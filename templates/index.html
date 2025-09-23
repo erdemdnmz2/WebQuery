@@ -1,0 +1,1733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Query Panel</title>
+    <!-- Bootstrap CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" xintegrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Ace Editor CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/theme/dracula.min.css">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827;
+            /* Add padding to body to prevent content from being hidden under fixed navbar */
+            padding-top: 70px; /* Adjust this value based on your navbar's actual height */
+        }
+        /* Ace Editor stil ayarlamaları */
+        .ace_editor {
+            height: 700px !important;
+            border-radius: 0.75rem;
+            font-size: 0.95rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+            overflow: auto !important; /* Kutu içi kaydırma için */
+        }
+        /* Ace Editor satır numaraları ve gutter alanı */
+        .ace_gutter {
+            background-color: #1f2937 !important;
+            border-right: 1px solid #374151 !important;
+            color: #9ca3af !important;
+            width: 30px !important; /* Satır numarası alanının genişliğini daraltıldı */
+            padding-left: 0px !important;
+            padding-right: 3px !important;
+        }
+        .ace_gutter-cell {
+            color: #9ca3af !important;
+            padding-right: 0 !important;
+            padding-right: 2px;
+            margin-right: 1px;
+        }
+        /* Seçili satırın rengini değiştir */
+        .ace_active-line {
+            background-color: #374151 !important;
+        }
+
+        /* Sonuç tablosu temel stil */
+        .result-table {
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            min-width: 100%; /* İçeriğin taşması durumunda yatay kaydırmayı zorlar */
+        }
+        .result-table th, .result-table td {
+            border: 1px solid #4b5563;
+            padding: 0.75rem;
+            text-align: left;
+            white-space: nowrap; /* Hücre içeriğinin tek satırda kalmasını sağlar */
+        }
+        .result-table th {
+            background-color: #374151;
+            font-weight: 600;
+            color: #f3f4f6;
+        }
+        .result-table tr:nth-child(even) {
+            background-color: #1f2937;
+        }
+        .result-table tr:hover {
+            background-color: #4b5563;
+        }
+        /* Hata mesajı stili */
+        .error-message {
+            color: #fca5a5;
+            background-color: #7f1d1d;
+            border: 1px solid #b91c1c;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.1);
+        }
+        /* Başarı mesajı stili */
+        .success-message {
+            color: #a7f3d0;
+            background-color: #064e3b;
+            border: 1px solid #047857;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.1);
+            margin-bottom: 1rem; /* Added margin for spacing */
+        }
+
+        /* Webkit tabanlı tarayıcılar için kaydırma çubuğu stilleri */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #4b5563;
+            border-radius: 5px;
+            border: 2px solid #1f2937;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background-color: #6b7280;
+        }
+
+        /* Custom styles for Bootstrap Navbar to match dark theme */
+        .navbar-dark-custom {
+            background-color: #1f2937 !important; /* Darker gray for navbar background */
+            border-bottom: 1px solid #374151; /* Subtle border at the bottom */
+        }
+        .navbar-dark-custom .navbar-brand,
+        .navbar-dark-custom .nav-link {
+            color: #f3f4f6 !important; /* Light text for brand and links */
+        }
+        .navbar-dark-custom .dropdown-menu {
+            background-color: #1f2937; /* Dropdown menu background */
+            border: 1px solid #374151;
+        }
+        .navbar-dark-custom .dropdown-item {
+            color: #f3f4f6; /* Dropdown item text color */
+        }
+        .navbar-dark-custom .dropdown-item:hover,
+        .navbar-dark-custom .dropdown-item:focus {
+            background-color: #374151; /* Dropdown item hover background */
+            color: #f3f4f6;
+        }
+        .navbar-dark-custom .dropdown-item.active {
+            background-color: #4b5563; /* Active dropdown item background */
+            color: #f3f4f6;
+        }
+
+        /* Custom Tab Styles */
+        .nav-tabs-custom {
+            border-bottom-color: #4b5563;
+        }
+
+        .nav-tabs-custom .nav-item {
+            margin-bottom: -1px;
+        }
+
+        .nav-tabs-custom .nav-link {
+            background-color: #374151;
+            border: 1px solid #4b5563;
+            color: #d1d5db;
+            margin: 0; /* Removed horizontal margin */
+            border-top-left-radius: 0.5rem;
+            border-top-right-radius: 0.5rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex-shrink: 1;
+            min-width: 50px; /* Prevent tabs from becoming too small */
+            transition: all 0.2s ease-in-out;
+        }
+
+        .nav-tabs-custom .nav-link:hover {
+            background-color: #4b5563;
+            color: #f9fafb;
+            border-color: #6b7280;
+        }
+
+        .nav-tabs-custom .nav-link.active {
+            background-color: #1f2937;
+            color: #f9fafb;
+            border-color: #4b5563 #4b5563 #1f2937; /* Match bottom border to content bg */
+            font-weight: 600;
+            flex-shrink: 0; /* Allow active tab to take needed space */
+            white-space: normal;
+        }
+
+        .tab-content-custom > .tab-pane {
+            background-color: #1f2937;
+            border: 1px solid #4b5563;
+            border-top: none;
+            padding: 1rem;
+            border-bottom-left-radius: 0.5rem;
+            border-bottom-right-radius: 0.5rem;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        /* Remove alternating colors and margin for tables inside tabs */
+        .tab-content-custom .result-table {
+            margin-top: 0;
+            background-color: #1f2937;
+        }
+        .tab-content-custom .result-table tr,
+        .tab-content-custom .result-table tr:nth-child(even) {
+            background-color: transparent;
+        }
+        .tab-content-custom .result-table tr:hover {
+            background-color: #374151;
+        }
+
+        .badge-success {
+            background-color: #059669 !important;
+            color: white !important;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+            margin-left: 0.5rem;
+        }
+        
+        .badge-danger {
+            background-color: #dc2626 !important;
+            color: white !important;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+            margin-left: 0.5rem;
+        }
+
+        /* Table container inside tab */
+        .tab-table-container {
+            max-height: 550px; /* Adjust height to fit within tab-pane */
+            overflow: auto; /* Use 'auto' for both vertical and horizontal scroll */
+            /* Removed border and background to blend with parent */
+        }
+
+        /* Toast container positioning */
+        .toast-container {
+            position: fixed;
+            top: 80px; /* Below the navbar */
+            right: 20px;
+            z-index: 1055;
+        }
+
+        /* Custom toast styles for dark theme */
+        .toast-success {
+            background-color: #065f46 !important;
+            border-left: 4px solid #10b981 !important;
+        }
+
+        .toast-success .toast-header {
+            background-color: #047857 !important;
+            color: #ffffff !important;
+            border-bottom: 1px solid #10b981 !important;
+        }
+
+        .toast-success .toast-body {
+            color: #ffffff !important;
+        }
+
+        .toast-error {
+            background-color: #7f1d1d !important;
+            border-left: 4px solid #ef4444 !important;
+        }
+
+        .toast-error .toast-header {
+            background-color: #991b1b !important;
+            color: #ffffff !important;
+            border-bottom: 1px solid #ef4444 !important;
+        }
+
+        .toast-error .toast-body {
+            color: #ffffff !important;
+        }
+
+        .toast .btn-close {
+            filter: invert(1);
+        }
+
+        /* Modal customizations for dark theme */
+        .modal-content {
+            background-color: #1f2937 !important;
+            border: 1px solid #374151 !important;
+        }
+
+        .modal-header {
+            border-bottom: 1px solid #374151 !important;
+        }
+
+        .modal-footer {
+            border-top: 1px solid #374151 !important;
+        }
+
+        .modal-title {
+            color: #f9fafb !important;
+        }
+
+        .modal-body {
+            color: #f9fafb !important;
+        }
+
+        .modal .form-label {
+            color: #f9fafb !important;
+        }
+
+        .modal .form-control {
+            background-color: #374151 !important;
+            border: 1px solid #4b5563 !important;
+            color: #f9fafb !important;
+        }
+
+        .modal .form-control:focus {
+            background-color: #374151 !important;
+            border-color: #6366f1 !important;
+            color: #f9fafb !important;
+            box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.25) !important;
+        }
+
+        .modal .form-control::placeholder {
+            color: #9ca3af !important;
+        }
+
+        .modal .form-select {
+            background-color: #374151 !important;
+            border: 1px solid #4b5563 !important;
+            color: #f9fafb !important;
+        }
+
+        .modal .form-select:focus {
+            background-color: #374151 !important;
+            border-color: #6366f1 !important;
+            color: #f9fafb !important;
+            box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.25) !important;
+        }
+
+        .modal .text-muted {
+            color: #9ca3af !important;
+        }
+
+        .modal .text-danger {
+            color: #ef4444 !important;
+        }
+
+        .modal .list-group-item {
+            background-color: #374151 !important;
+            border: 1px solid #4b5563 !important;
+            color: #f9fafb !important;
+        }
+
+        .modal .alert {
+            color: #f9fafb !important;
+        }
+
+        .modal .alert-success {
+            background-color: #064e3b !important;
+            border-color: #047857 !important;
+            color: #ffffff !important;
+        }
+
+        .modal .alert-danger {
+            background-color: #7f1d1d !important;
+            border-color: #b91c1c !important;
+            color: #ffffff !important;
+        }
+
+        .modal .btn-close {
+            filter: invert(1) grayscale(100%) brightness(200%);
+        }
+
+        /* Fixed height and scrollbar for database dropdown */
+        .dropdown-menu.database-dropdown-menu {
+            max-height: 250px;
+            overflow-y: auto;
+            min-width: 220px;
+        }
+        /* Optional: make sure dropdown items don't wrap */
+        .dropdown-menu.database-dropdown-menu .dropdown-item {
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Toast Container -->
+    <div class="toast-container"></div>
+
+    <!-- React ve ReactDOM CDNs -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX transformation (in-browser) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Ace Editor CDN'leri -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/mode-sql.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/theme-dracula.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- Bootstrap JS CDN (Popper.js ile birlikte) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" xintegrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+        const { createRoot } = ReactDOM;
+
+        // Add global fetch wrapper for authentication handling
+        const authenticatedFetch = async (url, options = {}) => {
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    credentials: 'include'
+                });
+                
+                if (response.status === 401) {
+                    // Token is invalid or missing, redirect to login
+                    window.location.href = '/login';
+                    return null;
+                }
+                
+                return response;
+            } catch (error) {
+                console.error('Fetch error:', error);
+                throw error;
+            }
+        };
+
+        function App() {
+            const [sqlQuery, setSqlQuery] = useState(``);
+            const [result, setResult] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [servers, setServers] = useState({}); // Changed from databaseNames to servers
+            const [selectedServer, setSelectedServer] = useState(''); // New state for selected server
+            const [selectedDatabase, setSelectedDatabase] = useState(''); // State to store selected database
+            const [showMultipleQueryModal, setShowMultipleQueryModal] = useState(false);
+            const [multipleQueryTargets, setMultipleQueryTargets] = useState([]);
+            const [multipleQueryResults, setMultipleQueryResults] = useState(null);
+            const [multipleQueryLoading, setMultipleQueryLoading] = useState(false);
+            const [workspaces, setWorkspaces] = useState([]);
+            const [currentWorkspaceId, setCurrentWorkspaceId] = useState(null);
+            const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
+            const [workspaceName, setWorkspaceName] = useState('');
+            const [workspaceDescription, setWorkspaceDescription] = useState('');
+            const [workspaceModalAlert, setWorkspaceModalAlert] = useState(null);
+            const [showSaveConfirmModal, setShowSaveConfirmModal] = useState(false);
+            const [pendingAction, setPendingAction] = useState(null);
+            const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+            const [initialWorkspaceQuery, setInitialWorkspaceQuery] = useState('');
+            const editorContainerRef = useRef(null);
+            const aceEditorInstance = useRef(null);
+
+            // Initialize Ace Editor and set up event listeners
+            useEffect(() => {
+                ace.config.set('basePath', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/');
+
+                if (editorContainerRef.current && !aceEditorInstance.current) {
+                    aceEditorInstance.current = ace.edit(editorContainerRef.current);
+                    aceEditorInstance.current.setTheme("ace/theme/dracula");
+                    aceEditorInstance.current.session.setMode("ace/mode/sql");
+                    aceEditorInstance.current.setOptions({
+                        showLineNumbers: true,
+                        tabSize: 2,
+                        wrap: false
+                    });
+                    aceEditorInstance.current.setValue(sqlQuery, -1);
+
+                    aceEditorInstance.current.on("change", () => {
+                        setSqlQuery(aceEditorInstance.current.getValue());
+                    });
+                }
+
+                // Load workspace if ID is in URL
+                const urlParams = new URLSearchParams(window.location.search);
+                const workspaceId = urlParams.get('workspace_id');
+                if (workspaceId) {
+                    loadWorkspace(workspaceId);
+                }
+
+                return () => {
+                    if (aceEditorInstance.current) {
+                        aceEditorInstance.current.destroy();
+                        aceEditorInstance.current.container.remove();
+                    }
+                };
+            }, []);
+
+            // Fetch database names and server name on component mount
+            useEffect(() => {
+                const fetchDatabaseInformation = async () => {
+                    try {
+                        console.log('=== FRONTEND DEBUG START ===');
+                        const response = await authenticatedFetch('/api/database_information');
+                        
+                        if (!response) return; // Redirected to login
+                        
+                        console.log('Response status:', response.status);
+                        console.log('Response ok:', response.ok);
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP Error: ${response.status}`);
+                        }
+                        const data = await response.json();
+                        
+                        console.log('Raw response data:', data);
+                        console.log('data.db_info:', data.db_info);
+                        console.log('data.db_info type:', typeof data.db_info);
+                        console.log('data.db_info keys:', data.db_info ? Object.keys(data.db_info) : 'null');
+                        
+                        if (data.db_info && typeof data.db_info === 'object') {
+                            setServers(data.db_info);
+                            
+                            // Set first server as default
+                            const serverNames = Object.keys(data.db_info);
+                            
+                            if (serverNames.length > 0) {
+                                const firstServer = serverNames[0];
+                                setSelectedServer(firstServer);
+                                
+                                // Set first database of first server as default
+                                const databases = data.db_info[firstServer];
+                                
+                                if (Array.isArray(databases) && databases.length > 0) {
+                                    setSelectedDatabase(databases[0]);
+                                } else {
+                                    setSelectedDatabase('');
+                                }
+                            } else {
+                                setSelectedServer('');
+                                setSelectedDatabase('');
+                            }
+                        } else {
+                            console.error('API response for database information is not in expected format:', data);
+                            setServers({});
+                        }
+                        console.log('=== FRONTEND DEBUG END ===');
+                    } catch (error) {
+                        console.error('Error fetching database information:', error);
+                        setResult({ error: `Veritabanı bilgileri çekilirken hata oluştu: ${error.message}` });
+                        setServers({});
+                    }
+                };
+
+                fetchDatabaseInformation();
+                fetchWorkspaces();
+            }, []); // Empty dependency array means this runs once on mount
+
+            // Update databases when server changes
+            useEffect(() => {
+                if (selectedServer && servers[selectedServer]) {
+                    const databases = servers[selectedServer];
+                    if (Array.isArray(databases) && databases.length > 0) {
+                        setSelectedDatabase(databases[0]); // Select first database of the new server
+                    } else {
+                        setSelectedDatabase('');
+                    }
+                }
+            }, [selectedServer, servers]);
+
+            const fetchWorkspaces = async () => {
+                try {
+                    const response = await authenticatedFetch('/api/workspace');
+                    if (!response) return; // Redirected to login
+                    
+                    if (!response.ok) throw new Error('Failed to fetch workspaces');
+                    const data = await response.json();
+                    setWorkspaces(data.workspaces || []);
+                } catch (error) {
+                    console.error("Error fetching workspaces:", error);
+                }
+            };
+
+            const loadWorkspace = async (workspaceId) => {
+                try {
+                    const response = await authenticatedFetch(`/api/get_workspace_by_id/${workspaceId}`);
+                    if (!response) return; // Redirected to login
+                    
+                    if (!response.ok) throw new Error('Failed to load workspace');
+                    const data = await response.json();
+                    
+                    setSqlQuery(data.query);
+                    setInitialWorkspaceQuery(data.query);
+                    if (aceEditorInstance.current) {
+                        aceEditorInstance.current.setValue(data.query, -1);
+                        
+                        // Disable editor if query is waiting for approval or rejected
+                        const isReadOnly = data.status === 'waiting_for_approval' || data.status === 'rejected';
+                        aceEditorInstance.current.setReadOnly(isReadOnly);
+                        
+                        if (data.status === 'waiting_for_approval') {
+                            showToast('This query is waiting for admin approval and cannot be edited.', 'warning');
+                        } else if (data.status === 'rejected') {
+                            showToast('This query has been rejected by the admin and cannot be edited.', 'error');
+                        } else if (data.status === 'approved_and_executed') {
+                            showToast('This query has been approved and executed by the admin.', 'success');
+                        }
+                    }
+                    setSelectedServer(data.servername);
+                    setTimeout(() => setSelectedDatabase(data.database_name), 100);
+                    setCurrentWorkspaceId(data.id);
+                    setHasUnsavedChanges(false);
+
+                    const url = new URL(window.location);
+                    url.searchParams.set('workspace_id', data.id);
+                    window.history.pushState({}, '', url);
+
+                } catch (error) {
+                    console.error("Error loading workspace:", error);
+                    alert(`Workspace yüklenemedi: ${error.message}`);
+                }
+            };
+
+            // Function to show toast notifications
+            const showToast = (message, type = 'success') => {
+                const toastContainer = document.querySelector('.toast-container');
+                const toastId = `toast-${Date.now()}`;
+                
+                const toastHtml = `
+                    <div class="toast toast-${type}" role="alert" aria-live="assertive" aria-atomic="true" id="${toastId}">
+                        <div class="toast-header">
+                            <div class="rounded me-2" style="width: 20px; height: 20px; background-color: ${type === 'success' ? '#10b981' : '#ef4444'};"></div>
+                            <strong class="me-auto">${type === 'success' ? 'Success' : 'Error'}</strong>
+                            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>
+                        <div class="toast-body">
+                            ${message}
+                        </div>
+                    </div>
+                `;
+                
+                toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+                
+                const toastElement = document.getElementById(toastId);
+                const toast = new bootstrap.Toast(toastElement, {
+                    autohide: true,
+                    delay: type === 'success' ? 3000 : 5000
+                });
+                
+                toast.show();
+                
+                // Remove toast element after it's hidden
+                toastElement.addEventListener('hidden.bs.toast', () => {
+                    toastElement.remove();
+                });
+            };
+
+            const handleSaveWorkspace = async () => {
+                if (currentWorkspaceId) {
+                    try {
+                        const response = await authenticatedFetch(`/api/workspaces/${currentWorkspaceId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ query: sqlQuery })
+                        });
+                        
+                        if (!response) return; // Redirected to login
+                        
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            throw new Error(errorData.message || 'Workspace güncellenemedi');
+                        }
+                        setInitialWorkspaceQuery(sqlQuery);
+                        setHasUnsavedChanges(false);
+                        showToast('Workspace başarıyla güncellendi.', 'success');
+                        fetchWorkspaces();
+                    } catch (error) {
+                        showToast(`Workspace güncellenemedi: ${error.message}`, 'error');
+                    }
+                } else {
+                    setShowWorkspaceModal(true);
+                    setWorkspaceName('');
+                    setWorkspaceDescription('');
+                    setWorkspaceModalAlert(null);
+                }
+            };
+
+            const handleWorkspaceModalSubmit = async (e) => {
+                e.preventDefault();
+                
+                if (!workspaceName.trim()) {
+                    setWorkspaceModalAlert({ type: 'danger', message: 'Workspace adı gereklidir!' });
+                    return;
+                }
+
+                const payload = {
+                    name: workspaceName.trim(),
+                    description: workspaceDescription.trim(),
+                    query: sqlQuery,
+                    servername: selectedServer,
+                    database_name: selectedDatabase
+                };
+
+                try {
+                    const response = await authenticatedFetch('/api/workspaces', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (!response) return; // Redirected to login
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.message || 'Workspace kaydedilemedi');
+                    }
+                    
+                    const data = await response.json();
+                    setCurrentWorkspaceId(data.workspace_id);
+                    setInitialWorkspaceQuery(sqlQuery);
+                    setHasUnsavedChanges(false);
+                    setWorkspaceModalAlert({ type: 'success', message: 'Workspace başarıyla kaydedildi!' });
+                    fetchWorkspaces();
+                    
+                    // 2 saniye sonra modal'ı kapat
+                    setTimeout(() => {
+                        setShowWorkspaceModal(false);
+                        setWorkspaceModalAlert(null);
+                    }, 2000);
+                    
+                } catch (error) {
+                    setWorkspaceModalAlert({ type: 'danger', message: `Hata: ${error.message}` });
+                }
+            };
+
+            const closeWorkspaceModal = () => {
+                setShowWorkspaceModal(false);
+                setWorkspaceName('');
+                setWorkspaceDescription('');
+                setWorkspaceModalAlert(null);
+            };
+
+            const handleNewWorkspace = () => {
+                if (hasUnsavedChanges) {
+                    setPendingAction('new');
+                    setShowSaveConfirmModal(true);
+                } else {
+                    createNewWorkspace();
+                }
+            };
+
+            const handleWorkspaceSwitch = (workspaceId) => {
+                if (hasUnsavedChanges) {
+                    setPendingAction(() => () => loadWorkspace(workspaceId));
+                    setShowSaveConfirmModal(true);
+                } else {
+                    loadWorkspace(workspaceId);
+                }
+            };
+
+            const createNewWorkspace = () => {
+                setSqlQuery('');
+                setInitialWorkspaceQuery('');
+                if (aceEditorInstance.current) {
+                    aceEditorInstance.current.setValue('');
+                    aceEditorInstance.current.setReadOnly(false);
+                }
+                setResult(null);
+                setMultipleQueryResults(null);
+                setMultipleQueryTargets([]);
+                setCurrentWorkspaceId(null);
+                setHasUnsavedChanges(false);
+                // Clear workspace_id from URL
+                const url = new URL(window.location);
+                url.searchParams.delete('workspace_id');
+                window.history.pushState({}, '', url);
+                showToast('Yeni workspace oluşturuldu.', 'success');
+            };
+
+            const handleSaveAndContinue = async () => {
+                try {
+                    await handleSaveWorkspace();
+                    if (pendingAction === 'new') {
+                        createNewWorkspace();
+                    } else if (typeof pendingAction === 'function') {
+                        pendingAction();
+                    }
+                    setShowSaveConfirmModal(false);
+                    setPendingAction(null);
+                } catch (error) {
+                    console.error('Save failed:', error);
+                }
+            };
+
+            const handleDiscardAndContinue = () => {
+                if (pendingAction === 'new') {
+                    createNewWorkspace();
+                } else if (typeof pendingAction === 'function') {
+                    pendingAction();
+                }
+                setShowSaveConfirmModal(false);
+                setPendingAction(null);
+            };
+
+            const handleCancelAction = () => {
+                setShowSaveConfirmModal(false);
+                setPendingAction(null);
+            };
+
+            // Function to execute the query
+            const executeQuery = async () => {
+                setLoading(true);
+                setResult(null);
+
+                try {
+                    const response = await authenticatedFetch('/api/execute_query', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ 
+                            query: sqlQuery, 
+                            servername: selectedServer,
+                            database_name: selectedDatabase 
+                        }),
+                    });
+
+                    if (!response) return; // Redirected to login
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || `HTTP Error: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    setResult(data);
+                } catch (error) {
+                    setResult({ error: `Sorgu çalıştırılırken bir hata oluştu: ${error.message}` });
+                    console.error('Sorgu çalıştırma hatası:', error);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            // Function to execute multiple queries
+            const executeMultipleQuery = async () => {
+                if (multipleQueryTargets.length === 0) {
+                    console.warn('Lütfen en az bir sunucu-veritabanı kombinasyonu ekleyin.');
+                    return;
+                }
+
+                setMultipleQueryLoading(true);
+                setMultipleQueryResults(null);
+                setShowMultipleQueryModal(false);
+
+                try {
+                    const response = await authenticatedFetch('/api/multiple_query', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ 
+                            query: sqlQuery,
+                            execution_info: multipleQueryTargets
+                        }),
+                    });
+
+                    if (!response) return; 
+
+                    if (!response.ok) {
+                        let errorMsg = '';
+                        const errorData = await response.json();
+                        if (response.status === 400 && errorData && errorData.detail) {
+                            errorMsg = errorData.detail;
+                        } else if (errorData && errorData.error) {
+                            errorMsg = errorData.error;
+                        } else {
+                            errorMsg = `HTTP Error: ${response.status}`;
+                        }
+                        throw new Error(errorMsg);
+                    }
+
+                    const data = await response.json();
+                    setMultipleQueryResults(data);
+                } catch (error) {
+                    setMultipleQueryResults({ error: `Çoklu sorgu çalıştırılırken bir hata oluştu: ${error.message}` });
+                    console.error('Çoklu sorgu çalıştırma hatası:', error);
+                } finally {
+                    setMultipleQueryLoading(false);
+                }
+            };
+
+            // Add new target for multiple query
+            const addMultipleQueryTarget = () => {
+                if (selectedServer && selectedDatabase) {
+                    const newTarget = {
+                        servername: selectedServer,
+                        database_name: selectedDatabase
+                    };
+                    
+                    // Check if combination already exists
+                    const exists = multipleQueryTargets.some(target => 
+                        target.servername === newTarget.servername && 
+                        target.database_name === newTarget.database_name
+                    );
+                    
+                    if (!exists) {
+                        setMultipleQueryTargets([...multipleQueryTargets, newTarget]);
+                    }
+                }
+            };
+
+            // Remove target from multiple query
+            const removeMultipleQueryTarget = (index) => {
+                setMultipleQueryTargets(multipleQueryTargets.filter((_, i) => i !== index));
+            };
+
+            // Clear multiple query targets
+            const clearMultipleQueryTargets = () => {
+                setMultipleQueryTargets([]);
+            };
+
+            // Function to handle logout
+            const handleLogout = async () => {
+                try {
+                    const response = await authenticatedFetch('/api/logout', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                    });
+
+                    if (!response) return; // Already redirected to login
+
+                    if (response.ok) {
+                        window.location.href = '/login';
+                    } else {
+                        const errorData = await response.json();
+                        setResult({ error: errorData.message || 'Logout failed.' });
+                        console.error('Logout error:', errorData);
+                    }
+                } catch (error) {
+                    setResult({ error: `Logout sırasında bir hata oluştu: ${error.message}` });
+                    console.error('Logout request failed:', error);
+                }
+            };
+
+            const downloadFile = async (format, query, servername, database_name) => {
+                const endpoint = format === 'csv' ? '/api/download_csv' : '/api/download_excel';
+                const filename = `query_result.${format === 'xlsx' ? 'xlsx' : 'csv'}`;
+
+                try {
+                    const response = await authenticatedFetch(endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query, servername, database_name })
+                    });
+
+                    if (!response) return; // Redirected to login
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || 'Download failed');
+                    }
+
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+
+                } catch (error) {
+                    console.error(`Error downloading ${format}:`, error);
+                    alert(`Dosya indirilemedi: ${error.message}`);
+                }
+            };
+
+            const downloadFromData = (data, format, filename) => {
+                if (!data || data.length === 0) {
+                    alert("İndirilecek veri bulunamadı.");
+                    return;
+                }
+
+                if (format === 'csv') {
+                    const headers = Object.keys(data[0]);
+                    const rows = data.map(row => headers.map(h => `"${(row[h] ?? '').toString().replace(/"/g, '""')}"`).join(','));
+                    const csvContent = [headers.join(','), ...rows].join('\r\n');
+                    const blob = new Blob([csvContent], { type: "text/csv" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = filename || "query_result.csv";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } else if (format === 'xlsx') {
+                    const ws = XLSX.utils.json_to_sheet(data);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, "Sonuçlar");
+                    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+                    const blob = new Blob([wbout], { type: "application/octet-stream" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = filename || "query_result.xlsx";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }
+            };
+
+            const downloadSqlFile = () => {
+                const blob = new Blob([sqlQuery], { type: "text/sql" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "query.sql";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
+            const downloadCsvFile = () => {
+                if (!result || !result.data || result.data.length === 0) {
+                    alert("İndirilecek sonuç bulunamadı.");
+                    return;
+                }
+                downloadFromData(result.data, 'csv', 'query_result.csv');
+            };
+
+            const downloadExcelFile = () => {
+                if (!result || !result.data || result.data.length === 0) {
+                    alert("İndirilecek sonuç bulunamadı.");
+                    return;
+                }
+                downloadFromData(result.data, 'xlsx', 'query_result.xlsx');
+            };
+
+            // Clear editor and results - Updated to include accordion
+            const clearEditorAndResults = () => {
+                if (hasUnsavedChanges) {
+                    setPendingAction('clear');
+                    setShowSaveConfirmModal(true);
+                } else {
+                    performClear();
+                }
+            };
+
+            const performClear = () => {
+                setSqlQuery('');
+                setInitialWorkspaceQuery('');
+                if (aceEditorInstance.current) {
+                    aceEditorInstance.current.setValue('');
+                    aceEditorInstance.current.setReadOnly(false);
+                }
+                setResult(null);
+                setMultipleQueryResults(null);
+                setMultipleQueryTargets([]);
+                setCurrentWorkspaceId(null);
+                setHasUnsavedChanges(false);
+                // Clear workspace_id from URL
+                const url = new URL(window.location);
+                url.searchParams.delete('workspace_id');
+                window.history.pushState({}, '', url);
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
+                    {/* Bootstrap Navbar */}
+                    <nav className="navbar navbar-dark-custom py-2 px-4 shadow-lg fixed-top">
+                        <div className="container-fluid flex-wrap">
+                            <a className="navbar-brand text-xl font-bold" href="/">WEBQuery</a>
+                            
+                            {/* Workspaces Dropdown */}
+                            <div className="dropdown me-2">
+                                <button
+                                    className="btn bg-gray-700 hover:bg-gray-600 text-gray-100 font-medium py-1 px-3 rounded text-sm dropdown-toggle"
+                                    type="button"
+                                    id="workspaceDropdown"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false"
+                                >
+                                    Workspaces {hasUnsavedChanges && <span className="text-yellow-400">*</span>}
+                                </button>
+                                <ul className="dropdown-menu" aria-labelledby="workspaceDropdown">
+                                    <li>
+                                        <a
+                                            className="dropdown-item text-success fw-bold"
+                                            href="#"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                handleNewWorkspace();
+                                            }}
+                                        >
+                                            + New Workspace
+                                        </a>
+                                    </li>
+                                    {workspaces.length > 0 && <li><hr className="dropdown-divider" /></li>}
+                                    {workspaces.length > 0 ? (
+                                        workspaces.map((ws) => (
+                                            <li key={ws.id}>
+                                                <a
+                                                    className={`dropdown-item ${currentWorkspaceId === ws.id ? 'active' : ''}`}
+                                                    href="#"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        if (currentWorkspaceId !== ws.id) {
+                                                            handleWorkspaceSwitch(ws.id);
+                                                        }
+                                                    }}
+                                                >
+                                                    {ws.name}
+                                                    {currentWorkspaceId === ws.id && hasUnsavedChanges && <span className="text-warning ms-1">*</span>}
+                                                </a>
+                                            </li>
+                                        ))
+                                    ) : (
+                                        <li><a className="dropdown-item disabled" href="#">No saved workspace found</a></li>
+                                    )}
+                                </ul>
+                            </div>
+
+                            {/* Server Selection Dropdown */}
+                            <div className="dropdown me-2">
+                                <button
+                                    className="btn bg-gray-700 hover:bg-gray-600 text-gray-100 font-medium py-1 px-3 rounded text-sm dropdown-toggle"
+                                    type="button"
+                                    id="serverDropdown"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false"
+                                >
+                                    Server: {selectedServer || 'Select Server'}
+                                </button>
+                                <ul className="dropdown-menu" aria-labelledby="serverDropdown">
+                                    {(() => {
+                                        return Object.keys(servers).length > 0 ? (
+                                            Object.keys(servers).map((serverName) => {
+                                                return (
+                                                    <li key={serverName}>
+                                                        <a
+                                                            className={`dropdown-item ${selectedServer === serverName ? 'active' : ''}`}
+                                                            href="#"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                setSelectedServer(serverName);
+                                                            }}
+                                                        >
+                                                            {serverName}
+                                                        </a>
+                                                    </li>
+                                                );
+                                            })
+                                        ) : (
+                                            <li><a className="dropdown-item" href="#">Sunucu bulunamadı</a></li>
+                                        );
+                                    })()}
+                                </ul>
+                            </div>
+
+                            {/* Database Selection Dropdown */}
+                            <div className="dropdown me-2">
+                                <button
+                                    className="btn bg-gray-700 hover:bg-gray-600 text-gray-100 font-medium py-1 px-3 rounded text-sm dropdown-toggle"
+                                    type="button"
+                                    id="databaseDropdown"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false"
+                                >
+                                    Database: {selectedDatabase || 'Select Database'}
+                                </button>
+                                <ul className="dropdown-menu database-dropdown-menu" aria-labelledby="databaseDropdown">
+                                    {(() => {
+                                        return selectedServer && servers[selectedServer] && Array.isArray(servers[selectedServer]) ? (
+                                            servers[selectedServer].map((dbName) => (
+                                                <li key={dbName}>
+                                                    <a
+                                                        className={`dropdown-item ${selectedDatabase === dbName ? 'active' : ''}`}
+                                                        href="#"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            setSelectedDatabase(dbName);
+                                                        }}
+                                                    >
+                                                        {dbName}
+                                                    </a>
+                                                </li>
+                                            ))
+                                        ) : (
+                                            <li><a className="dropdown-item" href="#">
+                                                {selectedServer ? 'No database found' : 'Select server first'}
+                                            </a></li>
+                                        );
+                                    })()}
+                                </ul>
+                            </div>
+
+                            <div className="d-flex flex-wrap justify-content-end gap-1 ms-auto">
+                                {/* Split Dropdown for Query Execution */}
+                                <div className="btn-group" role="group">
+                                    <button
+                                        type="button"
+                                        onClick={executeQuery}
+                                        className="btn bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1 px-3 rounded-l text-sm shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50"
+                                    >
+                                        {loading ? 'Running Query...' : 'Run Query'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1 px-2 rounded-r text-sm shadow-lg dropdown-toggle dropdown-toggle-split focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50"
+                                        data-bs-toggle="dropdown"
+                                        aria-expanded="false"
+                                    >
+                                        <span className="visually-hidden">Toggle Dropdown</span>
+                                    </button>
+                                    <ul className="dropdown-menu">
+                                        <li>
+                                            <a 
+                                                className="dropdown-item" 
+                                                href="#"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    setShowMultipleQueryModal(true);
+                                                }}
+                                            >
+                                                Multiple Query
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <button
+                                    onClick={handleSaveWorkspace}
+                                    className="btn bg-teal-600 hover:bg-teal-700 text-white font-medium py-1 px-3 rounded text-sm shadow-lg"
+                                >
+                                    {currentWorkspaceId ? (hasUnsavedChanges ? 'Update *' : 'Update') : 'Save'}
+                                </button>
+
+                                {/* Download Dropdown */}
+                                <div className="btn-group">
+                                    <button type="button" className="btn bg-green-600 hover:bg-green-700 text-white font-medium py-1 px-3 rounded text-sm shadow-lg dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                        Download
+                                    </button>
+                                    <ul className="dropdown-menu">
+                                        <li><a className="dropdown-item" href="#" onClick={downloadSqlFile}>Download Query (.sql)</a></li>
+                                        <li><hr className="dropdown-divider" /></li>
+                                        <li><a className="dropdown-item" href="#" onClick={downloadCsvFile}>Download Result as CSV</a></li>
+                                        <li><a className="dropdown-item" href="#" onClick={downloadExcelFile}>Download Result as Excel</a></li>
+                                    </ul>
+                                </div>
+
+                                <button
+                                    id="clear-btn"
+                                    onClick={clearEditorAndResults}
+                                    className="btn bg-gray-700 hover:bg-gray-600 text-gray-100 font-medium py-1 px-3 rounded text-sm shadow-lg focus:outline-none focus:ring-4 focus:ring-gray-500 focus:ring-opacity-50"
+                                >
+                                    Clear
+                                </button>
+                                <button
+                                    onClick={() => window.location.href = '/home'}
+                                    className="btn bg-blue-600 hover:bg-blue-700 text-white font-medium py-1 px-3 rounded text-sm shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50"
+                                >
+                                    Home
+                                </button>
+                                <button
+                                    onClick={downloadCsvFile}
+                                    className="btn bg-yellow-600 hover:bg-yellow-700 text-white font-medium py-1 px-3 rounded text-sm shadow-lg"
+                                    style={{ display: 'none' }}
+                                >
+                                    CSV Download
+                                </button>
+                                <button
+                                    onClick={downloadExcelFile}
+                                    className="btn bg-blue-600 hover:bg-blue-700 text-white font-medium py-1 px-3 rounded text-sm shadow-lg"
+                                    style={{ display: 'none' }}
+                                >
+                                    Excel Download
+                                </button>
+                                <button
+                                    onClick={handleLogout}
+                                    className="btn bg-red-600 hover:bg-red-700 text-white font-medium py-1 px-3 rounded text-sm shadow-lg focus:outline-none focus:ring-4 focus:ring-red-500 focus:ring-opacity-50"
+                                >
+                                    Logout
+                                </button>
+                            </div>
+                        </div>
+                    </nav>
+
+                    {/* Workspace Save Modal */}
+                    <div className={`modal fade ${showWorkspaceModal ? 'show' : ''}`} 
+                         style={{ display: showWorkspaceModal ? 'block' : 'none' }}
+                         tabIndex="-1" 
+                         aria-labelledby="workspaceModalLabel" 
+                         aria-hidden={!showWorkspaceModal}>
+                        <div className="modal-dialog">
+                            <div className="modal-content bg-gray-800 text-gray-100">
+                                <div className="modal-header border-gray-600">
+                                    <h5 className="modal-title" id="workspaceModalLabel">Save Workspace</h5>
+                                    <button 
+                                        type="button" 
+                                        className="btn-close btn-close-white" 
+                                        aria-label="Close"
+                                        onClick={closeWorkspaceModal}
+                                    ></button>
+                                </div>
+                                <form onSubmit={handleWorkspaceModalSubmit}>
+                                    <div className="modal-body">
+                                        {/* Alert Area */}
+                                        {workspaceModalAlert && (
+                                            <div className={`alert alert-${workspaceModalAlert.type} alert-dismissible fade show`} role="alert">
+                                                {workspaceModalAlert.message}
+                                                <button 
+                                                    type="button" 
+                                                    className="btn-close" 
+                                                    onClick={() => setWorkspaceModalAlert(null)}
+                                                    aria-label="Close"
+                                                ></button>
+                                            </div>
+                                        )}
+                                        
+                                        <div className="mb-3">
+                                            <label htmlFor="workspaceName" className="form-label">Workspace Name <span className="text-danger">*</span></label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control bg-gray-700 text-gray-100 border-gray-600" 
+                                                id="workspaceName"
+                                                value={workspaceName}
+                                                onChange={(e) => setWorkspaceName(e.target.value)}
+                                                placeholder="Enter a name for the workspace"
+                                                required
+                                            />
+                                        </div>
+                                        <div className="mb-3">
+                                            <label htmlFor="workspaceDescription" className="form-label">Description</label>
+                                            <textarea 
+                                                className="form-control bg-gray-700 text-gray-100 border-gray-600" 
+                                                id="workspaceDescription"
+                                                rows="3"
+                                                value={workspaceDescription}
+                                                onChange={(e) => setWorkspaceDescription(e.target.value)}
+                                                placeholder="Workspace description (optional)"
+                                            ></textarea>
+                                        </div>
+                                        <div className="mb-3">
+                                            <label className="form-label">Server and Database</label>
+                                            <div className="text-muted small">
+                                                <strong>Server:</strong> {selectedServer || 'Not selected'}<br/>
+                                                <strong>Database:</strong> {selectedDatabase || 'Not selected'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="modal-footer border-gray-600">
+                                        <button 
+                                            type="button" 
+                                            className="btn btn-secondary"
+                                            onClick={closeWorkspaceModal}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button 
+                                            type="submit" 
+                                            className="btn btn-primary"
+                                            disabled={!workspaceName.trim()}
+                                        >
+                                            Save
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {showWorkspaceModal && <div className="modal-backdrop fade show"></div>}
+
+                    {/* Multiple Query Modal */}
+                    <div className={`modal fade ${showMultipleQueryModal ? 'show' : ''}`} 
+                         style={{ display: showMultipleQueryModal ? 'block' : 'none' }}
+                         tabIndex="-1" 
+                         aria-labelledby="multipleQueryModalLabel" 
+                         aria-hidden={!showMultipleQueryModal}>
+                        <div className="modal-dialog modal-lg">
+                            <div className="modal-content bg-gray-800 text-gray-100">
+                                <div className="modal-header border-gray-600">
+                                    <h5 className="modal-title" id="multipleQueryModalLabel">Multiple Query Configuration</h5>
+                                    <button 
+                                        type="button" 
+                                        className="btn-close btn-close-white" 
+                                        aria-label="Close"
+                                        onClick={() => setShowMultipleQueryModal(false)}
+                                    ></button>
+                                </div>
+                                <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+                                    <div className="mb-3">
+                                        <label className="form-label">Server and Database Selection:</label>
+                                        <div className="d-flex gap-2 align-items-end">
+                                            <div className="flex-grow-1">
+                                                <label className="form-label text-sm">Server:</label>
+                                                <select 
+                                                    className="form-select bg-gray-700 text-gray-100 border-gray-600"
+                                                    value={selectedServer}
+                                                    onChange={(e) => setSelectedServer(e.target.value)}
+                                                >
+                                                    <option value="">Select Server</option>
+                                                    {Object.keys(servers).map((serverName) => (
+                                                        <option key={serverName} value={serverName}>
+                                                            {serverName}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="flex-grow-1">
+                                                <label className="form-label text-sm">Database:</label>
+                                                <select 
+                                                    className="form-select bg-gray-700 text-gray-100 border-gray-600"
+                                                    value={selectedDatabase}
+                                                    onChange={(e) => setSelectedDatabase(e.target.value)}
+                                                >
+                                                    <option value="">Select Database</option>
+                                                    {selectedServer && servers[selectedServer] && Array.isArray(servers[selectedServer]) ? 
+                                                        servers[selectedServer].map((dbName) => (
+                                                            <option key={dbName} value={dbName}>
+                                                                {dbName}
+                                                            </option>
+                                                        )) : null
+                                                    }
+                                                </select>
+                                            </div>
+                                            <button 
+                                                type="button" 
+                                                className="btn btn-success btn-sm"
+                                                onClick={addMultipleQueryTarget}
+                                                disabled={!selectedServer || !selectedDatabase}
+                                            >
+                                                +
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-3">
+                                        <label className="form-label">Selected Targets:</label>
+                                        {multipleQueryTargets.length === 0 ? (
+                                            <p className="text-gray-400 text-sm">No targets added yet.</p>
+                                        ) : (
+                                            <div className="list-group">
+                                                {multipleQueryTargets.map((target, index) => (
+                                                    <div key={index} className="list-group-item bg-gray-700 border-gray-600 d-flex justify-content-between align-items-center">
+                                                        <span>{target.servername} - {target.database_name}</span>
+                                                        <button 
+                                                            type="button" 
+                                                            className="btn btn-danger btn-sm"
+                                                            onClick={() => removeMultipleQueryTarget(index)}
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    </div>
+                                                ))}
+
+                                                {/* Display the count of selected targets */}
+                                                <div className="mt-2 text-end">
+                                                    <span className="badge bg-indigo-600">
+                                                        {multipleQueryTargets.length} targets selected
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="modal-footer border-gray-600">
+                                    <button 
+                                        type="button" 
+                                        className="btn btn-secondary"
+                                        onClick={clearMultipleQueryTargets}
+                                    >
+                                        Clear All
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        className="btn btn-primary"
+                                        onClick={executeMultipleQuery}
+                                        disabled={multipleQueryTargets.length === 0}
+                                    >
+                                        Run Multiple Query
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {showMultipleQueryModal && <div className="modal-backdrop fade show"></div>}
+
+                    {/* Save Confirmation Modal */}
+                    <div className={`modal fade ${showSaveConfirmModal ? 'show' : ''}`} 
+                         style={{ display: showSaveConfirmModal ? 'block' : 'none' }}
+                         tabIndex="-1" 
+                         aria-labelledby="saveConfirmModalLabel" 
+                         aria-hidden={!showSaveConfirmModal}>
+                        <div className="modal-dialog">
+                            <div className="modal-content bg-gray-800 text-gray-100">
+                                <div className="modal-header border-gray-600">
+                                    <h5 className="modal-title" id="saveConfirmModalLabel">Unsaved Changes</h5>
+                                    <button 
+                                        type="button" 
+                                        className="btn-close btn-close-white" 
+                                        aria-label="Close"
+                                        onClick={handleCancelAction}
+                                    ></button>
+                                </div>
+                                <div className="modal-body">
+                                    <p>There are unsaved changes in the current workspace. What would you like to do?</p>
+                                </div>
+                                <div className="modal-footer border-gray-600">
+                                    <button 
+                                        type="button" 
+                                        className="btn btn-secondary"
+                                        onClick={handleCancelAction}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        className="btn btn-danger"
+                                        onClick={handleDiscardAndContinue}
+                                    >
+                                        Discard and Continue
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        className="btn btn-success"
+                                        onClick={handleSaveAndContinue}
+                                    >
+                                        Save and Continue
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {showSaveConfirmModal && <div className="modal-backdrop fade show"></div>}
+
+                    {/* Main content area */}
+                    <div className="p-4 md:p-8 flex-grow flex items-center justify-center pt-16">
+                        <div className="bg-gray-800 p-6 md:p-8 rounded-xl shadow-2xl w-full max-w-full lg:w-[95vw]">
+                            <div className="flex flex-col md:flex-row gap-6">
+                                {/* Left Side: SQL Code Editor */}
+                                <div className="flex-1 min-w-0">
+                                    <label htmlFor="sql-editor-container" className="block text-gray-300 text-sm font-semibold mb-2">SQL Query:</label>
+                                    <div ref={editorContainerRef} id="sql-editor-container" className="w-full rounded-xl shadow-md" style={{ height: '700px', borderRadius: '0.75rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2)' }}></div>
+                                </div>
+
+                                {/* Right Side: Result Panel */}
+                                <div className="flex-1 min-w-0">
+                                    <label htmlFor="result-panel" className="block text-gray-300 text-sm font-semibold mb-2">Results:</label>
+                                    <div
+                                        id="result-panel-wrapper"
+                                        className="bg-gray-700 border border-gray-600 rounded-xl p-4 overflow-y-auto overflow-x-auto text-gray-100 text-sm shadow-inner"
+                                        style={{ height: '700px' }}
+                                    >
+                                        {/* Multiple Query Loading */}
+                                        {multipleQueryLoading && (
+                                            <p className="text-gray-400 text-center py-4">Running multiple query...</p>
+                                        )}
+
+                                        {/* Multiple Query Results */}
+                                        {!multipleQueryLoading && multipleQueryResults && (
+                                            <div>
+                                                <h6 className="text-gray-300 mb-3">Multiple Query Results:</h6>
+                                                {multipleQueryResults.error ? (
+                                                    <div className="error-message">
+                                                        <strong>Error:</strong><br/>{multipleQueryResults.error}
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <ul className="nav nav-tabs nav-tabs-custom nav-fill" id="multipleQueryTab" role="tablist">
+                                                            {multipleQueryResults.results && multipleQueryResults.results.map((result, index) => {
+                                                                const targetInfo = multipleQueryTargets[index];
+                                                                const serverName = targetInfo?.servername || 'Bilinmeyen Sunucu';
+                                                                const databaseName = targetInfo?.database_name || 'Bilinmeyen Veritabanı';
+                                                                const tabTitle = `${serverName} - ${databaseName}`;
+                                                                
+                                                                return (
+                                                                    <li className="nav-item" role="presentation" key={`tab-item-${index}`}>
+                                                                        <button 
+                                                                            className={`nav-link ${index === 0 ? 'active' : ''}`}
+                                                                            id={`tab-${index}`} 
+                                                                            data-bs-toggle="tab" 
+                                                                            data-bs-target={`#tab-pane-${index}`} 
+                                                                            type="button" 
+                                                                            role="tab" 
+                                                                            aria-controls={`tab-pane-${index}`} 
+                                                                            aria-selected={index === 0}
+                                                                            title={tabTitle}
+                                                                        >
+                                                                            {tabTitle}
+                                                                            <span className={`badge ${result.error ? 'badge-danger' : 'badge-success'}`}>
+                                                                                {result.error ? 'Error' : 'Success'}
+                                                                            </span>
+                                                                        </button>
+                                                                    </li>
+                                                                );
+                                                            })}
+                                                        </ul>
+                                                        <div className="tab-content tab-content-custom" id="multipleQueryTabContent">
+                                                            {multipleQueryResults.results && multipleQueryResults.results.map((result, index) => {
+                                                                return (
+                                                                    <div 
+                                                                        className={`tab-pane fade ${index === 0 ? 'show active' : ''}`}
+                                                                        id={`tab-pane-${index}`} 
+                                                                        role="tabpanel" 
+                                                                        aria-labelledby={`tab-${index}`} 
+                                                                        tabIndex="0"
+                                                                        key={`tab-pane-${index}`}
+                                                                    >
+                                                                        {result.error ? (
+                                                                            <div className="error-message">
+                                                                                <strong>Error:</strong><br/>{result.error}
+                                                                            </div>
+                                                                        ) : result.data && result.data.length > 0 ? (
+                                                                            <>
+                                                                                <div className="d-flex justify-content-end mb-2 gap-2">
+                                                                                    <button 
+                                                                                        className="btn btn-sm bg-yellow-600 hover:bg-yellow-700 text-white"
+                                                                                        onClick={() => {
+                                                                                            const targetInfo = multipleQueryTargets[index];
+                                                                                            const filename = `${targetInfo.servername}_${targetInfo.database_name}_result.csv`;
+                                                                                            downloadFromData(result.data, 'csv', filename);
+                                                                                        }}
+                                                                                    >
+                                                                                        Download CSV
+                                                                                    </button>
+                                                                                    <button 
+                                                                                        className="btn btn-sm bg-blue-600 hover:bg-blue-700 text-white"
+                                                                                        onClick={() => {
+                                                                                            const targetInfo = multipleQueryTargets[index];
+                                                                                            const filename = `${targetInfo.servername}_${targetInfo.database_name}_result.xlsx`;
+                                                                                            downloadFromData(result.data, 'xlsx', filename);
+                                                                                        }}
+                                                                                    >
+                                                                                        Download Excel
+                                                                                    </button>
+                                                                                </div>
+                                                                                <div className="tab-table-container">
+                                                                                    <table className="result-table w-100">
+                                                                                        <thead>
+                                                                                            <tr>
+                                                                                                {Object.keys(result.data[0]).map((key) => (
+                                                                                                    <th key={key} className="px-3 py-2 border border-gray-600 bg-gray-700 text-gray-100 font-semibold text-left whitespace-nowrap">
+                                                                                                        {key}
+                                                                                                    </th>
+                                                                                                ))}
+                                                                                            </tr>
+                                                                                        </thead>
+                                                                                        <tbody>
+                                                                                            {result.data.map((rowData, rowIndex) => (
+                                                                                                <tr key={rowIndex}>
+                                                                                                    {Object.values(rowData).map((value, colIndex) => (
+                                                                                                        <td key={colIndex} className="px-3 py-2 border border-gray-600 text-left whitespace-nowrap">
+                                                                                                            {value === null ? 'NULL' : String(value)}
+                                                                                                        </td>
+                                                                                                    ))}
+                                                                                                </tr>
+                                                                                            ))}
+                                                                                        </tbody>
+                                                                                    </table>
+                                                                                </div>
+                                                                            </>
+                                                                        ) : (
+                                                                            <div className="success-message text-center">
+                                                                                <strong>Success:</strong> The query did not return any data.
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Single Query Results */}
+                                        {!multipleQueryLoading && !multipleQueryResults && (
+                                            <>
+                                                {loading && (
+                                                    <p className="text-gray-400 text-center py-4">Running query...</p>
+                                                )}
+
+                                                {!loading && !result && (
+                                                    <p className="text-gray-400">Query results, errors, or info messages will be shown here.</p>
+                                                )}
+
+                                                {!loading && result && result.error && (
+                                                    <div className="error-message">
+                                                        <strong>Error:</strong><br/>{result.error}
+                                                    </div>
+                                                )}
+
+                                                {/* Display success message if it exists */}
+                                                {!loading && result && result.message && (
+                                                    <p className="success-message text-center">{result.message}</p>
+                                                )}
+
+                                                {/* Display 'no data' message only if there's no error, no explicit success message, and data is empty */}
+                                                {!loading && result && !result.error && !result.message && result.data && result.data.length === 0 && (
+                                                    <p className="success-message text-center">The query did not return any data.</p>
+                                                )}
+
+                                                {!loading && result && result.data && result.data.length > 0 && (
+                                                    <table className="result-table w-full">
+                                                        <thead>
+                                                            <tr>
+                                                                {Object.keys(result.data[0]).map((key) => (
+                                                                    <th key={key} className="px-3 py-2 border border-gray-600 bg-gray-700 text-gray-100 font-semibold text-left whitespace-nowrap">
+                                                                        {key}
+                                                                    </th>
+                                                                ))}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {result.data.map((rowData, rowIndex) => (
+                                                                <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-800' : 'bg-gray-700'}>
+                                                                    {Object.values(rowData).map((value, colIndex) => (
+                                                                        <td key={colIndex} className="px-3 py-2 border border-gray-600 text-left whitespace-nowrap">
+                                                                            {value === null ? 'NULL' : String(value)}
+                                                                        </td>
+                                                                    ))}
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        // Render the React application to the DOM
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

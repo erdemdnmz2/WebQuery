@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSSQL Bağlantı Bilgileri</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Ana gövde stilleri: Tam ekran yüksekliği, koyu arka plan, ortalama */
+        body {
+            font-family: 'Inter', sans-serif; /* Inter yazı tipi */
+            background-color: #111827; /* Tailwind gray-900 */
+            color: #f3f4f6; /* Tailwind gray-100 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh; /* Tam ekran yüksekliği */
+            padding: 20px; /* Genel dolgu */
+        }
+        /* Konteyner stilleri: Formu çevreleyen kutu */
+        .container {
+            background-color: #1f2937; /* Tailwind gray-800 */
+            padding: 2.5rem; /* p-10 gibi */
+            border-radius: 0.75rem; /* rounded-xl */
+            /* Kutu gölgesi */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 500px; /* Formun maksimum genişliği */
+            text-align: left;
+        }
+        /* Başlık (H2) stilleri */
+        h2 {
+            color: #f3f4f6; /* Tailwind gray-100 */
+            font-size: 2.25rem; /* text-4xl */
+            font-weight: 700; /* font-bold */
+            text-align: center;
+            margin-bottom: 1rem; /* Alt boşluk */
+        }
+        /* Ayırıcı çizgi (HR) stilleri */
+        hr {
+            border-color: #374151; /* Tailwind gray-700 */
+            margin-top: 0.5rem;
+            margin-bottom: 1rem;
+            width: 100%; /* Tam genişlik */
+        }
+        /* Form etiketi (Label) stilleri */
+        .form-label {
+            color: #d1d5db; /* Tailwind gray-300 */
+            font-size: 0.875rem; /* text-sm */
+            font-weight: 600; /* font-semibold */
+            margin-bottom: 0.5rem;
+            display: block; /* Label'ın kendi satırında olmasını sağlar */
+        }
+        /* Form kontrol (Input) stilleri */
+        .form-control {
+            display: block;
+            width: 100%;
+            padding: 0.75rem 1rem; /* py-3 px-4 */
+            font-size: 1rem;
+            line-height: 1.5;
+            color: #e5e7eb; /* Tailwind gray-200 */
+            background-color: #374151; /* Tailwind gray-700 */
+            background-clip: padding-box;
+            border: 1px solid #4b5563; /* Tailwind gray-600 */
+            border-radius: 0.5rem; /* rounded-lg */
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        }
+        /* Placeholder metin stilleri */
+        .form-control::placeholder {
+            color: #9ca3af; /* Tailwind gray-400 */
+            opacity: 1;
+        }
+        /* Input odaklanma (focus) stilleri */
+        .form-control:focus {
+            color: #e5e7eb;
+            background-color: #374151;
+            border-color: #6366f1; /* Tailwind indigo-500 */
+            outline: 0;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.5); /* Tailwind indigo-500 ile ring-3 */
+        }
+        /* Genel alt boşluk sınıfı */
+        .mb-3 {
+            margin-bottom: 1rem; /* mb-4 */
+        }
+
+        /* Buton temel stilleri */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            padding: 0.75rem 2rem; /* py-3 px-8 */
+            border-radius: 9999px; /* rounded-full */
+            /* Buton gölgesi */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: all 0.3s ease-in-out; /* Yumuşak geçişler */
+            transform: translateY(0); /* Varsayılan dikey konum */
+        }
+        /* Buton üzerine gelindiğinde (hover) stilleri */
+        .btn:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* hover:shadow-xl */
+            transform: translateY(-2px); /* hover:-translate-y-1 */
+        }
+        /* Buton odaklanma (focus) stilleri */
+        .btn:focus {
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.5); /* focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50 */
+        }
+
+        /* Birincil buton stilleri (Mavi) */
+        .btn-primary {
+            background-color: #4f46e5; /* Tailwind indigo-600 */
+            color: #ffffff; /* Beyaz metin */
+            border: none;
+        }
+        /* Birincil buton üzerine gelindiğinde stilleri */
+        .btn-primary:hover {
+            background-color: #4338ca; /* Tailwind indigo-700 */
+        }
+        /* Birincil buton odaklanma stilleri */
+        .btn-primary:focus {
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.5); /* focus:ring-indigo-500 */
+        }
+
+        /* Sonuç mesajı konteyner stilleri */
+        .result-message {
+            margin-top: 20px;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        /* Başarılı sonuç mesajı stilleri (Yeşil) */
+        .text-success {
+            color: #a7f3d0; /* Tailwind green-300 */
+            background-color: #064e3b; /* Tailwind green-900 */
+            border: 1px solid #047857; /* Tailwind green-700 */
+        }
+        /* Hatalı sonuç mesajı stilleri (Kırmızı) */
+        .text-danger {
+            color: #fca5a5; /* Tailwind red-300 */
+            background-color: #7f1d1d; /* Tailwind red-900 */
+            border: 1px solid #b91c1c; /* Tailwind red-700 */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>MSSQL Bağlantı Bilgileri</h2>
+        <hr>
+        <form id="mssqlConnectForm">
+            <div class="mb-3">
+                <label for="databaseName" class="form-label">Veritabanı Adı</label>
+                <input type="text" class="form-control" id="databaseName" placeholder="Veritabanı adını giriniz" name="databaseName" required>
+            </div>
+            <div class="mb-3">
+                <label for="username" class="form-label">Kullanıcı Adı</label>
+                <input type="text" class="form-control" id="username" placeholder="Kullanıcı adını giriniz" name="username" required>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Şifre</label>
+                <input type="password" class="form-control" id="password" placeholder="Şifre giriniz" name="password" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Bağlantıyı Dene</button>
+        </form>
+        <div id="result" class="result-message"></div>
+    </div>
+
+    <script>
+        // Form gönderildiğinde çalışacak olay dinleyicisi
+        document.getElementById('mssqlConnectForm').addEventListener('submit', async function(e) {
+            e.preventDefault(); // Formun varsayılan submit davranışını engelle
+
+            // Input alanlarından değerleri al
+            const databaseName = document.getElementById('databaseName').value;
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            // Sonuç mesajını gösterecek div elementini al
+            const resultDiv = document.getElementById('result');
+
+            // API isteği gönderme işlemi
+            try {
+                // Burada sunucu tarafındaki MSSQL bağlantı deneme API'nize istek göndereceksiniz.
+                // Örnek olarak '/api/mssql-connect' adresini kullanıyorum.
+                const response = await fetch('/api/mssql-connect', {
+                    method: 'POST', // POST metodu ile veri gönderimi
+                    headers: {
+                        'Content-Type': 'application/json' // JSON formatında veri gönderileceğini belirt
+                    },
+                    body: JSON.stringify({ databaseName, username, password }) // Verileri JSON string'ine dönüştür
+                });
+
+                // Sunucudan gelen yanıtı kontrol et
+                if (response.ok) {
+                    // Yanıt başarılı ise (HTTP 2xx durumu)
+                    const data = await response.json(); // JSON yanıtını ayrıştır
+                    resultDiv.className = 'result-message text-success'; // Başarı stili
+                    resultDiv.innerHTML = data.message || 'Giriş başarılı!'; // Sunucudan gelen mesajı göster (varsayılan: Giriş başarılı!)
+                    
+                    // 1 saniye bekledikten sonra /home URL'sine yönlendir
+                    setTimeout(() => {
+                        window.location.href = '/home';
+                    }, 1000); // 1000 milisaniye = 1 saniye
+
+                } else {
+                    // Yanıt başarısız ise (HTTP 4xx veya 5xx durumu)
+                    const errorData = await response.json(); // Hata yanıtını ayrıştır
+                    resultDiv.className = 'result-message text-danger'; // Hata stili
+                    resultDiv.innerHTML = 'Hata: ' + (errorData.error || 'Bağlantı sırasında bilinmeyen bir hata oluştu.'); // Hata mesajını göster
+                }
+            } catch (error) {
+                // Ağ hatası veya fetch isteği sırasında oluşan diğer hataları yakala
+                resultDiv.className = 'result-message text-danger'; // Hata stili
+                resultDiv.innerHTML = 'İstek gönderilirken bir hata oluştu: ' + error.message; // Hata mesajını göster
+            }
+        });
+    </script>
+</body>
+</html>
