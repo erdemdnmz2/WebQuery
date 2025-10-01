@@ -16,7 +16,6 @@ from middlewares import AuthMiddleware
 from database import session_cache, add_user_to_cache, engine_cache, get_db_info, close_user_engines
 from datetime import datetime
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with get_app_db() as db:
@@ -91,11 +90,12 @@ async def login(user: schemas.UserLogin, response: Response, request: Request):
         }
         session_cache[user_id] = sub_dict
 
-        await add_user_to_cache(
-            user_id=user_id,
-            username=username,
-            password=user.password 
-        )
+        if user_id not in engine_cache:
+            await add_user_to_cache(
+                user_id=user_id,
+                username=username,
+                password=user.password 
+            )
 
         return {"access_token": token}
 
@@ -122,6 +122,10 @@ async def read_users_me(current_user = Depends(get_current_user)):
 
 @app.post("/api/execute_query", response_model=schemas.SQLResponse)
 async def execute_query(query_request: schemas.SQLQuery, current_user = Depends(get_current_user)):
+
+    if current_user.id in session_cache:
+        current_user.password = session_cache[current_user.id]["user_password"]
+
     async with get_session(current_user, query_request.servername, query_request.database_name) as session:
         data = await crud.execute_query_db(
             query=query_request.query, 
@@ -158,6 +162,9 @@ async def logout(response: Response, current_user = Depends(get_current_user)):
 
 @app.post("/api/multiple_query", response_model=schemas.MultipleQueryResponse)
 async def multiple_query(request: schemas.MultipleQueryRequest, current_user=Depends(get_current_user)):
+    if current_user.id in session_cache:
+        current_user.password = session_cache[current_user.id]["user_password"]
+    
     results = []
 
     if len(request.execution_info) > config.MULTIPLE_QUERY_COUNT:
@@ -167,7 +174,6 @@ async def multiple_query(request: schemas.MultipleQueryRequest, current_user=Dep
         )
 
     for execution_info in request.execution_info:
-        
         servername = execution_info["servername"]
         database_name = execution_info["database_name"]
         async with get_session(current_user, server_name=servername, database_name=database_name) as session:
