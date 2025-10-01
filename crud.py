@@ -9,6 +9,7 @@ from config import message_format, approval_message_format, DANGEROUS_SQL_KEYWOR
 from slack_utils import send_message_to_slack
 import uuid
 from query_analysis import analyze_query
+from database import session_cache
 
 async def get_user_by_email(db: AsyncSession, email: str):
     result = await db.execute(select(models.User).where(models.User.email == email))
@@ -45,6 +46,9 @@ async def authenticate_user(db: AsyncSession, email: str, password: str):
     return user
 
 async def execute_query_db(query: str, db: AsyncSession, user: models.User, server_name: str, database_name: str):
+    user_id = user.id
+    if user_id in session_cache:
+        user.id = session_cache[user_id]["user_password"]
     log_id = None
     async with get_app_db() as db_for_logging:
         log = await create_log(db_for_logging, user, query, machine_name=server_name)
