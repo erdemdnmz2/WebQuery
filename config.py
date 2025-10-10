@@ -11,13 +11,6 @@ DATABASE_URL = (
     "&TrustServerCertificate=yes"
 )
 
-ADMIN_DATABASE_URL = (
-    "mssql+aioodbc://localhost/AdventureWorks2022"
-    "?driver=ODBC+Driver+18+for+SQL+Server"
-    "&trusted_connection=yes"
-    "&TrustServerCertificate=yes"
-)
-
 #Authentication config
 
 SECRET_KEY = "your_secret_key"
