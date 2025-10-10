@@ -17,7 +17,7 @@ This project is a database management and query analysis tool for SQL Server. It
 
 1. **Clone the repository**
    ```bash
-   git clone <repo_url>
+   git clone https://github.com/erdemdnmz2/WebQuery
    cd dba_application
    ```
 
@@ -74,7 +74,7 @@ Bu proje, SQL Server için bir veritabanı yönetim ve sorgu analiz aracıdır. 
 
 1. **Projeyi klonlayın**
    ```bash
-   git clone <repo_url>
+   git clone https://github.com/erdemdnmz2/WebQuery
    cd dba_application
    ```
 
