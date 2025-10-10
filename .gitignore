@@ -1,0 +1,70 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyc
+
+# Virtual environments
+myenv/
+env/
+.venv/
+venv/
+
+# Distribution / packaging
+build/
+dist/
+pip-wheel-metadata/
+*.egg-info/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs / editors
+.vscode/
+.idea/
+
+# Environment variables / secrets
+.env
+.env.*
+
+# Database files / logs
+*.sqlite3
+*.log
+
+# Misc
+.DS_Store
+
+# Bytecode and caches (already present but keep concise)
+__pycache__/
+*.py[cod]
+*.pyc
+
+# Virtual environments (your project has `myenv/`)
+myenv/
+env/
+.venv/
+venv/
+
+# Distribution / packaging
+build/
+dist/
+pip-wheel-metadata/
+*.egg-info/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs / editors
+.vscode/
+.idea/
+
+# Environment variables / secrets
+.env
+.env.*
+
+# Database files / logs
+*.sqlite3
+*.log
