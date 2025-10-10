@@ -44,7 +44,7 @@ This project is a database management and query analysis tool for SQL Server. It
 
 4. **Run the application**
    ```bash
-   python main.py
+   python app.py
    ```
 
 ### Usage
@@ -101,7 +101,7 @@ Bu proje, SQL Server için bir veritabanı yönetim ve sorgu analiz aracıdır. 
 
 4. **Uygulamayı çalıştırın**
    ```bash
-   python main.py
+   python app.py
    ```
 
 ### Kullanım
