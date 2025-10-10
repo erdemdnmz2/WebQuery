@@ -11,20 +11,17 @@ from sqlalchemy.exc import SQLAlchemyError
 
 # mysql+mysqlconnector://<username>:<password>@<server>:<port>/dbname this is for mysql
 #                  (user_id,(servername, dict(database, engine)))
-engine_cache: Dict[int, Dict[str, Dict[str, AsyncEngine]]] = {} # ask here: do users connect with different username/password or the same? engine cache or connection pool depends on this
+engine_cache: Dict[int, Dict[str, Dict[str, AsyncEngine]]] = {}
 all_db_names: list[str] = []
 db_info: Dict[str, list[str]] = {}
 
 session_cache: Dict[int, Dict] = {}
-# create an environment file or config
 
 conn_string = (
-    "mssql+aioodbc://{username}:{password}@{servername}/{database}" ## {servername}
+    "mssql+aioodbc://{username}:{password}@{servername}/{database}"
     "?driver=ODBC+Driver+18+for+SQL+Server"
     "&TrustServerCertificate=yes"
     )
-
-# mandatory databases to connect for user management, logging will be added later
 
 DATABASE_URL = (
     "mssql+aioodbc://localhost/dba_application_db"
@@ -52,9 +49,6 @@ async def get_app_db():
             yield session
         finally:
             await session.close()
-
-# for external engines that users want to connect to
-# can this be written in a single function?
     
 def create_conn_string(username, password,servername ,database_name):
     return conn_string.format(
