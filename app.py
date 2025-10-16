@@ -15,6 +15,13 @@ from slowapi.errors import RateLimitExceeded
 from middlewares import AuthMiddleware
 from database import session_cache, add_user_to_cache, engine_cache, get_db_info, close_user_engines
 from datetime import datetime
+from cryptography.fernet import Fernet
+
+#TODO fernet ile session cache şifreleme yap
+
+session_key = Fernet.generate_key()
+
+f = Fernet(session_key)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -85,7 +92,7 @@ async def login(user: schemas.UserLogin, response: Response, request: Request):
         client_ip = request.client.host
         await create_login_log(db=db, user_id=user_id, client_ip=client_ip)
         sub_dict = {
-            "user_password": user.password,
+            "user_password": f.encrypt(user.password.encode()),
             "addition_date": datetime.now()
         }
         session_cache[user_id] = sub_dict
@@ -124,7 +131,8 @@ async def read_users_me(current_user = Depends(get_current_user)):
 async def execute_query(query_request: schemas.SQLQuery, current_user = Depends(get_current_user)):
 
     if current_user.id in session_cache:
-        current_user.password = session_cache[current_user.id]["user_password"]
+        encoded_pw = session_cache[current_user.id]["user_password"]
+        current_user.password = f.decrypt(encoded_pw).decode()
 
     async with get_session(current_user, query_request.servername, query_request.database_name) as session:
         data = await crud.execute_query_db(
@@ -139,11 +147,12 @@ async def execute_query(query_request: schemas.SQLQuery, current_user = Depends(
 @app.get("/api/database_information", response_model=schemas.DatabaseInformationResponse)
 async def get_db_info_endpoint(current_user = Depends(get_current_user)):
     if current_user.id not in engine_cache:
-            await add_user_to_cache(
-                user_id=current_user.id,
-                username=current_user.username,
-                password=session_cache[current_user.id]["user_password"]
-            )
+        decoded_password = f.decrypt(session_cache[current_user.id]["user_password"]).decode()
+        await add_user_to_cache(
+            user_id=current_user.id,
+            username=current_user.username,
+            password=decoded_password
+        )
     db_info = get_db_info_by_user_id(current_user.id)
     return {"db_info": db_info}
 
@@ -163,7 +172,8 @@ async def logout(response: Response, current_user = Depends(get_current_user)):
 @app.post("/api/multiple_query", response_model=schemas.MultipleQueryResponse)
 async def multiple_query(request: schemas.MultipleQueryRequest, current_user=Depends(get_current_user)):
     if current_user.id in session_cache:
-        current_user.password = session_cache[current_user.id]["user_password"]
+        encoded_pw = session_cache[current_user.id]["user_password"]
+        current_user.password = f.decrypt(encoded_pw).decode()
     
     results = []
 

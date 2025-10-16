@@ -7,10 +7,6 @@ from sqlalchemy.future import select
 from contextlib import asynccontextmanager
 from sqlalchemy.exc import SQLAlchemyError
 
-# user_id, servername(database_name, Engine)
-
-# mysql+mysqlconnector://<username>:<password>@<server>:<port>/dbname this is for mysql
-#                  (user_id,(servername, dict(database, engine)))
 engine_cache: Dict[int, Dict[str, Dict[str, AsyncEngine]]] = {}
 all_db_names: list[str] = []
 db_info: Dict[str, list[str]] = {}
