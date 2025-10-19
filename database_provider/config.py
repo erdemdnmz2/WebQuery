@@ -1,0 +1,3 @@
+SERVER_NAMES = [
+    ""
+]
