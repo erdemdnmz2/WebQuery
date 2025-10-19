@@ -41,7 +41,6 @@ class AppDatabase:
         db.add(created_user)
         await db.commit()
         await db.refresh(created_user)
-        add_user_to_cache(created_user)
         
         return {
             "success": True,

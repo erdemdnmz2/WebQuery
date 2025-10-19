@@ -1,7 +1,7 @@
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSession, async_sessionmaker
 from typing import Dict
-import models as models
+import  app_database.models as models
 from database_provider.config import SERVER_NAMES
 from sqlalchemy.future import select
 from contextlib import asynccontextmanager
@@ -17,8 +17,6 @@ class DatabaseProvider:
             "?driver=ODBC+Driver+18+for+SQL+Server"
             "&TrustServerCertificate=yes"
             )
-        
-        self._get_db_info()
 
         
     def _create_connection_string(self, username: str, password: str, database: str, server: str):
@@ -67,15 +65,14 @@ class DatabaseProvider:
     
     @asynccontextmanager
     async def get_session(self, user: models.User, server_name: str, database_name: str):
-        engine = self.engine_cache[user.id][server_name][database_name]
-        if engine is None:
+        if self.engine_cache[user.id][server_name][database_name] is None:
             conn_str = self._create_connection_string(
                 username=user.username, 
                 password=user.password, 
-                servername=server_name,
-                database_name=database_name
+                database=database_name,
+                server=server_name
             )
-            engine = self.engine_cache[user.id][server_name][database_name] = create_async_engine(
+            self.engine_cache[user.id][server_name][database_name] = create_async_engine(
                 conn_str,
                 pool_size=1,
                 max_overflow=1,
@@ -84,7 +81,8 @@ class DatabaseProvider:
                 pool_pre_ping=True,
                 connect_args={"timeout": 30, "autocommit": True}
             )
-        #Session erişimi optimize edildi zincirleme değişken metoduyla
+        
+        engine = self.engine_cache[user.id][server_name][database_name]
         AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=engine)
         async with AsyncSessionLocal() as session:
             try:
@@ -115,16 +113,9 @@ class DatabaseProvider:
         for server_name, databases in self.db_info.items():
             self.engine_cache[user_id][server_name] = {}
             for db_name in databases:
-                conn_str = self.create_conn_string(username, password, server_name, db_name)
-                self.engine_cache[user_id][server_name][db_name] = create_async_engine(
-                    conn_str,
-                    pool_size=1,
-                    max_overflow=1,
-                    pool_timeout=30,
-                    pool_recycle=3600,
-                    pool_pre_ping=True,
-                    connect_args={"timeout": 30, "autocommit": True}
-                )
+                conn_str = self._create_connection_string(username, password, db_name, server_name)
+                self.engine_cache[user_id][server_name][db_name] = None  # Lazy initialization
     
-    def get_db_info(self):
+    def get_db_info_db(self):
+        """Alias for get_db_info_by_user_id compatibility"""
         return self.db_info
