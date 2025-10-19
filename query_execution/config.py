@@ -1,0 +1,6 @@
+"""
+Query Execution Service Config
+"""
+MULTIPLE_QUERY_COUNT = 10
+MAX_ROW_COUNT_WARNING = 10000
+MAX_ROW_COUNT_LIMIT = 1000
