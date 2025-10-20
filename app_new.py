@@ -48,6 +48,8 @@ async def lifespan(app: FastAPI):
         
         app.state.session_cache = SessionCache()
         print("✓ Session cache hazır")
+
+        app.state.workspace_service
         
         print("Tüm servisler başarıyla başlatıldı\n")
         

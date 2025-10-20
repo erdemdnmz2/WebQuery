@@ -67,8 +67,6 @@ def get_user_id_from_payload(payload: dict) -> Optional[str]:
         return None
 
 
-
-
 async def get_current_user(
     request: Request,
     app_db: AppDatabase = Depends(get_app_db)
