@@ -34,7 +34,6 @@ class DatabaseProvider:
             response[servername] = list(databases.keys())
         return response
     
-    #TODO init e ekle
     async def get_db_info(self):
         
         for server in SERVER_NAMES: 
@@ -77,7 +76,7 @@ class DatabaseProvider:
                 pool_size=1,
                 max_overflow=1,
                 pool_timeout=30,
-                pool_recycle=3600,
+                pool_recycle=1800,
                 pool_pre_ping=True,
                 connect_args={"timeout": 30, "autocommit": True}
             )

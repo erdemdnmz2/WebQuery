@@ -14,19 +14,12 @@ import uvicorn
 # Yeni mimari sınıfları
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
+from session import SessionCache
 
 # Middleware
 from middlewares import AuthMiddleware
 
-# Session cache için
-session_cache = {}
-session_key = Fernet.generate_key()
-fernet_instance = Fernet(session_key)
 
-
-# ========================================
-# Lifespan: Uygulama Başlatma ve Kapatma
-# ========================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -52,21 +45,21 @@ async def lifespan(app: FastAPI):
         print("✓ DatabaseProvider hazır ve db_info yüklendi")
         
         # Session cache ve fernet instance'larını state'e koy
-        app.state.session_cache = session_cache
-        app.state.fernet = fernet_instance
+        
+        app.state.session_cache = SessionCache()
         print("✓ Session cache hazır")
         
-        print("✅ Tüm servisler başarıyla başlatıldı\n")
+        print("Tüm servisler başarıyla başlatıldı\n")
         
         yield
         
     except Exception as e:
-        print(f"❌ Uygulama başlatma hatası: {e}")
+        print(f"Uygulama başlatma hatası: {e}")
         raise  # Uygulama başlamasın
     
     finally:
         # Graceful shutdown - her durumda çalışır
-        print("\n🛑 Uygulama kapatılıyor...")
+        print("\nUygulama kapatılıyor...")
         
         try:
             # DatabaseProvider engine'lerini kapat
@@ -74,7 +67,7 @@ async def lifespan(app: FastAPI):
                 await app.state.db_provider.close_engines()
                 print("✓ DatabaseProvider bağlantıları kapatıldı")
         except Exception as e:
-            print(f"⚠️ DatabaseProvider kapatma hatası: {e}")
+            print(f"DatabaseProvider kapatma hatası: {e}")
         
         try:
             # AppDatabase engine'ini kapat
@@ -82,14 +75,12 @@ async def lifespan(app: FastAPI):
                 await app.state.app_db.app_engine.dispose()
                 print("✓ AppDatabase bağlantısı kapatıldı")
         except Exception as e:
-            print(f"⚠️ AppDatabase kapatma hatası: {e}")
+            print(f"AppDatabase kapatma hatası: {e}")
         
-        print("✅ Kapatma işlemi tamamlandı")
+        print("Kapatma işlemi tamamlandı")
 
 
-# ========================================
 # FastAPI Uygulaması
-# ========================================
 app = FastAPI(
     title="WebQuery API",
     description="Modular SQL Query Execution Platform",
@@ -98,23 +89,18 @@ app = FastAPI(
 )
 
 
-# ========================================
 # Rate Limiter
-# ========================================
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
-# ========================================
 # Middleware
-# ========================================
 app.add_middleware(AuthMiddleware)
 
 
-# ========================================
 # Router'ları Include Et
-# ========================================
+
 # Authentication Router
 from authentication.router import router as auth_router
 app.include_router(auth_router, tags=["Authentication"])
@@ -132,9 +118,7 @@ app.include_router(query_router, tags=["Query Execution"])
 # app.include_router(workspace_router, tags=["Workspace"])
 
 
-# ========================================
 # HTML Sayfaları (Statik)
-# ========================================
 @app.get("/", response_class=FileResponse)
 def homepage():
     return FileResponse("templates/home.html")
@@ -165,9 +149,7 @@ def home_page():
     return FileResponse("templates/index.html")
 
 
-# ========================================
 # Health Check
-# ========================================
 @app.get("/health")
 async def health_check():
     """Sağlık kontrolü endpoint'i"""
@@ -178,9 +160,7 @@ async def health_check():
     }
 
 
-# ========================================
 # Uygulama Çalıştırma
-# ========================================
 if __name__ == "__main__":
     uvicorn.run(
         "app_new:app",

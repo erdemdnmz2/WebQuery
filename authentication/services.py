@@ -67,27 +67,6 @@ def get_user_id_from_payload(payload: dict) -> Optional[str]:
         return None
 
 
-def is_session_valid(user_id: int, session_cache: dict) -> bool:
-    """
-    Session'ın hala geçerli olup olmadığını kontrol eder
-    
-    Args:
-        user_id: Kullanıcı ID
-        session_cache: Session cache dictionary
-    
-    Returns:
-        True ise session geçerli, False ise geçersiz veya süresi dolmuş
-    """
-    info = session_cache.get(user_id)
-    if not info:
-        return False
-    
-    timeout = timedelta(minutes=config.SESSION_TIMEOUT)
-    if datetime.now() - info["addition_date"] > timeout:
-        session_cache.pop(user_id, None)
-        return False
-    
-    return True
 
 
 async def get_current_user(

@@ -64,11 +64,11 @@ class QueryService:
                     row_count=row_count
                 )
                 if row_count > config.MAX_ROW_COUNT_WARNING:
-                    print(f"⚠️ Warning: Query returned {row_count} rows")
+                    print(f"Warning: Query returned {row_count} rows")
                 return result_data
         except Exception as e:
             error_msg = str(e)
-            print(f"❌ Query execution error: {error_msg}")
+            print(f"Query execution error: {error_msg}")
             if log_id:
                 await self.app_db.update_log(
                     log_id=log_id,
