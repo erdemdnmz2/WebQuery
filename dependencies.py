@@ -7,7 +7,9 @@ from cryptography.fernet import Fernet
 
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
+
 from query_execution.services import QueryService
+from workspaces.services import WorkspaceService
 
 def get_app_db(request: Request) -> AppDatabase:
     """
@@ -50,3 +52,13 @@ def get_query_service(request: Request) -> QueryService:
     app_db = get_app_db(request)
     db_provider = get_db_provider(request)
     return QueryService(database_provider=db_provider, app_db=app_db)
+
+from workspaces.services import WorkspaceService
+
+def get_workspace_service(request: Request) -> WorkspaceService:
+    """
+    WorkspaceService instance'ını döndürür.
+    Kullanım: workspace_service: WorkspaceService = Depends(get_workspace_service)
+    """
+    app_db = get_app_db(request)
+    return WorkspaceService(app_db=app_db)

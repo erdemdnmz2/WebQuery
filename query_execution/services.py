@@ -12,11 +12,7 @@ from database_provider import DatabaseProvider
 from app_database.app_database import AppDatabase
 from app_database.models import User
 
-
-
 from query_execution.query_analyzer import QueryAnalyzer
-
-
 
 class QueryService:
     """Query execution service"""
