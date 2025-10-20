@@ -37,8 +37,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 if not user_id:
                     raise HTTPException(status_code=401, detail="Invalid token")
                 session_cache = get_session_cache(request)
-                if not is_session_valid(user_id=int(user_id), session_cache=session_cache):
-                    session_cache.pop(int(user_id), None)
+                from authentication import config
+                if not session_cache.is_valid(int(user_id), timeout_minutes=config.SESSION_TIMEOUT):
+                    session_cache.remove(int(user_id))
                     raise HTTPException(status_code=401, detail="Invalid session")
         except Exception as e:
             print(e)
