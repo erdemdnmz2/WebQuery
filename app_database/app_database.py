@@ -18,8 +18,7 @@ class AppDatabase:
             max_overflow=30,       # For peak times
             pool_timeout=20,
             pool_recycle=3600,
-            pool_pre_ping=True,
-            connect_args={"timeout": 30, "autocommit": True}
+            pool_pre_ping=True
         )
 
         self.AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=self.app_engine)
