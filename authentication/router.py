@@ -5,6 +5,8 @@ Login, register ve user bilgisi endpoint'leri
 from fastapi import APIRouter, HTTPException, Response, Request, Depends
 from datetime import datetime
 from cryptography.fernet import Fernet
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from authentication import config
 from authentication import schemas
@@ -16,8 +18,12 @@ from database_provider import DatabaseProvider
 
 router = APIRouter(prefix="/api")
 
+# Rate limiter instance
+limiter = Limiter(key_func=get_remote_address)
+
 
 @router.post("/login", response_model=schemas.Token)
+@limiter.limit(config.RATE_LIMITER)
 async def login(
     user: schemas.UserLogin,
     response: Response,
@@ -79,6 +85,7 @@ async def login(
 
 
 @router.post("/register")
+@limiter.limit(config.RATE_LIMITER)
 async def register(
     user: schemas.UserCreate,
     response: Response,

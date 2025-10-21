@@ -4,6 +4,8 @@ SQL query çalıştırma endpoint'leri
 """
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from query_execution import config
 from query_execution import models as query_models
@@ -17,8 +19,12 @@ from session.session_cache import SessionCache
 
 router = APIRouter(prefix="/api")
 
+# Rate limiter instance
+limiter = Limiter(key_func=get_remote_address)
+
 
 @router.post("/execute_query", response_model=query_models.SQLResponse)
+@limiter.limit(config.RATE_LIMITER)
 async def execute_query(
     query_request: query_models.SQLQuery,
     current_user: User = Depends(get_current_user),
