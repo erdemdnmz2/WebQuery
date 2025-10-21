@@ -3,7 +3,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response as StarletteResponse
 from starlette.responses import RedirectResponse
 from fastapi import Request
-from authentication.services import verify_token, get_user_id_from_payload, is_session_valid
+from authentication.services import verify_token, get_user_id_from_payload
 from dependencies import get_session_cache
 from fastapi.exceptions import HTTPException
 

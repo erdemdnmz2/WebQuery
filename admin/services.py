@@ -3,7 +3,7 @@ from sqlalchemy.sql import select, text
 from app_database.models import queryData, Workspace, User
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
-from schemas import *
+from .schemas import *
 
 class AdminService:
     def __init__(self, app_db: AppDatabase, db_provider: DatabaseProvider):

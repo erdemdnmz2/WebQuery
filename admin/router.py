@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, status, HTTPException, Response
-from schemas import *
+from .schemas import *
 from dependencies import get_admin_service
 from authentication.services import get_current_user
-from services import AdminService
+from .services import AdminService
 
 router = APIRouter(prefix="/api/admin")
 

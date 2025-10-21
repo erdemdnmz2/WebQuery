@@ -1,10 +1,10 @@
 
 from fastapi import APIRouter, Depends, status, HTTPException, Response
-from schemas import *
+from .schemas import *
 from dependencies import get_app_db, get_workspace_service
 from authentication.services import get_current_user
 from app_database import AppDatabase
-from services import WorkspaceService
+from .services import WorkspaceService
 
 router = APIRouter(prefix="/api")
 
