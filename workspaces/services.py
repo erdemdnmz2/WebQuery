@@ -2,7 +2,7 @@ from app_database.models import queryData, Workspace
 from app_database.app_database import AppDatabase
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
-from schemas import WorkspaceInfo
+from .schemas import WorkspaceInfo, WorkspaceCreate
 from sqlalchemy.sql import select
 
 class WorkspaceService:
@@ -10,7 +10,7 @@ class WorkspaceService:
     def __init__(self, app_db: AppDatabase):
         self.app_db = app_db
 
-    async def create_workspace(self, db: AsyncSession, workspace_data: WorkspaceInfo, user_id: int):
+    async def create_workspace(self, db: AsyncSession, workspace_data: WorkspaceCreate, user_id: int):
         try:
             new_query_data = queryData(
                     user_id=user_id,
@@ -26,20 +26,21 @@ class WorkspaceService:
 
             """Workspace oluşturma işlemi"""
             workspace = Workspace(
-                name=workspace_data.get("name"),
-                description=workspace_data.get("description"),
-                user_id=user_id
+                name=workspace_data.name,
+                description=workspace_data.description,
+                user_id=user_id,
+                query_id=new_query_data.id
             )
             db.add(workspace)
             await db.commit()
             await db.refresh(workspace)
             return {"success": True, "workspace_id": workspace.id}
         except Exception as e:
-            db.rollback()
+            await db.rollback()
             print(f"Error creating workspace: {e}")
             return {"success": False, "error": str(e)}
         
-    async def get_workspace_by_id(db: AsyncSession, user_id: int):
+    async def get_workspace_by_id(self, db: AsyncSession, user_id: int):
         
         results = await db.execute(
             select(Workspace).where(Workspace.user_id == user_id)
@@ -70,7 +71,7 @@ class WorkspaceService:
                 ))
         return workspace_list
     
-    async def delete_workspace_by_id(workspace_id: int, db: AsyncSession):
+    async def delete_workspace_by_id(self, workspace_id: int, db: AsyncSession):
         try:
             workspace = await db.get(Workspace, workspace_id)
             if not workspace:

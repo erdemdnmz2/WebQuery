@@ -2,14 +2,14 @@ from typing import Dict
 from cryptography.fernet import Fernet
 from datetime import datetime
 
-
 class SessionCache:
-    def __init__(self):
+    def __init__(self, fernet: Fernet | None = None):
         self.session_cache: Dict[int, Dict] = {}
-        self.session_key = Fernet().generate_key()
-        self.fernet_instance = Fernet(key=self.session_key)
+        self.fernet_instance = fernet
     
     def add_to_cache(self, password: str, user_id: int):
+        if not self.fernet_instance:
+            raise RuntimeError("Fernet instance is not initialized")
         sub = {
             "user_password": self.fernet_instance.encrypt(password.encode()),
             "addition_time": datetime.now()
@@ -17,6 +17,8 @@ class SessionCache:
         self.session_cache[user_id] = sub
 
     def get_password(self, user_id: int) -> str:
+        if not self.fernet_instance:
+            raise RuntimeError("Fernet instance is not initialized")
         encoded_pw = self.session_cache[user_id]["user_password"]
         password = self.fernet_instance.decrypt(encoded_pw).decode()
         return password
