@@ -28,7 +28,6 @@ async def lifespan(app: FastAPI):
     # Startup
     print("🚀 Uygulama başlatılıyor...")
     
-    # AppDatabase oluştur ve bağlantıyı test et - ZORUNLU
     try:
         app.state.app_db = AppDatabase()
         # Gerçek bağlantı testi
@@ -43,7 +42,6 @@ async def lifespan(app: FastAPI):
         await app.state.app_db.app_engine.dispose() if hasattr(app.state, 'app_db') else None
         raise SystemExit(1)
 
-    # DatabaseProvider oluştur ve db_info yükle - ZORUNLU
     try:
         app.state.db_provider = DatabaseProvider()
         await app.state.db_provider.get_db_info()
@@ -57,7 +55,6 @@ async def lifespan(app: FastAPI):
         await app.state.app_db.app_engine.dispose()
         raise SystemExit(1)
 
-    # Fernet encryption (tek instance)
     app.state.fernet = Fernet(Fernet.generate_key())
     print("✓ Fernet encryption hazır")
 
@@ -98,7 +95,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(AuthMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 
-# Basic CORS setup (adjust origins in production)
+#TODO burayı ayarla
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
