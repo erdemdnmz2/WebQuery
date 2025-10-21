@@ -16,6 +16,7 @@ class DatabaseProvider:
             "mssql+aioodbc://{username}:{password}@{servername}/{database}"
             "?driver=ODBC+Driver+18+for+SQL+Server"
             "&TrustServerCertificate=yes"
+            "&connection timeout=30"
             )
 
         
@@ -43,6 +44,7 @@ class DatabaseProvider:
                     "?driver=ODBC+Driver+18+for+SQL+Server"
                     "&trusted_connection=yes"
                     "&TrustServerCertificate=yes"
+                    "&connection timeout=30"
                 )
                 temp_engine = create_async_engine(master_conn_str)
 
@@ -77,8 +79,7 @@ class DatabaseProvider:
                 max_overflow=1,
                 pool_timeout=30,
                 pool_recycle=1800,
-                pool_pre_ping=True,
-                connect_args={"timeout": 30, "autocommit": True}
+                pool_pre_ping=True
             )
         
         engine = self.engine_cache[user.id][server_name][database_name]

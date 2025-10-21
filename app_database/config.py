@@ -3,4 +3,5 @@ DATABASE_URL = (
     "?driver=ODBC+Driver+18+for+SQL+Server"
     "&trusted_connection=yes"
     "&TrustServerCertificate=yes"
+    "&connection timeout=30"
 )
