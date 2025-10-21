@@ -12,11 +12,13 @@ from slowapi.errors import RateLimitExceeded
 import uvicorn
 from starlette.middleware.cors import CORSMiddleware
 from cryptography.fernet import Fernet
+from sqlalchemy import text
 
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
 from session import SessionCache
 from middlewares import AuthMiddleware
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -25,12 +27,35 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     print("🚀 Uygulama başlatılıyor...")
-    app.state.app_db = AppDatabase()
-    print("✓ AppDatabase hazır")
+    
+    # AppDatabase oluştur ve bağlantıyı test et - ZORUNLU
+    try:
+        app.state.app_db = AppDatabase()
+        # Gerçek bağlantı testi
+        async with app.state.app_db.app_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        print("✓ AppDatabase bağlantısı başarılı")
+    except Exception as e:
+        print(f"\n❌ FATAL: AppDatabase bağlantı hatası!")
+        print(f"   Hata: {type(e).__name__}: {e}")
+        print(f"   Lütfen APP_DATABASE_URL environment variable'ını kontrol edin")
+        print(f"   Uygulama başlatılamıyor!\n")
+        await app.state.app_db.app_engine.dispose() if hasattr(app.state, 'app_db') else None
+        raise SystemExit(1)
 
-    app.state.db_provider = DatabaseProvider()
-    await app.state.db_provider.get_db_info()
-    print("✓ DatabaseProvider hazır ve db_info yüklendi")
+    # DatabaseProvider oluştur ve db_info yükle - ZORUNLU
+    try:
+        app.state.db_provider = DatabaseProvider()
+        await app.state.db_provider.get_db_info()
+        print("✓ DatabaseProvider hazır ve db_info yüklendi")
+    except Exception as e:
+        print(f"\n❌ FATAL: DatabaseProvider başlatma hatası!")
+        print(f"   Hata: {type(e).__name__}: {e}")
+        print(f"   Lütfen SQL_SERVER_NAMES environment variable'ını ve SQL Server bağlantılarını kontrol edin")
+        print(f"   Uygulama başlatılamıyor!\n")
+        # Cleanup
+        await app.state.app_db.app_engine.dispose()
+        raise SystemExit(1)
 
     # Fernet encryption (tek instance)
     app.state.fernet = Fernet(Fernet.generate_key())

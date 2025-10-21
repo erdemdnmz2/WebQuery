@@ -2,7 +2,7 @@
 Query Execution Router
 SQL query çalıştırma endpoint'leri
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import List
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -26,6 +26,7 @@ limiter = Limiter(key_func=get_remote_address)
 @router.post("/execute_query", response_model=query_models.SQLResponse)
 @limiter.limit(config.RATE_LIMITER)
 async def execute_query(
+    request: Request,
     query_request: query_models.SQLQuery,
     current_user: User = Depends(get_current_user),
     query_service: QueryService = Depends(get_query_service),
