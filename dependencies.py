@@ -62,3 +62,14 @@ def get_workspace_service(request: Request) -> WorkspaceService:
     """
     app_db = get_app_db(request)
     return WorkspaceService(app_db=app_db)
+
+from admin.services import AdminService
+
+def get_admin_service(request: Request) -> AdminService:
+    """
+    AdminService instance'ını döndürür.
+    Kullanım: admin_service: AdminService = Depends(get_admin_service)
+    """
+    app_db = get_app_db(request)
+    db_provider = get_db_provider(request)
+    return AdminService(app_db=app_db, db_provider=db_provider)

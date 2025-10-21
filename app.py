@@ -8,17 +8,13 @@ from contextlib import asynccontextmanager
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from cryptography.fernet import Fernet
 import uvicorn
 
-# Yeni mimari sınıfları
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
 from session import SessionCache
 
-# Middleware
 from middlewares import AuthMiddleware
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -35,16 +31,13 @@ async def lifespan(app: FastAPI):
     try:
         print("🚀 Uygulama başlatılıyor...")
         
-        # AppDatabase instance'ı oluştur (uygulama kendi DB'si)
         app.state.app_db = AppDatabase()
         print("✓ AppDatabase hazır")
         
-        # DatabaseProvider instance'ı oluştur (kullanıcı hedef DB'leri)
         app.state.db_provider = DatabaseProvider()
         await app.state.db_provider.get_db_info()
         print("✓ DatabaseProvider hazır ve db_info yüklendi")
         
-        # Session cache ve fernet instance'larını state'e koy
         
         app.state.session_cache = SessionCache()
         print("✓ Session cache hazır")
@@ -57,14 +50,12 @@ async def lifespan(app: FastAPI):
         
     except Exception as e:
         print(f"Uygulama başlatma hatası: {e}")
-        raise  # Uygulama başlamasın
+        raise  
     
     finally:
-        # Graceful shutdown - her durumda çalışır
         print("\nUygulama kapatılıyor...")
         
         try:
-            # DatabaseProvider engine'lerini kapat
             if hasattr(app.state, 'db_provider') and app.state.db_provider:
                 await app.state.db_provider.close_engines()
                 print("✓ DatabaseProvider bağlantıları kapatıldı")
@@ -72,7 +63,6 @@ async def lifespan(app: FastAPI):
             print(f"DatabaseProvider kapatma hatası: {e}")
         
         try:
-            # AppDatabase engine'ini kapat
             if hasattr(app.state, 'app_db') and app.state.app_db:
                 await app.state.app_db.app_engine.dispose()
                 print("✓ AppDatabase bağlantısı kapatıldı")
@@ -81,8 +71,6 @@ async def lifespan(app: FastAPI):
         
         print("Kapatma işlemi tamamlandı")
 
-
-# FastAPI Uygulaması
 app = FastAPI(
     title="WebQuery API",
     description="Modular SQL Query Execution Platform",
@@ -90,68 +78,27 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-
-# Rate Limiter
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-
-# Middleware
 app.add_middleware(AuthMiddleware)
 
-
-# Router'ları Include Et
-
-# Authentication Router
 from authentication.router import router as auth_router
 app.include_router(auth_router, tags=["Authentication"])
 
-# Query Execution Router
 from query_execution.router import router as query_router
 app.include_router(query_router, tags=["Query Execution"])
 
-# TODO: Admin router eklenecek
-# from admin.router import router as admin_router
-# app.include_router(admin_router, tags=["Admin"])
+from admin.router import router as admin_router
+app.include_router(admin_router, tags=["Admin"])
 
-# TODO: Workspace router eklenecek
-# from workspace.router import router as workspace_router
-# app.include_router(workspace_router, tags=["Workspace"])
+from workspaces.router import router as workspace_router
+app.include_router(workspace_router, tags=["Workspace"])
 
+from static_files.router import router as static_router
+app.include_router(static_router, tags=["Static Files"])
 
-# HTML Sayfaları (Statik)
-@app.get("/", response_class=FileResponse)
-def homepage():
-    return FileResponse("templates/home.html")
-
-
-@app.get("/login", response_class=FileResponse)
-def login_page():
-    return FileResponse("templates/login.html")
-
-
-@app.get("/register", response_class=FileResponse)
-def register_page():
-    return FileResponse("templates/register.html")
-
-
-@app.get("/admin", response_class=FileResponse)
-def admin_page():
-    return FileResponse("templates/admin.html")
-
-
-@app.get("/index", response_class=FileResponse)
-def index_page():
-    return FileResponse("templates/index.html")
-
-
-@app.get("/home", response_class=FileResponse)
-def home_page():
-    return FileResponse("templates/index.html")
-
-
-# Health Check
 @app.get("/health")
 async def health_check():
     """Sağlık kontrolü endpoint'i"""
@@ -161,8 +108,6 @@ async def health_check():
         "db_provider": "connected" if app.state.db_provider else "disconnected"
     }
 
-
-# Uygulama Çalıştırma
 if __name__ == "__main__":
     uvicorn.run(
         "app_new:app",
