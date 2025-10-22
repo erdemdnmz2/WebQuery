@@ -10,6 +10,9 @@ Environment Variables:
     APP_DATABASE_URL: Tam connection string (override için)
 """
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 db_user = os.getenv("DB_USER", "sa")
 db_password = os.getenv("DB_PASSWORD", "")

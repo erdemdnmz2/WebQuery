@@ -4,6 +4,10 @@ Erişilebilir SQL Server instance listesi ve connection string template
 """
 import os
 from typing import List
+from dotenv import load_dotenv
+
+# .env dosyasını yükle
+load_dotenv()
 
 # Environment'tan virgülle ayrılmış server listesi al, yoksa default kullan
 _server_list = os.getenv("SQL_SERVER_NAMES", "localhost")

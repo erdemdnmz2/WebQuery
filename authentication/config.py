@@ -2,6 +2,10 @@
 Authentication Service Config
 """
 import os
+from dotenv import load_dotenv
+
+# .env dosyasını yükle
+load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here-change-in-production")
 ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
