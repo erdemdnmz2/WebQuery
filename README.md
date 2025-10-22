@@ -33,10 +33,11 @@ This project is a database management and query analysis tool for SQL Server. It
      SERVER_NAMES = [
          "YOUR_SERVER_NAME"
      ]
+     DB_USER = "sa"
+     DB_PASSWORD = "your_password"
      DATABASE_URL = (
-         "mssql+aioodbc://localhost/your_db"
+         f"mssql+aioodbc://{DB_USER}:{DB_PASSWORD}@localhost/your_db"
          "?driver=ODBC+Driver+18+for+SQL+Server"
-         "&trusted_connection=yes"
          "&TrustServerCertificate=yes"
      )
      ```
@@ -90,10 +91,11 @@ Bu proje, SQL Server için bir veritabanı yönetim ve sorgu analiz aracıdır. 
      SERVER_NAMES = [
          "SUNUCU_ADINIZ"
      ]
+     DB_USER = "sa"
+     DB_PASSWORD = "sifreniz"
      DATABASE_URL = (
-         "mssql+aioodbc://localhost/veritabani_adiniz"
+         f"mssql+aioodbc://{DB_USER}:{DB_PASSWORD}@localhost/veritabani_adiniz"
          "?driver=ODBC+Driver+18+for+SQL+Server"
-         "&trusted_connection=yes"
          "&TrustServerCertificate=yes"
      )
      ```
