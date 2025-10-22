@@ -2,6 +2,13 @@
 WebQuery API - Yeni Modüler Mimari
 AppDatabase ve DatabaseProvider ile temiz dependency injection
 """
+import os
+from dotenv import load_dotenv
+
+# .env dosyasını yükle (production için .env.production kullanabilirsiniz)
+env_file = os.getenv("ENV_FILE", ".env")
+load_dotenv(env_file)
+
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
