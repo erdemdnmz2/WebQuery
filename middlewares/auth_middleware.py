@@ -1,3 +1,7 @@
+"""
+Authentication Middleware
+Her HTTP request için JWT token doğrulama ve session kontrolü yapar
+"""
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response as StarletteResponse
@@ -8,7 +12,43 @@ from dependencies import get_session_cache
 from fastapi.exceptions import HTTPException
 
 class AuthMiddleware(BaseHTTPMiddleware):
+    """
+    JWT token ve session doğrulama middleware'i
+    
+    Her request'te:
+        1. Public endpoint kontrolü (login, register)
+        2. Cookie'den JWT token alınır
+        3. Token doğrulanır
+        4. Session geçerliliği kontrol edilir
+        5. Token/session geçersizse redirect veya 401 döner
+    
+    Public Endpoints (authentication bypass):
+        - /login, /register
+        - /api/login, /api/register
+    
+    Error Handling:
+        - API endpoint'leri: 401 JSON response
+        - Web sayfaları: /login'e redirect (cookie silme ile)
+    """
+    
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> StarletteResponse:
+        """
+        Request'i işler, authentication kontrolü yapar
+        
+        Args:
+            request: Gelen HTTP request
+            call_next: Sonraki middleware/endpoint handler
+        
+        Returns:
+            StarletteResponse: Response nesnesi
+        
+        Flow:
+            1. Public endpoint ise -> direkt geç
+            2. Token yoksa -> 401 veya redirect
+            3. Token geçersizse -> 401 veya redirect (cookie sil)
+            4. Session expired ise -> 401 veya redirect
+            5. Her şey OK ise -> next middleware/handler
+        """
         skip_auth_paths = [
             "/login", 
             "/register", 

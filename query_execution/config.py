@@ -1,5 +1,11 @@
 """
 Query Execution Service Config
+
+Konfigürasyon Parametreleri:
+    MULTIPLE_QUERY_COUNT: Tek seferde çalıştırılabilecek maksimum query sayısı
+    MAX_ROW_COUNT_WARNING: Bu sayıdan fazla satır dönerse warning loglanır
+    MAX_ROW_COUNT_LIMIT: Response'da döndürülecek maksimum satır sayısı
+    RATE_LIMITER: Query endpoint'leri için rate limit (örn: "10/minute")
 """
 import os
 

@@ -1,3 +1,14 @@
+"""
+Application Database Configuration
+
+Uygulama veritabanı bağlantı ayarları.
+Kullanıcı yönetimi, loglama ve workspace verilerini tutan veritabanı için kullanılır.
+
+Environment Variables:
+    DB_USER: SQL Server kullanıcı adı (default: "sa")
+    DB_PASSWORD: SQL Server şifresi (default: "")
+    APP_DATABASE_URL: Tam connection string (override için)
+"""
 import os
 
 db_user = os.getenv("DB_USER", "sa")

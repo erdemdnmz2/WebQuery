@@ -15,7 +15,18 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
 # Connection string builder fonksiyonları
 def create_connection_string(username: str, password: str, servername: str, database: str) -> str:
-    """User-specific connection string oluşturur"""
+    """
+    Kullanıcıya özel SQL Server connection string oluşturur.
+    
+    Args:
+        username: SQL Server kullanıcı adı
+        password: SQL Server şifresi
+        servername: SQL Server instance adı (ör: localhost, server1)
+        database: Bağlanılacak veritabanı adı
+        
+    Returns:
+        str: ODBC Driver 18 kullanan aioodbc connection string
+    """
     return (
         f"mssql+aioodbc://{username}:{password}@{servername}/{database}"
         "?driver=ODBC+Driver+18+for+SQL+Server"
@@ -24,7 +35,19 @@ def create_connection_string(username: str, password: str, servername: str, data
     )
 
 def get_master_connection_string(server: str) -> str:
-    """Master database connection string (database listesini almak için)"""
+    """
+    Master database'e bağlanmak için connection string oluşturur.
+    Veritabanı listesini almak için kullanılır (sys.databases sorgusu).
+    
+    Args:
+        server: SQL Server instance adı
+        
+    Returns:
+        str: Master database için connection string
+        
+    Note:
+        DB_USER ve DB_PASSWORD environment variable'larından alınır
+    """
     return (
         f"mssql+aioodbc://{DB_USER}:{DB_PASSWORD}@{server}/master"
         "?driver=ODBC+Driver+18+for+SQL+Server"

@@ -1,3 +1,7 @@
+"""
+Application Database Manager
+Uygulama veritabanı işlemleri (kullanıcı, log, workspace CRUD)
+"""
 from app_database.config import DATABASE_URL
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSession, async_sessionmaker
@@ -11,7 +15,28 @@ from app_database.schemas import UserCreate
 
 
 class AppDatabase:
+    """
+    Uygulama veritabanı yönetim sınıfı
+    
+    Kullanıcı yönetimi, query loglama, login loglama ve workspace işlemlerini yapar.
+    Connection pool ile optimize edilmiş async database bağlantısı sağlar.
+    
+    Attributes:
+        app_engine: SQLAlchemy async engine (connection pool ile)
+        AsyncSessionLocal: Async session factory
+    """
+    
     def __init__(self):
+        """
+        AppDatabase'i başlatır ve connection pool'u konfigüre eder
+        
+        Pool Configuration:
+            - pool_size: 20 (normal operasyonlar için)
+            - max_overflow: 30 (yoğun zamanlarda ekstra bağlantı)
+            - pool_timeout: 20 saniye
+            - pool_recycle: 3600 saniye (1 saat)
+            - pool_pre_ping: True (bağlantı kontrolü)
+        """
         self.app_engine = create_async_engine(
             DATABASE_URL,
             pool_size=20,          # For CRUD operations
@@ -25,13 +50,36 @@ class AppDatabase:
 
     @asynccontextmanager
     async def get_app_db(self):
+        """
+        Async database session context manager
+        
+        Yields:
+            AsyncSession: SQLAlchemy async session
+        
+        Example:
+            async with app_db.get_app_db() as session:
+                result = await session.execute(query)
+        """
         async with self.AsyncSessionLocal() as session:
             try:
                 yield session
             finally:
                 await session.close()
 
-    async def create_user(db : AsyncSession, user: UserCreate):
+    async def create_user(db: AsyncSession, user: UserCreate):
+        """
+        Yeni kullanıcı oluşturur (static method)
+        
+        Args:
+            db: Async database session
+            user: Kullanıcı oluşturma şeması
+        
+        Returns:
+            Dict: {"success": bool, "message": str}
+        
+        Note:
+            Şifre bcrypt ile hash'lenerek saklanır
+        """
         created_user = User(
             username = user.username,
             email = user.email
@@ -47,6 +95,20 @@ class AppDatabase:
         }
 
     async def create_log(self, user: User, query: str, machine_name: str):
+        """
+        Query execution log'u oluşturur (başlangıç kaydı)
+        
+        Args:
+            user: Query'yi çalıştıran kullanıcı
+            query: Çalıştırılan SQL query
+            machine_name: SQL Server instance adı
+        
+        Returns:
+            actionLogging: Oluşturulan log kaydı
+        
+        Note:
+            Log başlangıçta oluşturulur, sonuç update_log ile güncellenir
+        """
         async with self.get_app_db() as db:
             created_log = actionLogging(
                 user_id = user.id,
@@ -60,7 +122,20 @@ class AppDatabase:
             await db.refresh(created_log)
             return created_log
     
-    async def update_log(self, log_id, successfull: bool, error : str = None, row_count: int = None):
+    async def update_log(self, log_id, successfull: bool, error: str = None, row_count: int = None):
+        """
+        Query execution log'unu günceller (sonuç kaydı)
+        
+        Args:
+            log_id: Güncellenecek log ID'si
+            successfull: Query başarılı mı?
+            error: Hata mesajı (başarısızsa)
+            row_count: Dönen satır sayısı (başarılıysa)
+        
+        Note:
+            - Başarısızsa: ErrorMessage ve isSuccessfull güncellenir
+            - Başarılıysa: ExecutionDurationMS, isSuccessfull ve row_count güncellenir
+        """
         async with self.get_app_db() as db:
             result = await db.execute(select(actionLogging).where(actionLogging.id == log_id))
             log = result.scalars().first()
@@ -76,6 +151,16 @@ class AppDatabase:
             await db.commit()
 
     async def create_login_log(self, user_id: int, client_ip):
+        """
+        Kullanıcı login log'u oluşturur
+        
+        Args:
+            user_id: Giriş yapan kullanıcının ID'si
+            client_ip: İstek IP adresi
+        
+        Note:
+            logout_date başlangıçta NULL, logout'ta update_login_log ile güncellenir
+        """
         async with self.get_app_db() as db:
             created_log = loginLogging(
                 user_id = user_id,
@@ -86,6 +171,17 @@ class AppDatabase:
             await db.commit()
 
     async def update_login_log(self, user_id: int):
+        """
+        Kullanıcı logout log'unu günceller
+        
+        Args:
+            user_id: Çıkış yapan kullanıcının ID'si
+        
+        Note:
+            - logout_date NULL olan (aktif) log kaydını bulur
+            - logout_date ve login_duration_ms günceller
+            - Aktif kayıt bulunamazsa warning yazdırır
+        """
         async with self.get_app_db() as db:
             result = await db.execute(
                 select(loginLogging)
