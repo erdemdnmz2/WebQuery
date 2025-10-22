@@ -1,8 +1,9 @@
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSession, async_sessionmaker
 from typing import Dict
+import os
 import  app_database.models as models
-from database_provider.config import SERVER_NAMES
+from database_provider.config import SERVER_NAMES, create_connection_string, get_master_connection_string
 from sqlalchemy.future import select
 from contextlib import asynccontextmanager
 from sqlalchemy.exc import SQLAlchemyError
@@ -11,22 +12,15 @@ class DatabaseProvider:
     def __init__(self):
         self.engine_cache: Dict[int, Dict[str, Dict[str, AsyncEngine]]] = {}
         self.db_info: Dict[str, list[str]] = {} 
-        
-        self.connection_string = (
-            "mssql+aioodbc://{username}:{password}@{servername}/{database}"
-            "?driver=ODBC+Driver+18+for+SQL+Server"
-            "&TrustServerCertificate=yes"
-            "&connection timeout=30"
-            )
 
         
     def _create_connection_string(self, username: str, password: str, database: str, server: str):
-        return self.connection_string.format(
-        username = username,
-        password = password,
-        servername=server,
-        database = database
-    )
+        return create_connection_string(
+            username=username,
+            password=password,
+            servername=server,
+            database=database
+        )
 
     def get_db_info_by_user_id(self, user_id: int):
         user_dict = self.engine_cache[user_id]
@@ -39,13 +33,7 @@ class DatabaseProvider:
         
         for server in SERVER_NAMES: 
             try:
-                master_conn_str = (
-                    f"mssql+aioodbc://{server}/master"
-                    "?driver=ODBC+Driver+18+for+SQL+Server"
-                    "&trusted_connection=yes"
-                    "&TrustServerCertificate=yes"
-                    "&connection timeout=30"
-                )
+                master_conn_str = get_master_connection_string(server)
                 temp_engine = create_async_engine(master_conn_str)
 
                 async with temp_engine.connect() as connection:
