@@ -1,9 +1,26 @@
+"""
+Admin Schemas
+Pydantic models for admin approval endpoints
+"""
 from pydantic import BaseModel
 from typing import Optional, List
 
 class AdminApprovals(BaseModel):
-    user_id : int
-    workspace_id : int
+    """
+    Admin onayı bekleyen query bilgisi
+    
+    Attributes:
+        user_id: Query'yi gönderen kullanıcı ID'si
+        workspace_id: İlişkili workspace ID'si
+        username: Kullanıcı adı
+        query: Onay bekleyen SQL query
+        database: Hedef veritabanı
+        status: Query durumu ("waiting_for_approval", etc.)
+        risk_type: Risk tipi (opsiyonel, analyzer'dan gelen)
+        servername: Hedef SQL Server (opsiyonel)
+    """
+    user_id: int
+    workspace_id: int
     username: str
     query: str
     database: str
@@ -12,4 +29,5 @@ class AdminApprovals(BaseModel):
     servername: Optional[str] = None
 
 class AdminApprovalsList(BaseModel):
-    waiting_approvals : List[AdminApprovals]
+    """Admin onay listesi response şeması"""
+    waiting_approvals: List[AdminApprovals]

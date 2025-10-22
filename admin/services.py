@@ -1,3 +1,7 @@
+"""
+Admin Service Layer
+Riskli query'lerin admin onayı ve yönetimi işlemleri
+"""
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import select, text
 from app_database.models import queryData, Workspace, User
@@ -6,11 +10,39 @@ from database_provider import DatabaseProvider
 from .schemas import *
 
 class AdminService:
+    """
+    Admin query onay ve yönetim servisi
+    
+    Riskli olarak işaretlenen query'lerin admin tarafından onaylanması,
+    reddedilmesi veya çalıştırılması işlemlerini yönetir.
+    
+    Attributes:
+        app_db: Uygulama veritabanı instance
+        db_provider: Veritabanı bağlantı sağlayıcı
+    """
+    
     def __init__(self, app_db: AppDatabase, db_provider: DatabaseProvider):
+        """
+        AdminService'i başlatır
+        
+        Args:
+            app_db: AppDatabase instance
+            db_provider: DatabaseProvider instance
+        """
         self.app_db = app_db
         self.db_provider = db_provider
 
     async def get_workspaces_for_approval(self):
+        """
+        Admin onayı bekleyen workspace'leri getirir
+        
+        Returns:
+            List[AdminApprovals]: Onay bekleyen query listesi
+            
+        Note:
+            Status = "waiting_for_approval" olan kayıtları getirir
+            Her kayıt için user, workspace ve query bilgileri birleştirilir
+        """
         result_list = []
         try:
             async with self.app_db.get_app_db() as db:
@@ -45,6 +77,36 @@ class AdminService:
             return []
         
     async def approve_query_by_workspace_id(self, workspace_id: int):
+        """
+        Query'yi onaylar ve çalıştırır
+        
+        İş Akışı:
+            1. Workspace ve ilişkili query'yi bul
+            2. User bilgilerini al
+            3. Query'yi hedef veritabanında çalıştır
+            4. Başarılıysa: status = "approved_and_executed"
+            5. Başarısızsa: status = "approval_execution_failed"
+            6. Sonuçları döndür
+        
+        Args:
+            workspace_id: Onaylanacak workspace ID'si
+        
+        Returns:
+            Dict: {
+                "success": bool,
+                "data": List[Dict] (query sonuçları, başarılıysa),
+                "row_count": int (başarılıysa),
+                "query": str (başarılıysa),
+                "database": str (başarılıysa),
+                "servername": str (başarılıysa),
+                "error": str (başarısızsa)
+            }
+        
+        Note:
+            - Query çalıştırılır ve sonucu döndürülür
+            - Başarısız olsa bile status güncellenir
+            - Workspace description'a durum mesajı yazılır
+        """
         async with self.app_db.get_app_db() as db:
             workspace = await db.get(Workspace, workspace_id)
             if not workspace:
@@ -104,6 +166,23 @@ class AdminService:
                 return {"success": False, "error": str(e)}
 
     async def reject_query_by_workspace_id(self, workspace_id: int):
+        """
+        Query'yi reddeder
+        
+        Args:
+            workspace_id: Reddedilecek workspace ID'si
+        
+        Returns:
+            Dict: {
+                "success": bool,
+                "error": str (başarısızsa)
+            }
+        
+        Note:
+            - Query status = "rejected" olarak güncellenir
+            - Workspace description'a red mesajı yazılır
+            - Query çalıştırılmaz
+        """
         async with self.app_db.get_app_db() as db:
             try:
                 workspace = await db.get(Workspace, workspace_id)

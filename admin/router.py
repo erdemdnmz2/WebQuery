@@ -1,3 +1,7 @@
+"""
+Admin Router
+Admin query onay/red işlemleri endpoint'leri
+"""
 from fastapi import APIRouter, Depends, status, HTTPException, Response
 from .schemas import *
 from dependencies import get_admin_service
@@ -11,6 +15,17 @@ async def get_queries_to_approve(
     current_user = Depends(get_current_user),
     service: AdminService = Depends(get_admin_service)
 ):
+    """
+    Onay bekleyen query'lerin listesini döndürür
+    
+    Admin yetkisi gerektirir.
+    
+    Returns:
+        AdminApprovalsList: Onay bekleyen query'ler ve detayları
+    
+    Raises:
+        HTTPException 403: Admin yetkisi yoksa
+    """
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     
@@ -23,6 +38,24 @@ async def approve_query(
     current_user = Depends(get_current_user),
     service: AdminService = Depends(get_admin_service)
 ):
+    """
+    Query'yi onaylar ve çalıştırır
+    
+    Admin yetkisi gerektirir.
+    
+    Args:
+        workspace_id: Onaylanacak workspace ID'si
+    
+    Returns:
+        Dict: Query sonuçları ve metadata
+    
+    Raises:
+        HTTPException 403: Admin yetkisi yoksa
+        HTTPException 400: Onaylama/çalıştırma başarısızsa
+    
+    Note:
+        Query çalıştırılır ve sonuç döndürülür
+    """
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     
@@ -42,6 +75,24 @@ async def reject_query(
     current_user = Depends(get_current_user),
     service: AdminService = Depends(get_admin_service)
 ):
+    """
+    Query'yi reddeder
+    
+    Admin yetkisi gerektirir.
+    
+    Args:
+        workspace_id: Reddedilecek workspace ID'si
+    
+    Returns:
+        Response: 200 OK (başarılı)
+    
+    Raises:
+        HTTPException 403: Admin yetkisi yoksa
+        HTTPException 400: Reddetme başarısızsa
+    
+    Note:
+        Query çalıştırılmaz, sadece status güncellenir
+    """
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     

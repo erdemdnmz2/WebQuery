@@ -9,12 +9,30 @@ from contextlib import asynccontextmanager
 from sqlalchemy.exc import SQLAlchemyError
 
 class DatabaseProvider:
+    """
+    SQL Server veritabanı bağlantılarını yöneten sınıf.
+    Her kullanıcı için ayrı engine cache tutar ve lazy initialization kullanır.
+    """
+    
     def __init__(self):
+        """DatabaseProvider'ı başlatır ve cache yapılarını oluşturur."""
         self.engine_cache: Dict[int, Dict[str, Dict[str, AsyncEngine]]] = {}
         self.db_info: Dict[str, list[str]] = {} 
 
         
     def _create_connection_string(self, username: str, password: str, database: str, server: str):
+        """
+        Kullanıcıya özel connection string oluşturur.
+        
+        Args:
+            username: SQL Server kullanıcı adı
+            password: SQL Server şifresi
+            database: Bağlanılacak veritabanı adı
+            server: SQL Server instance adı
+            
+        Returns:
+            str: Formatlanmış connection string
+        """
         return create_connection_string(
             username=username,
             password=password,
@@ -23,6 +41,15 @@ class DatabaseProvider:
         )
 
     def get_db_info_by_user_id(self, user_id: int):
+        """
+        Kullanıcının erişebildiği sunucu ve veritabanlarını döndürür.
+        
+        Args:
+            user_id: Kullanıcı ID'si
+            
+        Returns:
+            Dict[str, List[str]]: {server_adı: [veritabanı_adları]}
+        """
         user_dict = self.engine_cache[user_id]
         response = {}
         for servername, databases in user_dict.items():
@@ -30,6 +57,11 @@ class DatabaseProvider:
         return response
     
     async def get_db_info(self):
+        """
+        Tüm sunuculardan erişilebilir veritabanlarının listesini alır.
+        Master database'e bağlanarak sys.databases tablosunu sorgular.
+        System veritabanları (ilk 4) hariç tutulur.
+        """
         
         for server in SERVER_NAMES: 
             try:
@@ -54,6 +86,22 @@ class DatabaseProvider:
     
     @asynccontextmanager
     async def get_session(self, user: models.User, server_name: str, database_name: str):
+        """
+        Kullanıcıya özel async database session'ı sağlar (context manager).
+        Engine yoksa lazy initialization ile oluşturur.
+        
+        Args:
+            user: Kullanıcı modeli (username ve password içerir)
+            server_name: SQL Server instance adı
+            database_name: Bağlanılacak veritabanı adı
+            
+        Yields:
+            AsyncSession: SQLAlchemy async session
+            
+        Example:
+            async with db_provider.get_session(user, "localhost", "mydb") as session:
+                result = await session.execute(query)
+        """
         if self.engine_cache[user.id][server_name][database_name] is None:
             conn_str = self._create_connection_string(
                 username=user.username, 
@@ -79,6 +127,10 @@ class DatabaseProvider:
                 await session.close()
 
     async def close_engines(self):
+        """
+        Tüm kullanıcıların tüm engine'lerini kapatır ve kaynakları serbest bırakır.
+        Uygulama kapanırken çağrılmalıdır.
+        """
         for user_id in self.engine_cache.keys():
             for server_name in self.engine_cache[user_id].keys():
                 for database_name in self.engine_cache[user_id][server_name].keys():
@@ -87,7 +139,14 @@ class DatabaseProvider:
                         await engine.dispose()
                         self.engine_cache[user_id][server_name][database_name] = None
 
-    async def close_user_engines(self,user_id: int):
+    async def close_user_engines(self, user_id: int):
+        """
+        Belirli bir kullanıcının tüm engine'lerini kapatır.
+        Kullanıcı logout olduğunda çağrılır.
+        
+        Args:
+            user_id: Kapatılacak kullanıcının ID'si
+        """
         if user_id in self.engine_cache:
             for server_name in self.engine_cache[user_id]:
                 for db_name in self.engine_cache[user_id][server_name]:
@@ -97,6 +156,15 @@ class DatabaseProvider:
             self.engine_cache.pop(user_id, None) 
 
     async def add_user_to_cache(self, user_id: int, username: str, password: str):
+        """
+        Yeni kullanıcıyı cache'e ekler ve erişebileceği tüm veritabanları için 
+        engine placeholder'ları oluşturur (lazy initialization).
+        
+        Args:
+            user_id: Kullanıcı ID'si
+            username: SQL Server kullanıcı adı
+            password: SQL Server şifresi
+        """
         self.engine_cache[user_id] = {}
         for server_name, databases in self.db_info.items():
             self.engine_cache[user_id][server_name] = {}
@@ -105,5 +173,10 @@ class DatabaseProvider:
                 self.engine_cache[user_id][server_name][db_name] = None  # Lazy initialization
     
     def get_db_info_db(self):
-        """Alias for get_db_info_by_user_id compatibility"""
+        """
+        Tüm sunuculardaki veritabanı bilgilerini döndürür.
+        
+        Returns:
+            Dict[str, List[str]]: {server_adı: [veritabanı_adları]}
+        """
         return self.db_info
