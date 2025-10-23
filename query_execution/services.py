@@ -14,6 +14,8 @@ from app_database.models import User
 
 from query_execution.query_analyzer import QueryAnalyzer
 
+from notification import NotificationService
+
 class QueryService:
     """
     Query execution ve loglama serviси
@@ -22,7 +24,7 @@ class QueryService:
     Admin olmayan kullanıcılar için query güvenlik kontrolü yapar.
     """
     
-    def __init__(self, database_provider: DatabaseProvider, app_db: AppDatabase):
+    def __init__(self, database_provider: DatabaseProvider, app_db: AppDatabase, notification_service: NotificationService):
         """
         QueryService'i başlatır
         
@@ -33,6 +35,7 @@ class QueryService:
         self.database_provider = database_provider
         self.app_db = app_db
         self.analyzer = QueryAnalyzer()
+        self.notification_service = notification_service
 
     async def execute_query(self, query: str, user: User, server_name: str, database_name: str) -> Dict[str, Any]:
         """
@@ -72,6 +75,23 @@ class QueryService:
             if not query_analysis["return"] and not user.is_admin:
                 error_msg = f"Query rejected: {query_analysis['risk_type']}"
                 await self.app_db.update_log(log_id=log_id, successfull=False, error=error_msg)
+                # Notify admins / approvers about the rejected query so they can review
+                try:
+                    if self.notification_service:
+                        # use current UTC time as request_time
+                        request_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                        # notification_service is async now; await it but don't let failures break flow
+                        await self.notification_service.send_approval_notifivation(
+                            username=getattr(user, 'username', str(getattr(user, 'id', 'unknown'))),
+                            request_time=request_time,
+                            database_name=database_name,
+                            servername=server_name,
+                            risk_type=query_analysis.get('risk_type', 'UNKNOWN'),
+                            query=query
+                        )
+                except Exception as notif_exc:
+                    # Don't fail the flow if notification sending fails; just log
+                    print(f"Notification send error: {type(notif_exc).__name__}: {notif_exc}")
                 return {
                     "response_type": "error",
                     "data": [],

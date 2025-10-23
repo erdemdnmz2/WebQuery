@@ -45,7 +45,9 @@ python-dotenv==1.0.1
 # File handling
 python-multipart==0.0.20
 
-# HTTP & SSL
+# HTTP & Requests
+requests==2.32.3
+httpx==0.24.1
 certifi==2025.7.9
 charset-normalizer==3.4.2
 idna==3.10

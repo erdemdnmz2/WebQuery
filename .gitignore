@@ -13,7 +13,7 @@ venv/
 build/
 dist/
 pip-wheel-metadata/
-*.egg-info/
+*.egg-info/r
 
 # Testing / coverage
 .pytest_cache/
