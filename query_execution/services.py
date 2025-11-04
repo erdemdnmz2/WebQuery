@@ -4,7 +4,7 @@ Query çalıştırma, analiz etme ve loglama işlemleri
 """
 from sqlalchemy.sql import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any
 
 from query_execution import config
@@ -79,7 +79,7 @@ class QueryService:
                 try:
                     if self.notification_service:
                         # use current UTC time as request_time
-                        request_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                        request_time = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
                         # notification_service is async now; await it but don't let failures break flow
                         await self.notification_service.send_approval_notifivation(
                             username=getattr(user, 'username', str(getattr(user, 'id', 'unknown'))),
