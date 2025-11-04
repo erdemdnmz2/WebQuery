@@ -14,8 +14,19 @@ annotated-types==0.7.0
 
 # SQLAlchemy & Database
 SQLAlchemy==2.0.41
+
+# MSSQL Support
 aioodbc==0.5.0
 pyodbc==5.2.0
+
+# MySQL Support
+aiomysql==0.2.0
+PyMySQL==1.1.0
+
+# PostgreSQL Support
+asyncpg==0.30.0
+
+# SQLAlchemy dependencies
 greenlet==3.2.3
 
 # Authentication & Security
