@@ -18,21 +18,22 @@ DB_USER = os.getenv("DB_USER", "sa")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
 # Connection string builder fonksiyonları
-def create_connection_string(username: str, password: str, servername: str, database: str) -> str:
+def create_connection_string(tech : str, driver: str, username: str, password: str, servername: str, database: str) -> str:
     """
     Kullanıcıya özel SQL Server connection string oluşturur.
     
     Args:
+        tech: Kullanılacak teknoloji örn: MSSQL, MYSQL, PostgreSQl
         username: SQL Server kullanıcı adı
         password: SQL Server şifresi
         servername: SQL Server instance adı (ör: localhost, server1)
         database: Bağlanılacak veritabanı adı
         
     Returns:
-        str: ODBC Driver 18 kullanan aioodbc connection string
+        str: İstenilen connection string
     """
     return (
-        f"mssql+aioodbc://{username}:{password}@{servername}/{database}"
+        f"{tech}+{driver}://{username}:{password}@{servername}/{database}"
         "?driver=ODBC+Driver+18+for+SQL+Server"
         "&TrustServerCertificate=yes"
         "&connection timeout=30"

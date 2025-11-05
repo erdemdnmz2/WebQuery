@@ -41,6 +41,8 @@ async def lifespan(app: FastAPI):
         async with app.state.app_db.app_engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
         print("✓ AppDatabase bağlantısı başarılı")
+        await app.state.app_db.create_tables()
+        print("✓ Tablolar oluşturuldu/kontrol edildi")
     except Exception as e:
         print(f"\n❌ FATAL: AppDatabase bağlantı hatası!")
         print(f"   Hata: {type(e).__name__}: {e}")

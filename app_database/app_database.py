@@ -9,7 +9,7 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 from sqlalchemy.sql import select
 
-from app_database.models import User, actionLogging, loginLogging, queryData, Workspace
+from app_database.models import User, actionLogging, loginLogging, queryData, Workspace, Base
 from database_provider import DatabaseProvider
 from app_database.schemas import UserCreate
 
@@ -65,6 +65,14 @@ class AppDatabase:
                 yield session
             finally:
                 await session.close()
+
+    async def create_tables(self):
+        """
+        Veritabanında tüm tabloları oluşturur (yoksa)
+        Development ortamında kullanılır
+        """
+        async with self.app_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
     async def create_user(db: AsyncSession, user: UserCreate):
         """

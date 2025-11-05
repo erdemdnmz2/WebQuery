@@ -139,6 +139,9 @@ class Workspace(Base):
     query_id = Column(Integer, ForeignKey("queryData.id"), nullable=False, unique=True)
     query_data = relationship("queryData")
 
-# TODO: accessibleTables modeli
-# Kullanıcının erişebildiği veritabanlarını cache'lemek için kullanılabilir
-# Böylece uygulama her açıldığında veritabanı listesini sorgulamaya gerek kalmaz
+class Databases(Base):
+    __tablename__ = "databases"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    servername = Column(NVARCHAR(100), nullable=False)
+    tablename = Column(NVARCHAR(100), nullable=False)
+    technology = Column(NVARCHAR(100), nullable=False)
