@@ -1,6 +1,7 @@
 import hashlib
 from typing import Dict
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.pool import QueuePool
 import asyncio
 from config import TIME_INTERVAL_FOR_CACHE
 from pydantic import BaseModel, Field
@@ -53,8 +54,9 @@ class EngineCache:
                         
             engine = create_async_engine(
                 url,
-                pool_size=1,
-                max_overflow=1,
+                poolclass=QueuePool,
+                pool_size=0,
+                max_overflow=20,
                 pool_timeout=30,
                 pool_recycle=1800,
                 pool_pre_ping=True
@@ -76,7 +78,6 @@ class EngineCache:
             self._cleanup_task = asyncio.create_task(self._loop())
             self._running = True
 
-    #TODO açık transaction var mı onu kontrol et
     async def _loop(self):
         while self._running:
             try:
@@ -89,13 +90,25 @@ class EngineCache:
                     
                     for key, entry in self._cache.items():
                         time_since_access = (current_time - entry.last_accessed).total_seconds()
+                        
                         if time_since_access > self.time_interval:
-                            stale_keys.append(key)
+                            is_active = False
+                            try:
+                                if entry.engine.sync_engine.pool.checkedout() > 0:
+                                    is_active = True
+                            except Exception:
+                                pass
+
+                            if is_active:
+                                entry.last_accessed = datetime.now()
+                            else:
+                                stale_keys.append(key)
                     
                     for key in stale_keys:
-                        entry = self._cache.pop(key)
-                        await entry.engine.dispose()
-                        self._stats["engine_count"] -= 1
+                        if key in self._cache:
+                            entry = self._cache.pop(key)
+                            await entry.engine.dispose()
+                            self._stats["engine_count"] -= 1
                         
             except asyncio.CancelledError:
                 break

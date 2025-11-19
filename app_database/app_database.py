@@ -9,9 +9,10 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 from sqlalchemy.sql import select
 
-from app_database.models import User, actionLogging, loginLogging, queryData, Workspace, Base
+from app_database.models import User, actionLogging, loginLogging, queryData, Workspace, Base, Databases
 from database_provider import DatabaseProvider
 from app_database.schemas import UserCreate
+from typing import Dict
 
 
 class AppDatabase:
@@ -118,17 +119,18 @@ class AppDatabase:
             Log başlangıçta oluşturulur, sonuç update_log ile güncellenir
         """
         async with self.get_app_db() as db:
-            created_log = actionLogging(
-                user_id = user.id,
-                username = user.username,
-                query_date = datetime.now(),
-                query = query,
-                machine_name = machine_name
-            )
-            db.add(created_log)
-            await db.commit()
-            await db.refresh(created_log)
-            return created_log
+            async with db.begin():
+                created_log = actionLogging(
+                    user_id = user.id,
+                    username = user.username,
+                    query_date = datetime.now(),
+                    query = query,
+                    machine_name = machine_name
+                )
+                db.add(created_log)
+                await db.flush()
+                await db.refresh(created_log)
+                return created_log
     
     async def update_log(self, log_id, successfull: bool, error: str = None, row_count: int = None):
         """
@@ -145,18 +147,19 @@ class AppDatabase:
             - Başarılıysa: ExecutionDurationMS, isSuccessfull ve row_count güncellenir
         """
         async with self.get_app_db() as db:
-            result = await db.execute(select(actionLogging).where(actionLogging.id == log_id))
-            log = result.scalars().first()
+            async with db.begin():
+                result = await db.execute(select(actionLogging).where(actionLogging.id == log_id))
+                log = result.scalars().first()
 
-            if not successfull:
-                log.ErrorMessage = error
-                log.isSuccessfull = False
-            else:
-                duration = datetime.now() - log.query_date
-                log.ExecutionDurationMS = int(duration.total_seconds() * 1000)
-                log.isSuccessfull = True
-                log.row_count = row_count
-            await db.commit()
+                if log:
+                    if not successfull:
+                        log.ErrorMessage = error
+                        log.isSuccessfull = False
+                    else:
+                        duration = datetime.now() - log.query_date
+                        log.ExecutionDurationMS = int(duration.total_seconds() * 1000)
+                        log.isSuccessfull = True
+                        log.row_count = row_count
 
     async def create_login_log(self, user_id: int, client_ip):
         """
@@ -170,13 +173,13 @@ class AppDatabase:
             logout_date başlangıçta NULL, logout'ta update_login_log ile güncellenir
         """
         async with self.get_app_db() as db:
-            created_log = loginLogging(
-                user_id = user_id,
-                login_date = datetime.now(),
-                client_ip = client_ip
-            )
-            db.add(created_log)
-            await db.commit()
+            async with db.begin():
+                created_log = loginLogging(
+                    user_id = user_id,
+                    login_date = datetime.now(),
+                    client_ip = client_ip
+                )
+                db.add(created_log)
 
     async def update_login_log(self, user_id: int):
         """
@@ -191,17 +194,33 @@ class AppDatabase:
             - Aktif kayıt bulunamazsa warning yazdırır
         """
         async with self.get_app_db() as db:
-            result = await db.execute(
-                select(loginLogging)
-                .where(loginLogging.user_id == user_id)
-                .where(loginLogging.logout_date.is_(None))
-            )
-            log = result.scalars().first()
-            if log:
-                log.logout_date = datetime.now()
-                duration = datetime.now() - log.login_date
-                log.login_duration_ms = int(duration.total_seconds() * 1000)
-                await db.commit()
-            else:
-                print(f"Active login record for user {user_id}")
+            async with db.begin():
+                result = await db.execute(
+                    select(loginLogging)
+                    .where(loginLogging.user_id == user_id)
+                    .where(loginLogging.logout_date.is_(None))
+                )
+                log = result.scalars().first()
+                if log:
+                    log.logout_date = datetime.now()
+                    duration = datetime.now() - log.login_date
+                    log.login_duration_ms = int(duration.total_seconds() * 1000)
+                else:
+                    print(f"Active login record for user {user_id}")
         
+    async def get_db_info(self) -> Dict[str, list[str]]:
+        async with self.get_app_db() as db:
+            async with db.begin():
+                result = await db.execute(
+                    select(Databases)
+                )
+                databases = result.scalars().all()
+
+                db_info : Dict[str, list[str]] = {}
+
+                for database in databases:
+                    if db_info.get(database.servername) is None:
+                        db_info[database.servername] = [database.database_name]
+                    else:
+                        db_info[database.servername].append(database.database_name)
+                return db_info

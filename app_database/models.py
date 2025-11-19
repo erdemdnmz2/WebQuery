@@ -143,5 +143,5 @@ class Databases(Base):
     __tablename__ = "databases"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     servername = Column(NVARCHAR(100), nullable=False)
-    tablename = Column(NVARCHAR(100), nullable=False)
+    database_name = Column(NVARCHAR(100), nullable=False)
     technology = Column(NVARCHAR(100), nullable=False)

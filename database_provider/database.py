@@ -7,6 +7,7 @@ from database_provider.config import SERVER_NAMES, create_connection_string, get
 from sqlalchemy.future import select
 from contextlib import asynccontextmanager
 from sqlalchemy.exc import SQLAlchemyError
+from engine_cache import EngineCache
 
 class DatabaseProvider:
     """
@@ -16,11 +17,11 @@ class DatabaseProvider:
     
     def __init__(self):
         """DatabaseProvider'ı başlatır ve cache yapılarını oluşturur."""
-        self.engine_cache: Dict[int, Dict[str, Dict[str, AsyncEngine]]] = {}
+        self.engine_cache: EngineCache = EngineCache()
         self.db_info: Dict[str, list[str]] = {} 
 
         
-    def _create_connection_string(self, username: str, password: str, database: str, server: str):
+    def _create_connection_string(self, username: str, password: str, database: str, server: str, tech: str, driver: str):
         """
         Kullanıcıya özel connection string oluşturur.
         
@@ -34,27 +35,16 @@ class DatabaseProvider:
             str: Formatlanmış connection string
         """
         return create_connection_string(
+            tech=tech,
+            driver=driver,
             username=username,
             password=password,
             servername=server,
             database=database
         )
 
-    def get_db_info_by_user_id(self, user_id: int):
-        """
-        Kullanıcının erişebildiği sunucu ve veritabanlarını döndürür.
-        
-        Args:
-            user_id: Kullanıcı ID'si
-            
-        Returns:
-            Dict[str, List[str]]: {server_adı: [veritabanı_adları]}
-        """
-        user_dict = self.engine_cache[user_id]
-        response = {}
-        for servername, databases in user_dict.items():
-            response[servername] = list(databases.keys())
-        return response
+    def set_db_info(self, info: Dict[str, list[str]]):
+        self.db_info = info
     
     async def get_db_info(self):
         """

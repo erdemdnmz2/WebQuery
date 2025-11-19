@@ -53,7 +53,8 @@ async def lifespan(app: FastAPI):
 
     try:
         app.state.db_provider = DatabaseProvider()
-        await app.state.db_provider.get_db_info()
+        db_info = await app.state.app_db.get_db_info()
+        app.state.db_provider.set_db_info(db_info)
         print("✓ DatabaseProvider hazır ve db_info yüklendi")
     except Exception as e:
         print(f"\n❌ FATAL: DatabaseProvider başlatma hatası!")
