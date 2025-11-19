@@ -76,6 +76,7 @@ class EngineCache:
             self._cleanup_task = asyncio.create_task(self._loop())
             self._running = True
 
+    #TODO açık transaction var mı onu kontrol et
     async def _loop(self):
         while self._running:
             try:
