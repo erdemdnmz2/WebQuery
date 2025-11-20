@@ -7,7 +7,7 @@ from database_provider.config import SERVER_NAMES, create_connection_string, get
 from sqlalchemy.future import select
 from contextlib import asynccontextmanager
 from sqlalchemy.exc import SQLAlchemyError
-from engine_cache import EngineCache
+from .engine_cache import EngineCache
 
 class DatabaseProvider:
     """
@@ -20,7 +20,6 @@ class DatabaseProvider:
         self.engine_cache: EngineCache = EngineCache()
         self.db_info: Dict[str, list[str]] = {} 
 
-    #TODO engine cahce ye göre metodları güncelle
         
     def _create_connection_string(self, username: str, password: str, database: str, server: str, tech: str, driver: str):
         """
@@ -76,7 +75,7 @@ class DatabaseProvider:
         print(f"Final db_info after processing: {self.db_info}")
     
     @asynccontextmanager
-    async def get_session(self, user: models.User, server_name: str, database_name: str):
+    async def get_session(self, user: models.User, servername: str, database_name: str, tech: str = "mssql", driver: str = "aioodbc"):
         """
         Kullanıcıya özel async database session'ı sağlar (context manager).
         Engine yoksa lazy initialization ile oluşturur.
@@ -85,6 +84,8 @@ class DatabaseProvider:
             user: Kullanıcı modeli (username ve password içerir)
             server_name: SQL Server instance adı
             database_name: Bağlanılacak veritabanı adı
+            tech: Veritabanı teknolojisi (default: mssql)
+            driver: Veritabanı sürücüsü (default: aioodbc)
             
         Yields:
             AsyncSession: SQLAlchemy async session
@@ -93,23 +94,18 @@ class DatabaseProvider:
             async with db_provider.get_session(user, "localhost", "mydb") as session:
                 result = await session.execute(query)
         """
-        if self.engine_cache[user.id][server_name][database_name] is None:
-            conn_str = self._create_connection_string(
-                username=user.username, 
-                password=user.password, 
-                database=database_name,
-                server=server_name
-            )
-            self.engine_cache[user.id][server_name][database_name] = create_async_engine(
-                conn_str,
-                pool_size=1,
-                max_overflow=1,
-                pool_timeout=30,
-                pool_recycle=1800,
-                pool_pre_ping=True
-            )
+
+        conn_str = create_connection_string(
+            tech=tech,
+            driver=driver,
+            servername=servername,
+            database=database_name,
+            username=user.username,
+            password=user.password,
+        )
         
-        engine = self.engine_cache[user.id][server_name][database_name]
+        engine = await self.engine_cache.get_engine(conn_str, owner_id=user.id)
+
         AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=engine)
         async with AsyncSessionLocal() as session:
             try:
@@ -122,13 +118,7 @@ class DatabaseProvider:
         Tüm kullanıcıların tüm engine'lerini kapatır ve kaynakları serbest bırakır.
         Uygulama kapanırken çağrılmalıdır.
         """
-        for user_id in self.engine_cache.keys():
-            for server_name in self.engine_cache[user_id].keys():
-                for database_name in self.engine_cache[user_id][server_name].keys():
-                    engine = self.engine_cache[user_id][server_name][database_name]
-                    if engine is not None:
-                        await engine.dispose()
-                        self.engine_cache[user_id][server_name][database_name] = None
+        await self.engine_cache.stop_loop()
 
     async def close_user_engines(self, user_id: int):
         """
@@ -138,30 +128,7 @@ class DatabaseProvider:
         Args:
             user_id: Kapatılacak kullanıcının ID'si
         """
-        if user_id in self.engine_cache:
-            for server_name in self.engine_cache[user_id]:
-                for db_name in self.engine_cache[user_id][server_name]:
-                    engine = self.engine_cache[user_id][server_name][db_name]
-                    if engine is not None:
-                        await engine.dispose()
-            self.engine_cache.pop(user_id, None) 
-
-    async def add_user_to_cache(self, user_id: int, username: str, password: str):
-        """
-        Yeni kullanıcıyı cache'e ekler ve erişebileceği tüm veritabanları için 
-        engine placeholder'ları oluşturur (lazy initialization).
-        
-        Args:
-            user_id: Kullanıcı ID'si
-            username: SQL Server kullanıcı adı
-            password: SQL Server şifresi
-        """
-        self.engine_cache[user_id] = {}
-        for server_name, databases in self.db_info.items():
-            self.engine_cache[user_id][server_name] = {}
-            for db_name in databases:
-                conn_str = self._create_connection_string(username, password, db_name, server_name)
-                self.engine_cache[user_id][server_name][db_name] = None  # Lazy initialization
+        await self.engine_cache.close_user_engines(user_id) 
     
     def get_db_info_db(self):
         """

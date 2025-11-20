@@ -40,8 +40,8 @@ class AppDatabase:
         """
         self.app_engine = create_async_engine(
             DATABASE_URL,
-            pool_size=20,          # For CRUD operations
-            max_overflow=30,       # For peak times
+            pool_size=20,          
+            max_overflow=30,       
             pool_timeout=20,
             pool_recycle=3600,
             pool_pre_ping=True

@@ -119,14 +119,6 @@ async def get_database_information(
     Returns:
         {servername: [database_names]} formatında dictionary
     """
-    # Kullanıcı engine cache'te yoksa
-    if current_user.id not in db_provider.engine_cache:
-        raise HTTPException(
-            status_code=404,
-            detail="No database connections found for user"
-        )
-    
-    # Kullanıcının erişebildiği database'leri al
-    db_info = db_provider.get_db_info_by_user_id(current_user.id)
+    db_info = db_provider.get_db_info_db()
     
     return {"db_info": db_info}
