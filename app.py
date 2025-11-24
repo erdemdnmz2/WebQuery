@@ -54,12 +54,27 @@ async def lifespan(app: FastAPI):
     try:
         app.state.db_provider = DatabaseProvider()
         db_info = await app.state.app_db.get_db_info()
+        
+        # Validate db_info
+        if not db_info:
+            print("\n⚠️  WARNING: Databases tablosu boş!")
+            print("   Lütfen Databases tablosuna kayıt ekleyin.")
+            print("   Örnek: INSERT INTO Databases (servername, database_name, technology)")
+            print("          VALUES ('localhost', 'mydb', 'mssql');")
+            print("   Uygulama çalışacak ancak hiçbir veritabanına bağlanamayacak.\n")
+        else:
+            print(f"✓ {len(db_info)} server yapılandırması yüklendi:")
+            for server, info in db_info.items():
+                db_count = len(info.get('databases', []))
+                tech = info.get('technology', 'unknown')
+                print(f"  • {server}: {db_count} database ({tech.upper()})")
+        
         app.state.db_provider.set_db_info(db_info)
         print("✓ DatabaseProvider hazır ve db_info yüklendi")
     except Exception as e:
         print(f"\n❌ FATAL: DatabaseProvider başlatma hatası!")
         print(f"   Hata: {type(e).__name__}: {e}")
-        print(f"   Lütfen SQL_SERVER_NAMES environment variable'ını ve SQL Server bağlantılarını kontrol edin")
+        print(f"   Lütfen Databases tablosunu kontrol edin")
         print(f"   Uygulama başlatılamıyor!\n")
         # Cleanup
         await app.state.app_db.app_engine.dispose()

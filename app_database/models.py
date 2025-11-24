@@ -37,7 +37,7 @@ class User(Base):
         """Düz metin şifreyi hash'lenmiş şifre ile karşılaştırır"""
         return pwd_context.verify(plain_password, self.password)
 
-class actionLogging(Base):
+class ActionLogging(Base):
     """
     Query execution log modeli
     
@@ -56,7 +56,7 @@ class actionLogging(Base):
         isSuccessfull: Başarı durumu
         ErrorMessage: Hata mesajı (varsa)
     """
-    __tablename__ = 'actionLogging'
+    __tablename__ = 'ActionLogging'
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey(User.id), index=True, nullable=False)
     username = Column(VARCHAR(50), index=True, nullable=False)
@@ -68,7 +68,7 @@ class actionLogging(Base):
     isSuccessfull = Column(Boolean, nullable=True)
     ErrorMessage = Column(TEXT, nullable=True)
 
-class loginLogging(Base):
+class LoginLogging(Base):
     """
     Kullanıcı login/logout log modeli
     
@@ -83,7 +83,7 @@ class loginLogging(Base):
         logout_date: Çıkış zamanı (NULL ise hala aktif)
         login_duration_ms: Session süresi (milisaniye)
     """
-    __tablename__ = "loginLogging"
+    __tablename__ = "LoginLogging"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     login_date = Column(DATETIME2(precision=7), nullable=False)
@@ -91,7 +91,7 @@ class loginLogging(Base):
     logout_date = Column(DATETIME2(precision=7), nullable=True)
     login_duration_ms = Column(Integer, nullable=True)
 
-class queryData(Base):
+class QueryData(Base):
     """
     Kullanıcı query saklama modeli (workspace için)
     
@@ -107,7 +107,7 @@ class queryData(Base):
         status: Query durumu
         risk_type: Risk analizi sonucu (varsa)
     """
-    __tablename__ = "queryData"
+    __tablename__ = "QueryData"
     id = Column(Integer, primary_key=True, index=True,autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     servername = Column(VARCHAR(50))
@@ -131,7 +131,7 @@ class Workspace(Base):
         query_id: İlişkili query foreign key (unique - 1:1 relationship)
         query_data: queryData ile relationship
     """
-    __tablename__ = "workspaces"
+    __tablename__ = "Workspaces"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     name = Column(NVARCHAR(100), nullable=False)
@@ -140,7 +140,7 @@ class Workspace(Base):
     query_data = relationship("queryData")
 
 class Databases(Base):
-    __tablename__ = "databases"
+    __tablename__ = "Databases"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     servername = Column(NVARCHAR(100), nullable=False)
     database_name = Column(NVARCHAR(100), nullable=False)

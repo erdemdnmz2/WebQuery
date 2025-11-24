@@ -512,10 +512,10 @@
                                 const firstServer = serverNames[0];
                                 setSelectedServer(firstServer);
                                 
-                                // Set first database of first server as default
-                                const databases = data.db_info[firstServer];
+                                const serverInfo = data.db_info[firstServer];
+                                const databases = serverInfo?.databases || [];
                                 
-                                if (Array.isArray(databases) && databases.length > 0) {
+                                if (databases.length > 0) {
                                     setSelectedDatabase(databases[0]);
                                 } else {
                                     setSelectedDatabase('');
@@ -543,8 +543,10 @@
             // Update databases when server changes
             useEffect(() => {
                 if (selectedServer && servers[selectedServer]) {
-                    const databases = servers[selectedServer];
-                    if (Array.isArray(databases) && databases.length > 0) {
+                    const serverInfo = servers[selectedServer];
+                    const databases = serverInfo?.databases || [];
+                    
+                    if (databases.length > 0) {
                         setSelectedDatabase(databases[0]); // Select first database of the new server
                     } else {
                         setSelectedDatabase('');
@@ -1161,8 +1163,12 @@
                                 </button>
                                 <ul className="dropdown-menu database-dropdown-menu" aria-labelledby="databaseDropdown">
                                     {(() => {
-                                        return selectedServer && servers[selectedServer] && Array.isArray(servers[selectedServer]) ? (
-                                            servers[selectedServer].map((dbName) => (
+                                        const serverInfo = selectedServer && servers[selectedServer] ? servers[selectedServer] : null;
+                                        const databases = serverInfo?.databases || [];
+                                        const technology = serverInfo?.technology || '';
+                                        
+                                        return databases.length > 0 ? (
+                                            databases.map((dbName) => (
                                                 <li key={dbName}>
                                                     <a
                                                         className={`dropdown-item ${selectedDatabase === dbName ? 'active' : ''}`}
@@ -1172,7 +1178,14 @@
                                                             setSelectedDatabase(dbName);
                                                         }}
                                                     >
-                                                        {dbName}
+                                                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                                                            <span>{dbName}</span>
+                                                            {technology && (
+                                                                <span className="badge bg-secondary ms-2" style={{fontSize: '0.7em'}}>
+                                                                    {technology.toUpperCase()}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </a>
                                                 </li>
                                             ))
@@ -1405,13 +1418,17 @@
                                                     onChange={(e) => setSelectedDatabase(e.target.value)}
                                                 >
                                                     <option value="">Select Database</option>
-                                                    {selectedServer && servers[selectedServer] && Array.isArray(servers[selectedServer]) ? 
-                                                        servers[selectedServer].map((dbName) => (
+                                                    {(() => {
+                                                        const serverInfo = selectedServer && servers[selectedServer] ? servers[selectedServer] : null;
+                                                        const databases = serverInfo?.databases || [];
+                                                        const technology = serverInfo?.technology || '';
+                                                        
+                                                        return databases.map((dbName) => (
                                                             <option key={dbName} value={dbName}>
-                                                                {dbName}
+                                                                {dbName} {technology ? `(${technology.toUpperCase()})` : ''}
                                                             </option>
-                                                        )) : null
-                                                    }
+                                                        ));
+                                                    })()}
                                                 </select>
                                             </div>
                                             <button 

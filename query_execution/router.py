@@ -8,7 +8,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from query_execution import config
-from query_execution import models as query_models
+from query_execution import schemas as query_models
 from query_execution.services import QueryService
 from authentication.services import get_current_user
 from dependencies import get_app_db, get_db_provider, get_session_cache, get_query_service
@@ -19,7 +19,6 @@ from session.session_cache import SessionCache
 
 router = APIRouter(prefix="/api")
 
-# Rate limiter instance
 limiter = Limiter(key_func=get_remote_address)
 
 
@@ -39,7 +38,6 @@ async def execute_query(
     2. Query'yi çalıştır
     3. Sonucu döndür
     """
-    # Session kontrolü
     from authentication import config
     if session_cache.is_valid(current_user.id, timeout_minutes=config.SESSION_TIMEOUT):
         try:
@@ -60,7 +58,6 @@ async def execute_query(
     
     return result
 
-
 @router.post("/multiple_query", response_model=query_models.MultipleQueryResponse)
 async def multiple_query(
     request: query_models.MultipleQueryRequest,
@@ -76,7 +73,6 @@ async def multiple_query(
     3. Her query'yi sırayla çalıştır
     4. Tüm sonuçları döndür
     """
-    # Session kontrolü
     from authentication import config
     if session_cache.is_valid(current_user.id, timeout_minutes=config.SESSION_TIMEOUT):
         try:
@@ -87,7 +83,6 @@ async def multiple_query(
     else:
         raise HTTPException(status_code=401, detail="Session expired")
     
-    # Query count kontrolü
     if len(request.execution_info) > config.MULTIPLE_QUERY_COUNT:
         raise HTTPException(
             status_code=400,
@@ -106,7 +101,6 @@ async def multiple_query(
         results.append(result)
     
     return query_models.MultipleQueryResponse(results=results)
-
 
 @router.get("/database_information", response_model=query_models.DatabaseInformationResponse)
 async def get_database_information(

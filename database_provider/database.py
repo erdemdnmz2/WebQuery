@@ -1,9 +1,14 @@
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSession, async_sessionmaker
-from typing import Dict
+from typing import Dict, Any
 import os
 import  app_database.models as models
-from database_provider.config import SERVER_NAMES, create_connection_string, get_master_connection_string
+from database_provider.config import (
+    SERVER_NAMES, 
+    create_connection_string, 
+    get_master_connection_string,
+    get_driver_for_technology
+)
 from sqlalchemy.future import select
 from contextlib import asynccontextmanager
 from sqlalchemy.exc import SQLAlchemyError
@@ -18,82 +23,63 @@ class DatabaseProvider:
     def __init__(self):
         """DatabaseProvider'ı başlatır ve cache yapılarını oluşturur."""
         self.engine_cache: EngineCache = EngineCache()
-        self.db_info: Dict[str, list[str]] = {} 
+        self.db_info: Dict[str, Dict[str, Any]] = {}
+        # Format: {servername: {"databases": [list], "technology": str}}
 
-        
-    def _create_connection_string(self, username: str, password: str, database: str, server: str, tech: str, driver: str):
+    def set_db_info(self, info: Dict[str, Dict[str, Any]]):
         """
-        Kullanıcıya özel connection string oluşturur.
+        Veritabanı bilgilerini ayarlar
         
         Args:
-            username: SQL Server kullanıcı adı
-            password: SQL Server şifresi
-            database: Bağlanılacak veritabanı adı
-            server: SQL Server instance adı
-            
-        Returns:
-            str: Formatlanmış connection string
+            info: {servername: {"databases": [list], "technology": str}}
         """
-        return create_connection_string(
-            tech=tech,
-            driver=driver,
-            username=username,
-            password=password,
-            servername=server,
-            database=database
-        )
-
-    def set_db_info(self, info: Dict[str, list[str]]):
         self.db_info = info
     
-    async def get_db_info(self):
-        """
-        Tüm sunuculardan erişilebilir veritabanlarının listesini alır.
-        Master database'e bağlanarak sys.databases tablosunu sorgular.
-        System veritabanları (ilk 4) hariç tutulur.
-        """
-        
-        for server in SERVER_NAMES: 
-            try:
-                master_conn_str = get_master_connection_string(server)
-                temp_engine = create_async_engine(master_conn_str)
-
-                async with temp_engine.connect() as connection:
-                    results = await connection.execute(text("SELECT name FROM sys.databases"))
-                    db_names = results.scalars().all()
-                    db_names = db_names[4:]
-                    self.db_info[server] = list(db_names)
-                    print(f"{server}: {len(db_names)} databases found - {db_names}")
-
-                await temp_engine.dispose()
-                temp_engine = None
-                
-            except Exception as e:
-                print(f"Could not connect to {server}: {str(e)}")
-                self.db_info[server] = [] 
-                
-        print(f"Final db_info after processing: {self.db_info}")
-    
     @asynccontextmanager
-    async def get_session(self, user: models.User, servername: str, database_name: str, tech: str = "mssql", driver: str = "aioodbc"):
+    async def get_session(self, user: models.User, servername: str, database_name: str):
         """
         Kullanıcıya özel async database session'ı sağlar (context manager).
         Engine yoksa lazy initialization ile oluşturur.
+        Database technology'sini db_info'dan otomatik olarak alır.
         
         Args:
             user: Kullanıcı modeli (username ve password içerir)
-            server_name: SQL Server instance adı
+            servername: Server instance adı
             database_name: Bağlanılacak veritabanı adı
-            tech: Veritabanı teknolojisi (default: mssql)
-            driver: Veritabanı sürücüsü (default: aioodbc)
             
         Yields:
             AsyncSession: SQLAlchemy async session
+            
+        Raises:
+            ValueError: Server veya database db_info'da bulunamazsa
             
         Example:
             async with db_provider.get_session(user, "localhost", "mydb") as session:
                 result = await session.execute(query)
         """
+        
+        # Server validation
+        if servername not in self.db_info:
+            raise ValueError(
+                f"Server '{servername}' not found in database configuration. "
+                f"Available servers: {list(self.db_info.keys())}. "
+                f"Please add it to the Databases table."
+            )
+        
+        server_info = self.db_info[servername]
+        
+        # Database validation
+        available_databases = server_info.get("databases", [])
+        if database_name not in available_databases:
+            raise ValueError(
+                f"Database '{database_name}' not found for server '{servername}'. "
+                f"Available databases: {available_databases}. "
+                f"Please add it to the Databases table."
+            )
+        
+        # Get technology and driver
+        tech = server_info.get("technology", "mssql")
+        driver = get_driver_for_technology(tech)
 
         conn_str = create_connection_string(
             tech=tech,
@@ -135,6 +121,11 @@ class DatabaseProvider:
         Tüm sunuculardaki veritabanı bilgilerini döndürür.
         
         Returns:
-            Dict[str, List[str]]: {server_adı: [veritabanı_adları]}
+            Dict[str, Dict[str, Any]]: {
+                servername: {
+                    "databases": [database_names],
+                    "technology": str
+                }
+            }
         """
         return self.db_info

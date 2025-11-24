@@ -12,7 +12,7 @@ from sqlalchemy.sql import select
 from app_database.models import User, actionLogging, loginLogging, queryData, Workspace, Base, Databases
 from database_provider import DatabaseProvider
 from app_database.schemas import UserCreate
-from typing import Dict
+from typing import Dict, Any
 
 
 class AppDatabase:
@@ -208,19 +208,50 @@ class AppDatabase:
                 else:
                     print(f"Active login record for user {user_id}")
         
-    async def get_db_info(self) -> Dict[str, list[str]]:
+    async def get_db_info(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Veritabanı bilgilerini server bazında döndürür.
+        Her server için database listesi ve technology bilgisini içerir.
+        
+        Returns:
+            Dict[str, Dict[str, Any]]: {
+                servername: {
+                    "databases": [database_names],
+                    "technology": "mssql" | "mysql" | "postgresql"
+                }
+            }
+        
+        Example:
+            {
+                "localhost": {
+                    "databases": ["Northwind", "AdventureWorks"],
+                    "technology": "mssql"
+                },
+                "mysql-server-1": {
+                    "databases": ["ecommerce", "analytics"],
+                    "technology": "mysql"
+                }
+            }
+        """
         async with self.get_app_db() as db:
             async with db.begin():
                 result = await db.execute(
                     select(Databases)
                 )
                 databases = result.scalars().all()
-
-                db_info : Dict[str, list[str]] = {}
-
+                db_info : Dict[str, Dict[str, Any]] = {}
+                
                 for database in databases:
-                    if db_info.get(database.servername) is None:
-                        db_info[database.servername] = [database.database_name]
-                    else:
-                        db_info[database.servername].append(database.database_name)
+                    servername = database.servername
+                    
+                    # Server ilk kez görülüyorsa yapıyı oluştur
+                    if servername not in db_info:
+                        db_info[servername] = {
+                            "databases": [],
+                            "technology": database.technology
+                        }
+                    
+                    # Database'i listeye ekle
+                    db_info[servername]["databases"].append(database.database_name)
+                
                 return db_info
