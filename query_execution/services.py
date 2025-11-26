@@ -100,7 +100,7 @@ class QueryService:
             ) as session:
                 sql_query = text(query)
                 result = await session.execute(sql_query)
-                rows = result.fetchall()
+                rows = result.fetchmany(size=config.MAX_ROW_COUNT_LIMIT)
                 row_count = len(rows)
                 if row_count > config.MAX_ROW_COUNT_LIMIT:
                     rows = rows[:config.MAX_ROW_COUNT_LIMIT]

@@ -116,6 +116,8 @@ class QueryData(Base):
     uuid = Column(UNIQUEIDENTIFIER, nullable=False, index=True)
     status = Column(VARCHAR(50), nullable=False)
     risk_type = Column(NVARCHAR(50), nullable=True)
+    cached_results = Column(TEXT, nullable = True)
+    cache_timestamp = Column(DATETIME2(precision=7), nullable=True)
 
 class Workspace(Base):
     """
@@ -137,7 +139,8 @@ class Workspace(Base):
     name = Column(NVARCHAR(100), nullable=False)
     description = Column(NVARCHAR(255), nullable=True)
     query_id = Column(Integer, ForeignKey("queryData.id"), nullable=False, unique=True)
-    query_data = relationship("queryData")
+    show_results = Column(Boolean, nullable=True, default=None)
+    query_data = relationship("QueryData")
 
 class Databases(Base):
     __tablename__ = "Databases"
