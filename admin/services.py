@@ -4,7 +4,7 @@ Riskli query'lerin admin onayı ve yönetimi işlemleri
 """
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import select, text
-from app_database.models import queryData, Workspace, User
+from app_database.models import QueryData, Workspace, User
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
 from .schemas import *
@@ -46,7 +46,7 @@ class AdminService:
         result_list = []
         try:
             async with self.app_db.get_app_db() as db:
-                results = await db.execute(select(queryData).where(queryData.status == "waiting_for_approval"))
+                results = await db.execute(select(QueryData).where(QueryData.status == "waiting_for_approval"))
                 queries = results.scalars().all()
                 if queries:
                     for query in queries:
@@ -76,43 +76,46 @@ class AdminService:
             print(f"Error: {str(e)}")
             return []
         
-    async def approve_query_by_workspace_id(self, workspace_id: int):
+    async def execute_for_preview(self, workspace_id: int, admin_user: User):
         """
-        Query'yi onaylar ve çalıştırır
+        Admin için query'yi çalıştırır ve önizler
+        
+        Henüz ONAYLANMAZ, sadece sonuçları döndürür.
+        Query execution loglama yapılır (admin user ile).
         
         İş Akışı:
             1. Workspace ve ilişkili query'yi bul
             2. User bilgilerini al
-            3. Query'yi hedef veritabanında çalıştır
-            4. Başarılıysa: status = "approved_and_executed"
-            5. Başarısızsa: status = "approval_execution_failed"
-            6. Sonuçları döndür
+            3. Query'yi hedef veritabanında çalıştır (MAX_ROW_COUNT_LIMIT ile)
+            4. Sonuçları döndür
         
         Args:
-            workspace_id: Onaylanacak workspace ID'si
+            workspace_id: Preview edilecek workspace ID'si
+            admin_user: Preview yapan admin kullanıcı
         
         Returns:
             Dict: {
                 "success": bool,
-                "data": List[Dict] (query sonuçları, başarılıysa),
-                "row_count": int (başarılıysa),
-                "query": str (başarılıysa),
-                "database": str (başarılıysa),
-                "servername": str (başarılıysa),
+                "data": List[Dict] (query sonuçları),
+                "row_count": int,
+                "query": str,
+                "database": str,
+                "servername": str,
                 "error": str (başarısızsa)
             }
         
         Note:
-            - Query çalıştırılır ve sonucu döndürülür
-            - Başarısız olsa bile status güncellenir
-            - Workspace description'a durum mesajı yazılır
+            - Query çalıştırılır ama loglama yapılmaz (preview)
+            - MAX_ROW_COUNT_LIMIT kontrolü uygulanır
+            - Status değiştirilmez
         """
+        log_id = None
         async with self.app_db.get_app_db() as db:
             workspace = await db.get(Workspace, workspace_id)
             if not workspace:
                 return {"success": False, "error": "Workspace not found"}
                     
-            query_data = await db.get(queryData, workspace.query_id)
+            query_data = await db.get(QueryData, workspace.query_id)
             if not query_data:
                 return {"success": False, "error": "Query data not found"}
                     
@@ -121,49 +124,66 @@ class AdminService:
                 return {"success": False, "error": "User not found"}
 
             try:
+                log = await self.app_db.create_log(
+                    user=admin_user, 
+                    query=query_data.query, 
+                    machine_name=query_data.servername
+                )
+                log_id = log.id
+                
                 async with self.db_provider.get_session(user, query_data.servername, query_data.database_name) as session:
                     sql_query = text(query_data.query)
                     result = await session.execute(sql_query)
                     rows = result.fetchall()
                     row_count = len(rows)
+                    
+                    # MAX_ROW_COUNT_LIMIT kontrolü
+                    from query_execution import config
+                    if row_count > config.MAX_ROW_COUNT_LIMIT:
+                        rows = rows[:config.MAX_ROW_COUNT_LIMIT]
+                        row_count = config.MAX_ROW_COUNT_LIMIT
 
                     result_data = [dict(row._mapping) for row in rows]
+                
+                await self.app_db.update_log(
+                    log_id=log_id,
+                    successfull=True,
+                    row_count=row_count
+                )
 
-                workspace_to_update = await db.get(Workspace, workspace_id)
-                query_data_to_update = await db.get(queryData, query_data.id)
-                    
-                if query_data_to_update:
-                    query_data_to_update.status = "approved_and_executed"
-                if workspace_to_update:
-                    workspace_to_update.description = f"Admin tarafından onaylandı ve çalıştırıldı - {row_count} satır etkilendi"
-                    
                 await db.commit()
-                
+
+                columns = list(result_data[0].keys()) if result_data else []
+                message = None
+                from query_execution import config
+                if row_count > 0 and row_count == config.MAX_ROW_COUNT_LIMIT:
+                    message = f"Truncated to MAX_ROW_COUNT_LIMIT ({config.MAX_ROW_COUNT_LIMIT})"
+
                 return {
-                    "success": True,
+                    "response_type": "data",
                     "data": result_data,
+                    "columns": columns,
                     "row_count": row_count,
-                    "query": query_data.query,
-                    "database": query_data.database_name,
-                    "servername": query_data.servername
+                    "message": message,
+                    "error": None
                 }
-                
             except Exception as e:
-                try:
-                    workspace_to_update = await db.get(Workspace, workspace_id)
-                    query_data_to_update = await db.get(queryData, query_data.id)
-                        
-                    if query_data_to_update:
-                        query_data_to_update.status = "approval_execution_failed"
-                    if workspace_to_update:
-                        workspace_to_update.description = f"Admin onayladı ancak çalıştırma başarısız: {str(e)}"
-                        
-                    await db.commit()
-                except Exception as db_error:
-                        print(f"Durum güncellenirken hata: {db_error}")
-                
-                print(f"Sorgu onaylanırken hata: {e}")
-                return {"success": False, "error": str(e)}
+                if log_id:
+                    await self.app_db.update_log(
+                        log_id=log_id,
+                        successfull=False,
+                        error=str(e)
+                    )
+
+                print(f"Query preview failed: {e}")
+                return {
+                    "response_type": "error",
+                    "data": [],
+                    "columns": [],
+                    "row_count": 0,
+                    "message": None,
+                    "error": str(e)
+                }
 
     async def reject_query_by_workspace_id(self, workspace_id: int):
         """
@@ -189,7 +209,7 @@ class AdminService:
                 if not workspace:
                     return {"success": False, "error": "Workspace not found"}
                     
-                query_data = await db.get(queryData, workspace.query_id)
+                query_data = await db.get(QueryData, workspace.query_id)
                 if not query_data:
                     return {"success": False, "error": "Query data not found"}
                 
@@ -203,3 +223,61 @@ class AdminService:
                 await db.rollback()
                 print(f"Error rejecting query: {e}")
                 return {"success": False, "error": str(e)}
+            
+    async def approve(self, workspace_id: int, show_results: bool):
+        """
+        Query'yi onaylar (EXECUTE ETMEZ, sadece işaretler)
+        
+        Args:
+            workspace_id: Onaylanacak workspace ID'si
+            show_results: 
+                - TRUE → Workspace "executable" olarak işaretlenir
+                - FALSE → Workspace "approved but not executable"
+        
+        Returns:
+            Dict: {
+                "success": bool,
+                "status": str,
+                "message": str,
+                "error": str (başarısızsa)
+            }
+        
+        Note:
+            - Query ÇALIŞTIRILMAZ
+            - Sadece status + show_results güncellenir
+            - Admin daha önce execute_for_preview ile sonuçları görmüş olmalı
+        """
+        async with self.app_db.get_app_db() as db:
+            workspace = await db.get(Workspace, workspace_id)
+            if not workspace:
+                return {"success": False, "error": "Workspace not found"}
+                    
+            query_data = await db.get(QueryData, workspace.query_id)
+            if not query_data:
+                return {"success": False, "error": "Query data not found"}
+            
+            try:
+                if show_results:
+                    query_data.status = "approved_with_results"
+                    workspace.show_results = True
+                    workspace.description = "Admin onayladı - Kullanıcı çalıştırabilir (executable)"
+                else:
+                    query_data.status = "approved"
+                    workspace.show_results = False
+                    workspace.description = "Admin onayladı - Kullanıcı çalıştıramaz (not executable)"
+                
+                await db.commit()
+                
+                return {
+                    "success": True,
+                    "status": query_data.status,
+                    "message": f"Query approved successfully ({'executable' if show_results else 'not executable'})"
+                }
+            
+            except Exception as e:
+                await db.rollback()
+                print(f"Approval failed: {e}")
+                return {
+                    "success": False,
+                    "error": f"Approval failed: {str(e)}"
+                }

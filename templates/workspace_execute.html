@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Workspace Execute</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <style>
+        body { background: #0f172a; color: #e6eef8; font-family: Inter, system-ui, sans-serif; padding: 1rem; }
+        .card { background: #0b1220; border: 1px solid #1f2a44; }
+        #editor { height: 420px; }
+        .result-table th, .result-table td { padding: .35rem .5rem; border: 1px solid #2b344a; }
+        .result-area { max-height: 520px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="card p-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 id="ws-name">Workspace</h5>
+                            <div id="db-info" class="small text-muted">Loading...</div>
+                        </div>
+                        <div>
+                            <button id="execute-btn" class="btn btn-success">Execute Query</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-5">
+                <div class="card p-2">
+                    <h6>Read-only Query</h6>
+                    <div id="editor"></div>
+                </div>
+            </div>
+            <div class="col-md-7">
+                <div class="card p-2">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">Results</h6>
+                        <div>
+                            <button id="download-csv" class="btn btn-outline-light btn-sm me-1" disabled>Download CSV</button>
+                            <button id="download-xlsx" class="btn btn-outline-light btn-sm" disabled>Download Excel</button>
+                        </div>
+                    </div>
+                    <div id="result-message" class="mb-2 small"></div>
+                    <div class="result-area">
+                        <table id="result-table" class="result-table table table-sm text-light"></table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Helpers
+        function getWorkspaceIdFromPath() {
+            const parts = window.location.pathname.split('/').filter(Boolean);
+            // expected: [..., 'workspaces', '{id}', 'execute']
+            const idx = parts.indexOf('workspaces');
+            if (idx >=0 && parts.length > idx+1) return parts[idx+1];
+            return null;
+        }
+
+        const workspaceId = getWorkspaceIdFromPath();
+        const editor = ace.edit('editor');
+        editor.setTheme('ace/theme/dracula');
+        editor.session.setMode('ace/mode/sql');
+        editor.setOptions({ readOnly: true, highlightActiveLine: false, showGutter: true, fontSize: '12px' });
+
+        const executeBtn = document.getElementById('execute-btn');
+        const resultTable = document.getElementById('result-table');
+        const resultMessage = document.getElementById('result-message');
+        const downloadCsvBtn = document.getElementById('download-csv');
+        const downloadXlsxBtn = document.getElementById('download-xlsx');
+
+        if (!workspaceId) {
+            resultMessage.textContent = 'Unable to determine workspace id from URL.';
+            executeBtn.disabled = true;
+        }
+
+        async function fetchWorkspace() {
+            const res = await fetch(`/api/get_workspace_by_id/${workspaceId}`, { credentials: 'same-origin' });
+            if (!res.ok) {
+                resultMessage.textContent = 'Workspace load error: ' + (await res.text());
+                executeBtn.disabled = true;
+                return;
+            }
+            const data = await res.json();
+            document.getElementById('ws-name').textContent = data.name || 'Workspace';
+            document.getElementById('db-info').textContent = `${data.servername} / ${data.database_name} • status: ${data.status}`;
+            editor.setValue(data.query || '', -1);
+        }
+
+        function renderResults(sqlResponse) {
+            // clear
+            resultTable.innerHTML = '';
+            if (!sqlResponse || sqlResponse.response_type !== 'data' || !sqlResponse.data || sqlResponse.data.length === 0) {
+                resultMessage.textContent = (sqlResponse && sqlResponse.message) ? sqlResponse.message : 'No rows returned.';
+                downloadCsvBtn.disabled = true;
+                downloadXlsxBtn.disabled = true;
+                return;
+            }
+
+            const rows = sqlResponse.data;
+            const cols = Object.keys(rows[0]);
+
+            // Header
+            const thead = document.createElement('thead');
+            const hrow = document.createElement('tr');
+            cols.forEach(c => { const th = document.createElement('th'); th.textContent = c; hrow.appendChild(th); });
+            thead.appendChild(hrow);
+            resultTable.appendChild(thead);
+
+            // Body
+            const tbody = document.createElement('tbody');
+            rows.forEach(r => {
+                const tr = document.createElement('tr');
+                cols.forEach(c => {
+                    const td = document.createElement('td');
+                    const v = r[c];
+                    td.textContent = v === null || v === undefined ? '' : String(v);
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+            resultTable.appendChild(tbody);
+
+            resultMessage.textContent = `Returned ${rows.length} row(s).`;
+            downloadCsvBtn.disabled = false;
+            downloadXlsxBtn.disabled = false;
+
+            // wire download actions
+            downloadCsvBtn.onclick = () => downloadCSV(rows, cols, `workspace_${workspaceId}.csv`);
+            downloadXlsxBtn.onclick = () => downloadXLSX(rows, cols, `workspace_${workspaceId}.xlsx`);
+        }
+
+        function downloadCSV(rows, cols, filename) {
+            const lines = [cols.join(',')];
+            rows.forEach(r => {
+                const vals = cols.map(c => {
+                    const v = r[c];
+                    if (v === null || v === undefined) return '';
+                    const s = String(v).replace(/"/g, '""');
+                    return '"' + s + '"';
+                });
+                lines.push(vals.join(','));
+            });
+            const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+        }
+
+        function downloadXLSX(rows, cols, filename) {
+            const aoa = [cols];
+            rows.forEach(r => aoa.push(cols.map(c => r[c] === undefined ? '' : r[c])));
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            XLSX.utils.book_append_sheet(wb, ws, 'Results');
+            XLSX.writeFile(wb, filename);
+        }
+
+        executeBtn.addEventListener('click', async () => {
+            executeBtn.disabled = true;
+            resultMessage.textContent = 'Executing...';
+            resultTable.innerHTML = '';
+            try {
+                const res = await fetch(`/api/execute_workspace/${workspaceId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    credentials: 'same-origin',
+                    body: JSON.stringify({})
+                });
+                const json = await res.json();
+                if (!res.ok) {
+                    resultMessage.textContent = json.detail || json.error || 'Execution failed';
+                } else {
+                    renderResults(json);
+                }
+            } catch (err) {
+                resultMessage.textContent = 'Network or execution error: ' + err;
+            } finally {
+                executeBtn.disabled = false;
+            }
+        });
+
+        // Init
+        fetchWorkspace();
+    </script>
+</body>
+</html>

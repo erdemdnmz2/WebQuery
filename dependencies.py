@@ -3,10 +3,13 @@ Ortak Dependency Injection Fonksiyonları
 Tüm router'lar bu fonksiyonları kullanarak app.state'ten instance'ları alır
 """
 from fastapi import Request
+from fastapi import Depends, HTTPException, status
 from cryptography.fernet import Fernet
 
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
+from authentication.services import get_current_user
+from app_database.models import Workspace, QueryData, User
 
 from query_execution.services import QueryService
 from workspaces.services import WorkspaceService
@@ -74,6 +77,27 @@ def get_admin_service(request: Request) -> AdminService:
     app_db = get_app_db(request)
     db_provider = get_db_provider(request)
     return AdminService(app_db=app_db, db_provider=db_provider)
+
+
+async def admin_required(current_user: User = Depends(get_current_user)) -> User:
+    """Dependency: ensures current_user is admin."""
+    if not current_user or not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return current_user
+
+
+async def ensure_owner(workspace_id: int,
+                       current_user: User = Depends(get_current_user),
+                       app_db: AppDatabase = Depends(get_app_db)) -> Workspace:
+    """Dependency: ensures the current_user is the owner of the workspace. Returns the Workspace."""
+    async with app_db.get_app_db() as db:
+        ws = await db.get(Workspace, workspace_id)
+        if not ws:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        if ws.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't own this workspace.")
+        return ws
+
 
 from notification import NotificationService
 

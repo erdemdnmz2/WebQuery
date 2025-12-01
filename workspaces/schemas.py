@@ -25,6 +25,9 @@ class WorkspaceInfo(BaseModel):
     servername: str
     database_name: str
     status: str
+    show_results: Optional[bool] = None
+    owner_id: int
+    is_owner: Optional[bool] = None
 
 class WorkspaceCreate(BaseModel):
     """
