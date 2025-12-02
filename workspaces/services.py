@@ -291,7 +291,8 @@ class WorkspaceService:
         # Execute using db_provider with the user's credentials
         log_id = None
         try:
-            log = await self.app_db.create_log(user=current_user, query=query_data.query, machine_name=query_data.servername)
+            # Mark this log as an approved execution (user runs an admin-approved workspace)
+            log = await self.app_db.create_log(user=current_user, query=query_data.query, machine_name=query_data.servername, approved_execution=True)
             log_id = log.id
 
             async with db_provider.get_session(user=current_user, servername=query_data.servername, database_name=query_data.database_name) as session:

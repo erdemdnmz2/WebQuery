@@ -6,6 +6,8 @@
     <title>Admin Paneli</title>
     <!-- Bootstrap CSS CDN -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Inter Font -->
@@ -162,25 +164,42 @@
 
     <!-- Approval Modal -->
     <div class="modal fade" id="approvalModal" tabindex="-1" aria-labelledby="approvalModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content bg-gray-800 text-gray-100" style="background-color: #1f2937 !important; color: #f3f4f6 !important;">
                 <div class="modal-header" style="border-bottom: 1px solid #374151;">
-                    <h5 class="modal-title text-white" id="approvalModalLabel">Sorgu Detayları</h5>
+                    <h5 class="modal-title text-white" id="approvalModalLabel">Sorgu Detayları ve Önizleme</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <div id="queryEditor" style="height: 400px; border-radius: 0.5rem;"></div>
+                    <div id="queryEditor" style="height: 300px; border-radius: 0.5rem;"></div>
                     <div class="mt-3 text-white">
                         <p><strong>Kullanıcı:</strong> <span id="modalUsername" class="text-info"></span></p>
                         <p><strong>Sunucu:</strong> <span id="modalServer" class="text-info"></span></p>
                         <p><strong>Veritabanı:</strong> <span id="modalDatabase" class="text-info"></span></p>
                         <p><strong>Risk Türü:</strong> <span id="modalRiskType" class="badge bg-danger"></span></p>
                     </div>
+                    
+                    <!-- Preview Button -->
+                    <div class="mt-3">
+                        <button type="button" class="btn btn-info" onclick="previewQuery()" id="previewButton">
+                            <i class="bi bi-eye"></i> Sorgu Sonuçlarını Önizle
+                        </button>
+                    </div>
+                    
+                    <!-- Preview Results Container -->
+                    <div id="previewResults" style="display: none; margin-top: 1.5rem;">
+                        <h6 class="text-white mb-2">Önizleme Sonuçları:</h6>
+                        <div id="previewInfo" class="text-light mb-2"></div>
+                        <div id="previewTableContainer" class="table-responsive" style="max-height: 400px; overflow-y: auto; background-color: #111827; border-radius: 0.5rem; padding: 1rem;">
+                            <!-- Preview table will be inserted here -->
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer" style="border-top: 1px solid #374151;">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
                     <button type="button" class="btn btn-danger" onclick="rejectQuery()">Reddet</button>
-                    <button type="button" class="btn btn-success" onclick="approveQuery()">Onayla</button>
+                    <button type="button" class="btn btn-warning" onclick="approveQueryNotExecutable()">Onayla (Çalıştırılamaz)</button>
+                    <button type="button" class="btn btn-success" onclick="approveQueryExecutable()">Onayla ve Çalıştırılabilir Yap</button>
                 </div>
             </div>
         </div>
@@ -296,16 +315,101 @@
             
             modalEditor.setValue(queryData.query, -1);
             
+            // Reset preview section
+            document.getElementById('previewResults').style.display = 'none';
+            document.getElementById('previewButton').disabled = false;
+            document.getElementById('previewTableContainer').innerHTML = '';
+            
             const modal = new bootstrap.Modal(document.getElementById('approvalModal'));
             modal.show();
         }
 
-        async function approveQuery() {
+        async function previewQuery() {
+            if (!currentApprovalData) return;
+            
+            const previewButton = document.getElementById('previewButton');
+            previewButton.disabled = true;
+            previewButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor...';
+            
+            try {
+                const response = await authenticatedFetch(`/api/admin/execute_for_preview/${currentApprovalData.workspace_id}`, {
+                    method: 'POST'
+                });
+                
+                if (!response) return; // Redirected to login
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    displayPreviewResults(result);
+                    showToast('Önizleme başarıyla yüklendi!', 'success');
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Preview failed');
+                }
+            } catch (error) {
+                console.error('Error previewing query:', error);
+                showToast(`Önizleme hatası: ${error.message}`, 'error');
+            } finally {
+                previewButton.disabled = false;
+                previewButton.innerHTML = '<i class="bi bi-eye"></i> Sorgu Sonuçlarını Önizle';
+            }
+        }
+
+        function displayPreviewResults(result) {
+            const previewResults = document.getElementById('previewResults');
+            const previewInfo = document.getElementById('previewInfo');
+            const previewTableContainer = document.getElementById('previewTableContainer');
+
+            // Update preview info
+            previewInfo.innerHTML = `
+                <p><strong>Satır Sayısı:</strong> ${result.row_count} ${result.truncated ? '(Önizleme için kısıtlı)' : ''}</p>
+            `;
+
+            // Create table
+            if (result.data && result.data.length > 0) {
+                const columns = Object.keys(result.data[0]);
+                let tableHtml = `
+                    <table class="table table-dark-custom table-striped table-sm">
+                        <thead>
+                            <tr>
+                                ${columns.map(col => `<th>${col}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${result.data.map(row => 
+                                `<tr>${columns.map(col => `<td>${row[col] !== null ? row[col] : '<span class="text-muted">NULL</span>'}</td>`).join('')}</tr>`
+                            ).join('')}
+                        </tbody>
+                    </table>
+                `;
+                previewTableContainer.innerHTML = tableHtml;
+            } else {
+                previewTableContainer.innerHTML = '<p class="text-info">Sorgu sonucu boş.</p>';
+            }
+
+            previewResults.style.display = 'block';
+        }
+
+        async function approveQueryExecutable() {
+            await approveQuery(true);
+        }
+
+        async function approveQueryNotExecutable() {
+            await approveQuery(false);
+        }
+
+        async function approveQuery(showResults = true) {
             if (!currentApprovalData) return;
             
             try {
                 const response = await authenticatedFetch(`/api/admin/approve_query/${currentApprovalData.workspace_id}`, {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        show_results: showResults
+                    })
                 });
                 
                 if (!response) return; // Redirected to login
@@ -314,18 +418,17 @@
                     const result = await response.json();
                     bootstrap.Modal.getInstance(document.getElementById('approvalModal')).hide();
                     await loadPendingQueries();
-                    showToast('Sorgu başarıyla onaylandı!', 'success');
-                    
-                    // Display query results
-                    if (result.data && result.data.length > 0) {
-                        displayQueryResults(result);
-                    }
+                    const message = showResults 
+                        ? 'Sorgu onaylandı ve çalıştırılabilir yapıldı!' 
+                        : 'Sorgu onaylandı (çalıştırılamaz olarak işaretlendi)';
+                    showToast(message, 'success');
                 } else {
-                    throw new Error('Approval failed');
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Approval failed');
                 }
             } catch (error) {
                 console.error('Error approving query:', error);
-                showToast('Sorgu onaylanırken hata oluştu!', 'error');
+                showToast(`Onaylama hatası: ${error.message}`, 'error');
             }
         }
 

@@ -115,3 +115,5 @@ async def execute_for_preview(
 
     if isinstance(result, dict) and result.get("response_type") == "error":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("error"))
+    
+    return result

@@ -13,6 +13,7 @@ from app_database.models import User, Workspace, QueryData
 from app_database import AppDatabase
 
 from .services import WorkspaceService
+from query_execution import schemas as query_models
 from database_provider import DatabaseProvider
 
 router = APIRouter(prefix="/api")
@@ -145,7 +146,7 @@ async def get_workspace_by_id(
         return result
 
 
-@router.post("/execute_workspace/{workspace_id}")
+@router.post("/execute_workspace/{workspace_id}", response_model=query_models.SQLResponse)
 async def execute_workspace(
     workspace_id: int,
     request: Request,

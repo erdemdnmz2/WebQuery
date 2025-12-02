@@ -103,7 +103,7 @@ class AppDatabase:
             "message": "Registration successful! Redirecting to login page..."
         }
 
-    async def create_log(self, user: User, query: str, machine_name: str):
+    async def create_log(self, user: User, query: str, machine_name: str, approved_execution: bool = False):
         """
         Query execution log'u oluşturur (başlangıç kaydı)
         
@@ -125,7 +125,8 @@ class AppDatabase:
                     username = user.username,
                     query_date = datetime.now(),
                     query = query,
-                    machine_name = machine_name
+                    machine_name = machine_name,
+                    approved_execution = approved_execution
                 )
                 db.add(created_log)
                 await db.flush()

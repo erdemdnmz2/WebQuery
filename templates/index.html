@@ -1097,6 +1097,12 @@
                                                     href="#"
                                                     onClick={(e) => {
                                                         e.preventDefault();
+                                                        // If workspace is executable (approved_with_results and show_results true),
+                                                        // send user to the lightweight execute page. Otherwise load in editor as before.
+                                                        if (ws.show_results === true && ws.status === 'approved_with_results') {
+                                                            window.location.href = `/workspaces/${ws.id}/execute`;
+                                                            return;
+                                                        }
                                                         if (currentWorkspaceId !== ws.id) {
                                                             handleWorkspaceSwitch(ws.id);
                                                         }

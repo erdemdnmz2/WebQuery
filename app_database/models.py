@@ -67,6 +67,8 @@ class ActionLogging(Base):
     row_count = Column(Integer, nullable=True)
     isSuccessfull = Column(Boolean, nullable=True)
     ErrorMessage = Column(TEXT, nullable=True)
+    # Flag to indicate the execution was performed after admin approval
+    approved_execution = Column(Boolean, nullable=True, default=False)
 
 class LoginLogging(Base):
     """
