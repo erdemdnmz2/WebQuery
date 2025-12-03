@@ -4,17 +4,57 @@
 
 ## Özellikler
 - **Çoklu Veritabanı Desteği**: MSSQL, MySQL, PostgreSQL
+- **Gelişmiş Connection Pooling**: `EngineCache` ile sunucu kaynaklarını yormayan akıllı bağlantı yönetimi (LRU, TTL, Active Connection Check)
+- **Risk Analizi ve Onay Mekanizması**: Tehlikeli sorgular için otomatik tespit ve Admin onay süreci
+- **Workspace Yönetimi**: Sorguları kaydetme, düzenleme ve paylaşma
 - JWT ile kullanıcı doğrulama ve oturum yönetimi
-- Sorgu risk analizi (DDL, potansiyel tehlikeli ifadeler, performans sınırları)
-- Çoklu sorgu desteği (tek istekte birden fazla sorgu)
 - Hız sınırlama (slowapi)
 - Otomatik driver seçimi ve connection string yönetimi
 
 ## Mimari ve Teknolojiler
-- FastAPI 0.116.x, Uvicorn
-- SQLAlchemy 2.x (async) + aioodbc/pyodbc (MSSQL) + aiomysql (MySQL) + asyncpg (PostgreSQL)
-- python-jose (JWT), cryptography (Fernet)
-- python-dotenv ile ortam değişkenleri
+- **Backend**: FastAPI 0.116.x, Uvicorn
+- **ORM**: SQLAlchemy 2.x (async)
+- **Drivers**: 
+  - MSSQL: `aioodbc` / `pyodbc`
+  - MySQL: `aiomysql`
+  - PostgreSQL: `asyncpg`
+- **Güvenlik**: python-jose (JWT), cryptography (Fernet), bcrypt
+- **Konfigürasyon**: python-dotenv
+
+## Proje Yapısı
+Modüler bir mimari benimsenmiştir:
+- `app_database/`: Uygulama içi veritabanı (User, Log, Workspace) modelleri ve işlemleri
+- `database_provider/`: Hedef veritabanlarına (MSSQL, MySQL, PG) bağlantı yönetimi (`EngineCache`)
+- `query_execution/`: Sorgu çalıştırma, risk analizi (`QueryAnalyzer`) ve loglama
+- `admin/`: Yönetici onay mekanizması ve işlemleri
+- `workspaces/`: Kullanıcı çalışma alanları yönetimi
+- `authentication/`: Login, register ve token işlemleri
+- `middlewares/`: Auth ve rate limiting middleware'leri
+
+## Gelişmiş Özellikler Detayı
+
+### 1. Akıllı Engine Cache (Connection Management)
+Uygulama, veritabanı bağlantılarını `EngineCache` sınıfı ile yönetir. Bu yapı, "Web Query Tool" senaryosu için özel olarak optimize edilmiştir:
+- **Pool Size = 0**: Sunucuda boşta (idle) bağlantı tutulmaz. Her sorgu bittiğinde bağlantı kapatılır.
+- **Max Overflow = 20**: Anlık yoğunlukta 20 eşzamanlı bağlantıya kadar izin verilir.
+- **LRU Eviction**: Cache dolduğunda en az kullanılan engine silinir.
+- **TTL Cleanup**: Belirli bir süre kullanılmayan engine'ler arka planda temizlenir.
+- **Active Check**: Temizlik sırasında, o an sorgu çalıştıran engine'ler (`checkedout > 0`) korunur, işlem yarıda kesilmez.
+
+### 2. Sorgu Risk Analizi (Query Analyzer)
+Her sorgu çalıştırılmadan önce `QueryAnalyzer` tarafından taranır. Riskler 4 seviyede değerlendirilir:
+1.  **SQL Injection**: `UNION SELECT`, `OR 1=1`, yorum satırları (`--`, `/*`) vb.
+2.  **DDL (Yapısal Değişiklik)**: `DROP`, `CREATE`, `ALTER`, `TRUNCATE`.
+3.  **Riskli DML**: `WHERE` koşulu olmayan `DELETE` veya `UPDATE` işlemleri.
+4.  **Performans**: 3'ten fazla `JOIN`, `CROSS JOIN`, `LIKE '%...%'`, büyük `LIMIT` + `ORDER BY`.
+
+**Onay Mekanizması**: Riskli bulunan sorgular (Admin değilse) doğrudan çalıştırılmaz. "Onay Bekliyor" durumuna alınır. Adminler bu sorguları inceleyip onaylayabilir veya reddedebilir.
+
+### 3. Workspace Sistemi
+Kullanıcılar sorgularını "Workspace" olarak kaydedebilir. Her workspace:
+- Bir SQL sorgusu içerir.
+- Sorgunun son çalışma durumu ve risk seviyesini tutar.
+- Admin onayı gerekiyorsa durumunu takip eder.
 
 ## Gereksinimler
 
