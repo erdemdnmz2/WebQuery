@@ -43,14 +43,12 @@ class EngineCache:
     def _is_engine_active(self, engine: AsyncEngine) -> bool:
         """Engine üzerinde aktif transaction/connection var mı kontrol eder"""
         try:
-            # checkedout > 0 ise havuzdan alınmış ve henüz geri dönmemiş bağlantı var demektir
             return engine.sync_engine.pool.checkedout() > 0
         except Exception:
             return False
 
     async def _evict_lru(self):
         """LRU Eviction: Yer açmak için en eski ve boşta olan engine'i siler"""
-        # 1. Aktif olmayan (idle) motorları bul
         idle_engines = {
             k: v for k, v in self._cache.items() 
             if not self._is_engine_active(v.engine)
@@ -118,24 +116,23 @@ class EngineCache:
                 await asyncio.sleep(self.time_interval)
                 
                 async with self.lock:
-                    if self._stats["engine_count"] < self._max_engines:
-                        current_time = datetime.now()
-                        stale_keys = []
+                    current_time = datetime.now()
+                    stale_keys = []
+                    
+                    for key, entry in self._cache.items():
+                        time_since_access = (current_time - entry.last_accessed).total_seconds()
                         
-                        for key, entry in self._cache.items():
-                            time_since_access = (current_time - entry.last_accessed).total_seconds()
-                            
-                            # Süresi dolmuş VE aktif işlemi olmayanları seç
-                            if time_since_access > self.time_interval and not self._is_engine_active(entry.engine):
-                                stale_keys.append(key)
-                        
-                        for key in stale_keys:
+                        if time_since_access > self.time_interval and not self._is_engine_active(entry.engine):
+                            stale_keys.append(key)
+                    
+                    for key in stale_keys:
+                        if key in self._cache:
                             entry = self._cache.pop(key)
                             await entry.engine.dispose()
                             self._stats["engine_count"] -= 1
-                        
-                        if stale_keys:
-                            print(f"[EngineCache] TTL Cleanup: Removed {len(stale_keys)} idle engines.")
+                    
+                    if stale_keys:
+                        print(f"[EngineCache] TTL Cleanup: Removed {len(stale_keys)} idle engines.")
 
             except asyncio.CancelledError:
                 break
