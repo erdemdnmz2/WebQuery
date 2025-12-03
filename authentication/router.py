@@ -18,7 +18,6 @@ from database_provider import DatabaseProvider
 
 router = APIRouter(prefix="/api")
 
-# Rate limiter instance
 limiter = Limiter(key_func=get_remote_address)
 
 
@@ -43,7 +42,6 @@ async def login(
     5. DatabaseProvider'a kullanıcıyı ekleme (engine cache)
     """
     async with app_db.get_app_db() as db:
-        # Import burada yapıyoruz circular import'u önlemek için
         from app_database.models import User
         from sqlalchemy.future import select
         
@@ -101,7 +99,6 @@ async def register(
     3. DatabaseProvider'a kullanıcıyı ekleme
     """
     async with app_db.get_app_db() as db:
-        # Import burada yapıyoruz circular import'u önlemek için
         from app_database.models import User
         from sqlalchemy.future import select
         
@@ -161,13 +158,10 @@ async def logout(
         httponly=True
     )
     
-    # Logout log güncelle
     await app_db.update_login_log(user_id=current_user.id)
     
-    # Kullanıcı engine'lerini kapat
     await db_provider.close_user_engines(current_user.id)
 
-    # Session cache'den kullanıcıyı sil
     session_cache.remove(current_user.id)
 
     return {"message": "Successfully logged out"}
