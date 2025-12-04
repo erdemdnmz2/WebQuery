@@ -17,7 +17,9 @@ SERVER_NAMES: List[str] = [s.strip() for s in _server_list.split(",") if s.strip
 DB_USER = os.getenv("DB_USER", "sa")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
-TIME_INTERVAL_FOR_CACHE = 1800 # in seconds
+# Engine Cache Cleanup Interval (seconds)
+# Default: 1800 seconds (30 minutes)
+TIME_INTERVAL_FOR_CACHE = int(os.getenv("ENGINE_CACHE_TTL_SECONDS", "1800"))
 
 # Technology to Driver mapping
 TECHNOLOGY_DRIVER_MAP = {

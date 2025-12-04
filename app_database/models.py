@@ -22,7 +22,7 @@ class User(Base):
         email: Email adresi (unique)
         is_admin: Admin yetkisi (admin query risk kontrolünden muaf)
     """
-    __tablename__ = 'users'
+    __tablename__ = 'Users'
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     username = Column(String(50), unique=True, index=True)
     password = Column(String)
@@ -118,9 +118,7 @@ class QueryData(Base):
     uuid = Column(UNIQUEIDENTIFIER, nullable=False, index=True)
     status = Column(VARCHAR(50), nullable=False)
     risk_type = Column(NVARCHAR(50), nullable=True)
-    cached_results = Column(TEXT, nullable = True)
-    cache_timestamp = Column(DATETIME2(precision=7), nullable=True)
-
+    
 class Workspace(Base):
     """
     Kullanıcı workspace modeli

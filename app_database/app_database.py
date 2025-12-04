@@ -9,7 +9,7 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 from sqlalchemy.sql import select
 
-from app_database.models import User, actionLogging, loginLogging, queryData, Workspace, Base, Databases
+from app_database.models import User, ActionLogging, LoginLogging, QueryData, Workspace, Base, Databases
 from database_provider import DatabaseProvider
 from app_database.schemas import UserCreate
 from typing import Dict, Any
@@ -113,14 +113,14 @@ class AppDatabase:
             machine_name: SQL Server instance adı
         
         Returns:
-            actionLogging: Oluşturulan log kaydı
+            ActionLogging: Oluşturulan log kaydı
         
         Note:
             Log başlangıçta oluşturulur, sonuç update_log ile güncellenir
         """
         async with self.get_app_db() as db:
             async with db.begin():
-                created_log = actionLogging(
+                created_log = ActionLogging(
                     user_id = user.id,
                     username = user.username,
                     query_date = datetime.now(),
@@ -149,7 +149,7 @@ class AppDatabase:
         """
         async with self.get_app_db() as db:
             async with db.begin():
-                result = await db.execute(select(actionLogging).where(actionLogging.id == log_id))
+                result = await db.execute(select(ActionLogging).where(ActionLogging.id == log_id))
                 log = result.scalars().first()
 
                 if log:
@@ -175,7 +175,7 @@ class AppDatabase:
         """
         async with self.get_app_db() as db:
             async with db.begin():
-                created_log = loginLogging(
+                created_log = LoginLogging(
                     user_id = user_id,
                     login_date = datetime.now(),
                     client_ip = client_ip
@@ -197,9 +197,9 @@ class AppDatabase:
         async with self.get_app_db() as db:
             async with db.begin():
                 result = await db.execute(
-                    select(loginLogging)
-                    .where(loginLogging.user_id == user_id)
-                    .where(loginLogging.logout_date.is_(None))
+                    select(LoginLogging)
+                    .where(LoginLogging.user_id == user_id)
+                    .where(LoginLogging.logout_date.is_(None))
                 )
                 log = result.scalars().first()
                 if log:
