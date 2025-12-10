@@ -245,14 +245,11 @@ class AppDatabase:
                 for database in databases:
                     servername = database.servername
                     
-                    # Server ilk kez görülüyorsa yapıyı oluştur
                     if servername not in db_info:
                         db_info[servername] = {
                             "databases": [],
                             "technology": database.technology
                         }
                     
-                    # Database'i listeye ekle
-                    db_info[servername]["databases"].append(database.database_name)
-                
+                    db_info[servername]["databases"].append(database.database_name)                
                 return db_info

@@ -11,7 +11,6 @@ from sqlalchemy.future import select
 from authentication import config
 from app_database.models import User
 from authentication.schemas import TokenData
-from dependencies import get_app_db, get_session_cache
 from app_database.app_database import AppDatabase
 
 
@@ -68,18 +67,13 @@ def get_user_id_from_payload(payload: dict) -> Optional[str]:
 
 
 async def get_current_user(
-    request: Request,
-    app_db: AppDatabase = Depends(get_app_db)
+    request: Request
 ) -> User:
     """
     Request'ten JWT token alır, doğrular ve User nesnesini döndürür
     
-    Dependencies:
-        - get_app_db: AppDatabase instance
-    
     Args:
         request: FastAPI Request nesnesi
-        app_db: AppDatabase instance (injected)
     
     Returns:
         User: Authenticated user
@@ -87,6 +81,9 @@ async def get_current_user(
     Raises:
         HTTPException: Token geçersiz veya kullanıcı bulunamaz ise
     """
+    # AppDatabase instance'ını request state'den al (Circular import önlemek için)
+    app_db: AppDatabase = request.app.state.app_db
+
     # Token'ı sadece cookie'den al
     token = request.cookies.get("access_token")
     
