@@ -5,11 +5,9 @@ Uygulama veritabanı için SQLAlchemy ORM modelleri
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
 from sqlalchemy.dialects.mssql import DATETIME2, VARCHAR, NVARCHAR, UNIQUEIDENTIFIER, TEXT
 from sqlalchemy.orm import relationship, declarative_base
-from passlib.context import CryptContext
+import bcrypt
 
 Base = declarative_base()
-
-pwd_context = CryptContext(schemes=["bcrypt"])
 
 class User(Base):
     """
@@ -31,11 +29,12 @@ class User(Base):
 
     def set_password(self, plain_password):
         """Düz metin şifreyi bcrypt ile hash'leyerek saklar"""
-        self.password = pwd_context.hash(plain_password)
+        salt = bcrypt.gensalt()
+        self.password = bcrypt.hashpw(plain_password.encode('utf-8'), salt).decode('utf-8')
     
     def check_password(self, plain_password):
         """Düz metin şifreyi hash'lenmiş şifre ile karşılaştırır"""
-        return pwd_context.verify(plain_password, self.password)
+        return bcrypt.checkpw(plain_password.encode('utf-8'), self.password.encode('utf-8'))
 
 class ActionLogging(Base):
     """
@@ -83,15 +82,13 @@ class LoginLogging(Base):
         login_date: Giriş zamanı
         client_ip: İstek yapan IP adresi
         logout_date: Çıkış zamanı (NULL ise hala aktif)
-        login_duration_ms: Session süresi (milisaniye)
     """
     __tablename__ = "LoginLogging"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("Users.id"), nullable=False)
     login_date = Column(DATETIME2(precision=7), nullable=False)
     client_ip = Column(String, nullable=False)
     logout_date = Column(DATETIME2(precision=7), nullable=True)
-    login_duration_ms = Column(Integer, nullable=True)
 
 class QueryData(Base):
     """
@@ -111,7 +108,7 @@ class QueryData(Base):
     """
     __tablename__ = "QueryData"
     id = Column(Integer, primary_key=True, index=True,autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("Users.id"), nullable=False)
     servername = Column(VARCHAR(50))
     database_name = Column(VARCHAR(50))
     query = Column(TEXT, nullable=False)
@@ -135,10 +132,10 @@ class Workspace(Base):
     """
     __tablename__ = "Workspaces"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("Users.id"), nullable=False)
     name = Column(NVARCHAR(100), nullable=False)
     description = Column(NVARCHAR(255), nullable=True)
-    query_id = Column(Integer, ForeignKey("queryData.id"), nullable=False, unique=True)
+    query_id = Column(Integer, ForeignKey("QueryData.id"), nullable=False, unique=True)
     show_results = Column(Boolean, nullable=True, default=None)
     query_data = relationship("QueryData")
 

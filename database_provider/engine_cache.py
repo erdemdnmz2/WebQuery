@@ -1,9 +1,8 @@
 import hashlib
 from typing import Dict, Optional
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSession, async_sessionmaker
-from sqlalchemy.pool import QueuePool
 import asyncio
-from config import TIME_INTERVAL_FOR_CACHE
+from .config import TIME_INTERVAL_FOR_CACHE
 from pydantic import BaseModel, Field
 from datetime import datetime
 
@@ -80,9 +79,8 @@ class EngineCache:
                         
             engine = create_async_engine(
                 url,
-                poolclass=QueuePool,
-                pool_size=0,
-                max_overflow=20,
+                pool_size=5,
+                max_overflow=10,
                 pool_timeout=30,
                 pool_recycle=1800,
                 pool_pre_ping=True

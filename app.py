@@ -21,7 +21,7 @@ from starlette.middleware.cors import CORSMiddleware
 from cryptography.fernet import Fernet
 from sqlalchemy import text
 
-from app_database.app_database import AppDatabase
+from app_database import AppDatabase
 from database_provider import DatabaseProvider
 from session import SessionCache
 from middlewares import AuthMiddleware
@@ -53,7 +53,8 @@ async def lifespan(app: FastAPI):
 
     try:
         app.state.db_provider = DatabaseProvider()
-        await app.state.db_provider.set_db_info(app.state.app_db.get_db_info())
+        db_info = await app.state.app_db.get_db_info()
+        app.state.db_provider.set_db_info(db_info)
         print("✓ DatabaseProvider hazır ve db_info yüklendi")
     except Exception as e:
         print(f"\n❌ FATAL: DatabaseProvider başlatma hatası!")
@@ -140,7 +141,7 @@ async def health_check():
 if __name__ == "__main__":
     uvicorn.run(
         "app:app",
-        host="0.0.0.0",
-        port=8000,
+        host="10.0.13.60",
+        port=8080,
         reload=True
     )

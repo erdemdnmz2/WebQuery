@@ -556,7 +556,7 @@
 
             const fetchWorkspaces = async () => {
                 try {
-                    const response = await authenticatedFetch('/api/workspace');
+                    const response = await authenticatedFetch('/api/workspaces');
                     if (!response) return; // Redirected to login
                     
                     if (!response.ok) throw new Error('Failed to fetch workspaces');

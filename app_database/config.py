@@ -12,7 +12,7 @@ Environment Variables:
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(".env.production")
 
 db_user = os.getenv("DB_USER", "sa")
 db_password = os.getenv("DB_PASSWORD", "")

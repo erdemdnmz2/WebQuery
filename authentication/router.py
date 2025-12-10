@@ -72,13 +72,6 @@ async def login(
         
         session_cache.add_to_cache(password=user.password, user_id=user_id)
         
-        if user_id not in db_provider.engine_cache:
-            await db_provider.add_user_to_cache(
-                user_id=user_id,
-                username=username,
-                password=user.password
-            )
-        
         return {"access_token": token}
 
 
@@ -131,7 +124,7 @@ async def read_users_me(current_user=Depends(get_current_user)):
     """
     return schemas.User(
         username=current_user.username,
-        is_admin=current_user.is_admin
+        is_admin=current_user.is_admin if current_user.is_admin is not None else False
     )
 
 

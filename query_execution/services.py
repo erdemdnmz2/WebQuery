@@ -69,8 +69,7 @@ class QueryService:
         """
         log_id = None
         try:
-            log = await self.app_db.create_log(user=user, query=query, machine_name=server_name)
-            log_id = log.id
+            log_id = await self.app_db.create_log(user=user, query=query, machine_name=server_name)
             query_analysis = self.analyzer.analyze(query)
             if not query_analysis["return"] and not user.is_admin:
                 error_msg = f"Query rejected: {query_analysis['risk_type']}"
@@ -95,7 +94,7 @@ class QueryService:
                 }
             async with self.database_provider.get_session(
                 user=user,
-                server_name=server_name,
+                servername=server_name,
                 database_name=database_name
             ) as session:
                 sql_query = text(query)

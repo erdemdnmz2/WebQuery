@@ -130,8 +130,8 @@ class AppDatabase:
                 )
                 db.add(created_log)
                 await db.flush()
-                await db.refresh(created_log)
-                return created_log
+                log_id = created_log.id
+            return log_id
     
     async def update_log(self, log_id, successfull: bool, error: str = None, row_count: int = None):
         """

@@ -54,7 +54,7 @@ def get_query_service(request: Request) -> QueryService:
     """
     app_db = get_app_db(request)
     db_provider = get_db_provider(request)
-    notification_service = get_notification_service()
+    notification_service = get_notification_service(request)
     return QueryService(database_provider=db_provider, app_db=app_db, notification_service=notification_service)
 
 from workspaces.services import WorkspaceService
