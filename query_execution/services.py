@@ -7,10 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 from typing import Dict, Any
 
+import uuid
+
 from query_execution import config
 from database_provider import DatabaseProvider
 from app_database.app_database import AppDatabase
-from app_database.models import User
+from app_database.models import User, QueryData, Workspace
 
 from query_execution.query_analyzer import QueryAnalyzer
 
@@ -74,6 +76,39 @@ class QueryService:
             if not query_analysis["return"] and not user.is_admin:
                 error_msg = f"Query rejected: {query_analysis['risk_type']}"
                 await self.app_db.update_log(log_id=log_id, successfull=False, error=error_msg)
+                
+                # Reddedilen query'yi QueryData + Workspace olarak kaydet (onay bekleyen)
+                try:
+                    async with self.app_db.get_session() as db_session:
+                        # 1. QueryData oluştur
+                        query_data = QueryData(
+                            user_id=user.id,
+                            servername=server_name,
+                            database_name=database_name,
+                            query=query,
+                            uuid=str(uuid.uuid4()),
+                            status="waiting_for_approval"
+                        )
+                        db_session.add(query_data)
+                        await db_session.flush()  # ID'yi almak için
+                        
+                        # 2. Workspace oluştur
+                        workspace_name = f"Pending: {query[:50]}..." if len(query) > 50 else f"Pending: {query}"
+                        workspace = Workspace(
+                            user_id=user.id,
+                            name=workspace_name,
+                            description=f"Risk Type: {query_analysis.get('risk_type', 'UNKNOWN')} - Waiting for admin approval",
+                            query_id=query_data.id,
+                            show_results=None
+                        )
+                        db_session.add(workspace)
+                        await db_session.commit()
+                        
+                        print(f"Query saved for approval - Workspace ID: {workspace.id}, UUID: {query_data.uuid}")
+                except Exception as save_exc:
+                    print(f"Failed to save query for approval: {type(save_exc).__name__}: {save_exc}")
+                
+                # Admin'e bildirim gönder
                 try:
                     if self.notification_service:
                         request_time = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
@@ -87,10 +122,11 @@ class QueryService:
                         )
                 except Exception as notif_exc:
                     print(f"Notification send error: {type(notif_exc).__name__}: {notif_exc}")
+                
                 return {
                     "response_type": "error",
                     "data": [],
-                    "error": error_msg
+                    "error": f"{error_msg}. Query saved to your workspaces and sent for admin approval."
                 }
             async with self.database_provider.get_session(
                 user=user,
