@@ -77,10 +77,8 @@ class QueryService:
                 error_msg = f"Query rejected: {query_analysis['risk_type']}"
                 await self.app_db.update_log(log_id=log_id, successfull=False, error=error_msg)
                 
-                # Reddedilen query'yi QueryData + Workspace olarak kaydet (onay bekleyen)
                 try:
-                    async with self.app_db.get_session() as db_session:
-                        # 1. QueryData oluştur
+                    async with self.app_db.get_app_db() as db_session:
                         query_data = QueryData(
                             user_id=user.id,
                             servername=server_name,
@@ -90,9 +88,9 @@ class QueryService:
                             status="waiting_for_approval"
                         )
                         db_session.add(query_data)
-                        await db_session.flush()  # ID'yi almak için
+                        await db_session.flush()
+                        await db_session.refresh(query_data)
                         
-                        # 2. Workspace oluştur
                         workspace_name = f"Pending: {query[:50]}..." if len(query) > 50 else f"Pending: {query}"
                         workspace = Workspace(
                             user_id=user.id,
@@ -108,7 +106,6 @@ class QueryService:
                 except Exception as save_exc:
                     print(f"Failed to save query for approval: {type(save_exc).__name__}: {save_exc}")
                 
-                # Admin'e bildirim gönder
                 try:
                     if self.notification_service:
                         request_time = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')

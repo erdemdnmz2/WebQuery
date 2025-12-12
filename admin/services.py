@@ -110,6 +110,7 @@ class AdminService:
             - Status değiştirilmez
         """
         log_id = None
+        
         async with self.app_db.get_app_db() as db:
             workspace = await db.get(Workspace, workspace_id)
             if not workspace:
@@ -119,71 +120,71 @@ class AdminService:
             if not query_data:
                 return {"success": False, "error": "Query data not found"}
                     
-            user = await db.get(User, query_data.user_id)
+            user = await db.get(User, admin_user.id)
             if not user:
                 return {"success": False, "error": "User not found"}
-
-            try:
-                log = await self.app_db.create_log(
-                    user=admin_user, 
-                    query=query_data.query, 
-                    machine_name=query_data.servername
-                )
-                log_id = log.id
+            
+            query_text = query_data.query
+            servername = query_data.servername
+            database_name = query_data.database_name
+        
+        try:
+            log_id = await self.app_db.create_log(
+                user=admin_user, 
+                query=query_text, 
+                machine_name=servername
+            )
+            
+            async with self.db_provider.get_session(user, servername, database_name) as session:
+                sql_query = text(query_text)
+                result = await session.execute(sql_query)
+                rows = result.fetchall()
+                row_count = len(rows)
                 
-                async with self.db_provider.get_session(user, query_data.servername, query_data.database_name) as session:
-                    sql_query = text(query_data.query)
-                    result = await session.execute(sql_query)
-                    rows = result.fetchall()
-                    row_count = len(rows)
-                    
-                    # MAX_ROW_COUNT_LIMIT kontrolü
-                    from query_execution import config
-                    if row_count > config.MAX_ROW_COUNT_LIMIT:
-                        rows = rows[:config.MAX_ROW_COUNT_LIMIT]
-                        row_count = config.MAX_ROW_COUNT_LIMIT
+                from query_execution import config
+                if row_count > config.MAX_ROW_COUNT_LIMIT:
+                    rows = rows[:config.MAX_ROW_COUNT_LIMIT]
+                    row_count = config.MAX_ROW_COUNT_LIMIT
 
-                    result_data = [dict(row._mapping) for row in rows]
-                
+                result_data = [dict(row._mapping) for row in rows]
+            
+            await self.app_db.update_log(
+                log_id=log_id,
+                successfull=True,
+                row_count=row_count
+            )
+
+            columns = list(result_data[0].keys()) if result_data else []
+            message = None
+            from query_execution import config
+            if row_count > 0 and row_count == config.MAX_ROW_COUNT_LIMIT:
+                message = f"Truncated to MAX_ROW_COUNT_LIMIT ({config.MAX_ROW_COUNT_LIMIT})"
+
+            return {
+                "response_type": "data",
+                "data": result_data,
+                "columns": columns,
+                "row_count": row_count,
+                "message": message,
+                "error": None
+            }
+        except Exception as e:
+            if log_id:
                 await self.app_db.update_log(
                     log_id=log_id,
-                    successfull=True,
-                    row_count=row_count
+                    successfull=False,
+                    error=str(e)
                 )
 
-                await db.commit()
-
-                columns = list(result_data[0].keys()) if result_data else []
-                message = None
-                from query_execution import config
-                if row_count > 0 and row_count == config.MAX_ROW_COUNT_LIMIT:
-                    message = f"Truncated to MAX_ROW_COUNT_LIMIT ({config.MAX_ROW_COUNT_LIMIT})"
-
-                return {
-                    "response_type": "data",
-                    "data": result_data,
-                    "columns": columns,
-                    "row_count": row_count,
-                    "message": message,
-                    "error": None
-                }
-            except Exception as e:
-                if log_id:
-                    await self.app_db.update_log(
-                        log_id=log_id,
-                        successfull=False,
-                        error=str(e)
-                    )
-
-                print(f"Query preview failed: {e}")
-                return {
-                    "response_type": "error",
-                    "data": [],
-                    "columns": [],
-                    "row_count": 0,
-                    "message": None,
-                    "error": str(e)
-                }
+            print(f"Query preview failed: {e}")
+            return {
+                "response_type": "error",
+                "data": [],
+                "columns": [],
+                "row_count": 0,
+                "message": None,
+                "error": str(e)
+            }
 
     async def reject_query_by_workspace_id(self, workspace_id: int):
         """
@@ -248,15 +249,17 @@ class AdminService:
             - Admin daha önce execute_for_preview ile sonuçları görmüş olmalı
         """
         async with self.app_db.get_app_db() as db:
-            workspace = await db.get(Workspace, workspace_id)
-            if not workspace:
-                return {"success": False, "error": "Workspace not found"}
-                    
-            query_data = await db.get(QueryData, workspace.query_id)
-            if not query_data:
-                return {"success": False, "error": "Query data not found"}
-            
             try:
+                workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+                workspace = workspace_result.scalars().first()
+                if not workspace:
+                    return {"success": False, "error": "Workspace not found"}
+                        
+                query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
+                query_data = query_result.scalars().first()
+                if not query_data:
+                    return {"success": False, "error": "Query data not found"}
+                
                 if show_results:
                     query_data.status = "approved_with_results"
                     workspace.show_results = True
