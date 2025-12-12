@@ -2,7 +2,6 @@
 Admin Service Layer
 Riskli query'lerin admin onayı ve yönetimi işlemleri
 """
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import select, text
 from app_database.models import QueryData, Workspace, User
 from app_database.app_database import AppDatabase
@@ -250,13 +249,11 @@ class AdminService:
         """
         async with self.app_db.get_app_db() as db:
             try:
-                workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
-                workspace = workspace_result.scalars().first()
+                workspace = await db.get(Workspace, workspace_id)
                 if not workspace:
                     return {"success": False, "error": "Workspace not found"}
                         
-                query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
-                query_data = query_result.scalars().first()
+                query_data = await db.get(QueryData, workspace.query_id)
                 if not query_data:
                     return {"success": False, "error": "Query data not found"}
                 
@@ -269,6 +266,8 @@ class AdminService:
                     workspace.show_results = False
                     workspace.description = "Admin onayladı - Kullanıcı çalıştıramaz (not executable)"
                 
+                db.add(workspace)
+                db.add(query_data)
                 await db.commit()
                 
                 return {

@@ -10,7 +10,6 @@ env_file = os.getenv("ENV_FILE", ".env")
 load_dotenv(env_file)
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.middleware import SlowAPIMiddleware
