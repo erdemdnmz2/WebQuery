@@ -291,22 +291,17 @@ class WorkspaceService:
             query_data = query_result.scalars().first()
             if not query_data:
                 return {"response_type": "error", "data": [], "error": "Query data not found"}
-
             # enforce approval
             if not workspace.show_results or query_data.status != "approved_with_results":
                 return {"response_type": "error", "data": [], "error": "This workspace is not approved for execution"}
 
-        # Execute using db_provider with the user's credentials
         log_id = None
         try:
-            # Mark this log as an approved execution (user runs an admin-approved workspace)
-            log = await self.app_db.create_log(user=current_user, query=query_data.query, machine_name=query_data.servername, approved_execution=True)
-            log_id = log.id
+            log_id = await self.app_db.create_log(user=current_user, query=query_data.query, machine_name=query_data.servername, approved_execution=True)
 
             async with db_provider.get_session(user=current_user, servername=query_data.servername, database_name=query_data.database_name) as session:
                 sql_query = text(query_data.query)
                 result = await session.execute(sql_query)
-                # fetch up to MAX_ROW_COUNT_LIMIT
                 rows = result.fetchmany(size=query_config.MAX_ROW_COUNT_LIMIT)
                 row_count = len(rows)
 
