@@ -55,7 +55,8 @@ class AdminService:
                         )
                         workspace = workspace_result.scalars().first()
 
-                        user = await db.get(User, query.user_id)
+                        user_result = await db.execute(select(User).where(User.id == query.user_id))
+                        user = user_result.scalars().first()
                         
                         if workspace and user:
                             data = AdminApprovals(
@@ -111,15 +112,18 @@ class AdminService:
         log_id = None
         
         async with self.app_db.get_app_db() as db:
-            workspace = await db.get(Workspace, workspace_id)
+            workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+            workspace = workspace_result.scalars().first()
             if not workspace:
                 return {"success": False, "error": "Workspace not found"}
                     
-            query_data = await db.get(QueryData, workspace.query_id)
+            query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
+            query_data = query_result.scalars().first()
             if not query_data:
                 return {"success": False, "error": "Query data not found"}
                     
-            user = await db.get(User, admin_user.id)
+            user_result = await db.execute(select(User).where(User.id == admin_user.id))
+            user = user_result.scalars().first()
             if not user:
                 return {"success": False, "error": "User not found"}
             
@@ -205,11 +209,13 @@ class AdminService:
         """
         async with self.app_db.get_app_db() as db:
             try:
-                workspace = await db.get(Workspace, workspace_id)
+                workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+                workspace = workspace_result.scalars().first()
                 if not workspace:
                     return {"success": False, "error": "Workspace not found"}
                     
-                query_data = await db.get(QueryData, workspace.query_id)
+                query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
+                query_data = query_result.scalars().first()
                 if not query_data:
                     return {"success": False, "error": "Query data not found"}
                 
@@ -249,11 +255,13 @@ class AdminService:
         """
         async with self.app_db.get_app_db() as db:
             try:
-                workspace = await db.get(Workspace, workspace_id)
+                workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+                workspace = workspace_result.scalars().first()
                 if not workspace:
                     return {"success": False, "error": "Workspace not found"}
-                        
-                query_data = await db.get(QueryData, workspace.query_id)
+                
+                query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
+                query_data = query_result.scalars().first()
                 if not query_data:
                     return {"success": False, "error": "Query data not found"}
                 
@@ -266,8 +274,6 @@ class AdminService:
                     workspace.show_results = False
                     workspace.description = "Admin onayladı - Kullanıcı çalıştıramaz (not executable)"
                 
-                db.add(workspace)
-                db.add(query_data)
                 await db.commit()
                 
                 return {

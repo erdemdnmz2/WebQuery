@@ -44,10 +44,10 @@ class AppDatabase:
             max_overflow=30,       
             pool_timeout=20,
             pool_recycle=3600,
-            pool_pre_ping=True
+            pool_pre_ping=False
         )
 
-        self.AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=self.app_engine)
+        self.AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=True, bind=self.app_engine)
 
     @asynccontextmanager
     async def get_app_db(self):

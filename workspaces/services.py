@@ -157,7 +157,8 @@ class WorkspaceService:
             - Workspace bulunamazsa False döner
         """
         try:
-            workspace = await db.get(Workspace, workspace_id)
+            workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+            workspace = workspace_result.scalars().first()
             if not workspace:
                 return False
             
@@ -166,7 +167,8 @@ class WorkspaceService:
             await db.delete(workspace)
             
             if query_id:
-                query_data = await db.get(QueryData, query_id)
+                query_result = await db.execute(select(QueryData).where(QueryData.id == query_id))
+                query_data = query_result.scalars().first()
                 if query_data:
                     await db.delete(query_data)
             
@@ -196,11 +198,13 @@ class WorkspaceService:
             - Workspace veya queryData bulunamazsa False döner
         """
         try:
-            workspace = await db.get(Workspace, workspace_id)
+            workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+            workspace = workspace_result.scalars().first()
             if not workspace:
                 return False
             
-            query_data = await db.get(QueryData, workspace.query_id)
+            query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
+            query_data = query_result.scalars().first()
             if not query_data:
                 return False
             
@@ -231,10 +235,12 @@ class WorkspaceService:
             - Workspace sahibi kontrolü yapar (user_id eşleşmeli)
             - Workspace veya queryData bulunamazsa None döner
         """
-        workspace = await db.get(Workspace, workspace_id)
+        workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+        workspace = workspace_result.scalars().first()
         if not workspace or workspace.user_id != user_id:
             return None
-        query_data = await db.get(QueryData, workspace.query_id)
+        query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
+        query_data = query_result.scalars().first()
         if not query_data:
             return None
         return {
@@ -276,11 +282,13 @@ class WorkspaceService:
 
         # Load workspace and query
         async with self.app_db.get_app_db() as db:
-            workspace = await db.get(Workspace, workspace_id)
+            workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+            workspace = workspace_result.scalars().first()
             if not workspace:
                 return {"response_type": "error", "data": [], "error": "Workspace not found"}
 
-            query_data = await db.get(QueryData, workspace.query_id)
+            query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
+            query_data = query_result.scalars().first()
             if not query_data:
                 return {"response_type": "error", "data": [], "error": "Query data not found"}
 
