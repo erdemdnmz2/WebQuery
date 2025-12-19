@@ -136,8 +136,9 @@
                 fetchWorkspace();
             }, []);
 
-            // Init Ace Editor (Read Only)
+            // Init Ace Editor and set content
             useEffect(() => {
+                // Initialize editor once
                 if (editorContainerRef.current && !aceEditorInstance.current) {
                     aceEditorInstance.current = ace.edit(editorContainerRef.current);
                     aceEditorInstance.current.setTheme("ace/theme/dracula");
@@ -150,12 +151,11 @@
                         highlightActiveLine: false
                     });
                 }
-            }, []);
 
-            // Update editor content when data loads
-            useEffect(() => {
-                if (aceEditorInstance.current && workspaceData) {
-                    aceEditorInstance.current.setValue(workspaceData.query || '', -1);
+                // Set content when data is available
+                if (aceEditorInstance.current && workspaceData && workspaceData.query) {
+                    aceEditorInstance.current.setValue(workspaceData.query, -1);
+                    aceEditorInstance.current.clearSelection();
                 }
             }, [workspaceData]);
 
