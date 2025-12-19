@@ -253,8 +253,9 @@
                         <td class="px-6 py-4">
                             <button class="btn btn-sm btn-success open-workspace-btn ${isDisabled ? 'disabled' : ''}" 
                                     data-id="${workspace.id}" 
+                                    data-status="${workspace.status}"
                                     ${isDisabled ? 'disabled' : ''}
-                                    onclick="openWorkspace(${workspace.id})">
+                                    onclick="openWorkspace(${workspace.id}, '${workspace.status}')">
                                 ${isDisabled ? (workspace.status === 'rejected' ? 'Rejected' : 'Waiting for Approval') : 'Open'}
                             </button>
                             <button class="btn btn-sm btn-danger delete-workspace-btn" data-id="${workspace.id}" onclick="deleteWorkspace(${workspace.id})">Delete</button>
@@ -281,9 +282,12 @@
                 }
             }
 
-            // Global functions for button clicks
-            window.openWorkspace = function(workspaceId) {
-                window.location.href = `/home?workspace_id=${workspaceId}`;
+            window.openWorkspace = function(workspaceId, status) {
+                if (status === 'approved_with_results') {
+                    window.location.href = `/api/workspaces/${workspaceId}/execute`;
+                } else {
+                    window.location.href = `/home?workspace_id=${workspaceId}`;
+                }
             };
 
             window.deleteWorkspace = async function(workspaceId) {
