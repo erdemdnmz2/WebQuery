@@ -79,30 +79,38 @@ class QueryService:
                 
                 try:
                     async with self.app_db.get_app_db() as db_session:
+                        query_uuid = str(uuid.uuid4())
                         query_data = QueryData(
                             user_id=user.id,
                             servername=server_name,
                             database_name=database_name,
                             query=query,
-                            uuid=str(uuid.uuid4()),
+                            uuid=query_uuid,
                             status="waiting_for_approval"
                         )
                         db_session.add(query_data)
                         await db_session.flush()
-                        await db_session.refresh(query_data)
+                        
+                        # flush sonrası ID context içinde al
+                        query_data_id = query_data.id
                         
                         workspace_name = f"Pending: {query[:50]}..." if len(query) > 50 else f"Pending: {query}"
                         workspace = Workspace(
                             user_id=user.id,
                             name=workspace_name,
                             description=f"Risk Type: {query_analysis.get('risk_type', 'UNKNOWN')} - Waiting for admin approval",
-                            query_id=query_data.id,
+                            query_id=query_data_id,
                             show_results=None
                         )
                         db_session.add(workspace)
+                        await db_session.flush()
+                        
+                        # flush sonrası workspace ID'yi al
+                        workspace_id = workspace.id
+                        
                         await db_session.commit()
                         
-                        print(f"Query saved for approval - Workspace ID: {workspace.id}, UUID: {query_data.uuid}")
+                    print(f"Query saved for approval - Workspace ID: {workspace_id}, UUID: {query_uuid}")
                 except Exception as save_exc:
                     print(f"Failed to save query for approval: {type(save_exc).__name__}: {save_exc}")
                 

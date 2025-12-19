@@ -127,6 +127,7 @@ class WorkspaceService:
         for ws in workspaces:
             query_data = query_data_map.get(ws.query_id)
             if query_data:
+                print(f"[DEBUG] Workspace {ws.id}: status={query_data.status}, show_results={getattr(ws, 'show_results', None)}")
                 workspace_list.append(WorkspaceInfo(
                     id=ws.id,
                     name=ws.name,

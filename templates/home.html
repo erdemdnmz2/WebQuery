@@ -268,8 +268,10 @@
                 switch(status) {
                     case 'waiting_for_approval':
                         return '<span class="badge bg-warning text-dark">Waiting for Approval</span>';
-                    case 'approved_and_executed':
-                        return '<span class="badge bg-success">Approved and Executed</span>';
+                    case 'approved_with_results':
+                        return '<span class="badge bg-success">Approved and Executable</span>';
+                    case 'approved':
+                        return '<span class="badge bg-primary">Approved (Not Executable)</span>';
                     case 'rejected':
                         return '<span class="badge bg-danger">Rejected</span>';
                     case 'saved_in_workspace':

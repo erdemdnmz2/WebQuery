@@ -253,39 +253,62 @@ class AdminService:
             - Sadece status + show_results güncellenir
             - Admin daha önce execute_for_preview ile sonuçları görmüş olmalı
         """
-        async with self.app_db.get_app_db() as db:
-            try:
-                workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
-                workspace = workspace_result.scalars().first()
-                if not workspace:
+        try:
+            # Validation - raw SQL ile query_id al
+            async with self.app_db.get_app_db() as db:
+                result = await db.execute(
+                    text("SELECT query_id FROM Workspaces WHERE id = :workspace_id"),
+                    {"workspace_id": workspace_id}
+                )
+                row = result.first()
+                if not row:
                     return {"success": False, "error": "Workspace not found"}
-                
-                query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
-                query_data = query_result.scalars().first()
-                if not query_data:
+                query_id = row[0]
+            
+            # Validation - query_data var mı kontrol et
+            async with self.app_db.get_app_db() as db:
+                result = await db.execute(
+                    text("SELECT id FROM QueryData WHERE id = :query_id"),
+                    {"query_id": query_id}
+                )
+                if not result.first():
                     return {"success": False, "error": "Query data not found"}
+            
+            # Update - tek context'te her şeyi güncelle
+            if show_results:
+                new_status = "approved_with_results"
+                new_desc = "Admin onayladı - Kullanıcı çalıştırabilir (executable)"
+                show_results_val = 1
+            else:
+                new_status = "approved"
+                new_desc = "Admin onayladı - Kullanıcı çalıştıramaz (not executable)"
+                show_results_val = 0
+            
+            async with self.app_db.get_app_db() as db:
+                result1 = await db.execute(
+                    text("UPDATE QueryData SET status = :status WHERE id = :id"),
+                    {"status": new_status, "id": query_id}
+                )
+                print(f"QueryData update affected rows: {result1.rowcount}")
                 
-                if show_results:
-                    query_data.status = "approved_with_results"
-                    workspace.show_results = True
-                    workspace.description = "Admin onayladı - Kullanıcı çalıştırabilir (executable)"
-                else:
-                    query_data.status = "approved"
-                    workspace.show_results = False
-                    workspace.description = "Admin onayladı - Kullanıcı çalıştıramaz (not executable)"
+                result2 = await db.execute(
+                    text("UPDATE Workspaces SET show_results = :show, description = :desc WHERE id = :id"),
+                    {"show": show_results_val, "desc": new_desc, "id": workspace_id}
+                )
+                print(f"Workspace update affected rows: {result2.rowcount}")
                 
                 await db.commit()
-                
-                return {
-                    "success": True,
-                    "status": query_data.status,
-                    "message": f"Query approved successfully ({'executable' if show_results else 'not executable'})"
-                }
+                print(f"Commit successful - Status: {new_status}, Workspace: {workspace_id}")
             
-            except Exception as e:
-                await db.rollback()
-                print(f"Approval failed: {e}")
-                return {
-                    "success": False,
-                    "error": f"Approval failed: {str(e)}"
-                }
+            return {
+                "success": True,
+                "status": new_status,
+                "message": f"Query approved successfully ({'executable' if show_results else 'not executable'})"
+            }
+        
+        except Exception as e:
+            print(f"Approval failed: {e}")
+            return {
+                "success": False,
+                "error": f"Approval failed: {str(e)}"
+            }
