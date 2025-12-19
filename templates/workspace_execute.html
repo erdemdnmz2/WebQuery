@@ -1,199 +1,371 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Workspace Execute</title>
+    <!-- Bootstrap CSS CDN -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Ace Editor CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/theme/dracula.min.css">
+
     <style>
-        body { background: #0f172a; color: #e6eef8; font-family: Inter, system-ui, sans-serif; padding: 1rem; }
-        .card { background: #0b1220; border: 1px solid #1f2a44; }
-        #editor { height: 420px; }
-        .result-table th, .result-table td { padding: .35rem .5rem; border: 1px solid #2b344a; }
-        .result-area { max-height: 520px; overflow: auto; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* gray-900 */
+            padding-top: 70px;
+        }
+
+        /* Ace Editor Customization */
+        .ace_editor {
+            height: 700px !important;
+            border-radius: 0.75rem;
+            font-size: 0.95rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+        .ace_gutter {
+            background-color: #1f2937 !important;
+            border-right: 1px solid #374151 !important;
+            color: #9ca3af !important;
+        }
+        .ace_active-line {
+            background-color: #374151 !important;
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #4b5563;
+            border-radius: 5px;
+            border: 2px solid #1f2937;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background-color: #6b7280;
+        }
+
+        /* Result Table Styling */
+        .result-table th, .result-table td {
+            white-space: nowrap;
+        }
+
+        /* Navbar Customization */
+        .navbar-dark-custom {
+            background-color: #1f2937 !important;
+            border-bottom: 1px solid #374151;
+        }
+        .navbar-dark-custom .navbar-brand {
+            color: #f3f4f6 !important;
+        }
     </style>
 </head>
 <body>
-    <div class="container-fluid">
-        <div class="row mb-3">
-            <div class="col-12">
-                <div class="card p-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h5 id="ws-name">Workspace</h5>
-                            <div id="db-info" class="small text-muted">Loading...</div>
-                        </div>
-                        <div>
-                            <button id="execute-btn" class="btn btn-success">Execute Query</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div id="root"></div>
 
-        <div class="row">
-            <div class="col-md-5">
-                <div class="card p-2">
-                    <h6>Read-only Query</h6>
-                    <div id="editor"></div>
-                </div>
-            </div>
-            <div class="col-md-7">
-                <div class="card p-2">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="mb-0">Results</h6>
-                        <div>
-                            <button id="download-csv" class="btn btn-outline-light btn-sm me-1" disabled>Download CSV</button>
-                            <button id="download-xlsx" class="btn btn-outline-light btn-sm" disabled>Download Excel</button>
-                        </div>
-                    </div>
-                    <div id="result-message" class="mb-2 small"></div>
-                    <div class="result-area">
-                        <table id="result-table" class="result-table table table-sm text-light"></table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- React Dependencies -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <script>
-        // Helpers
-        function getWorkspaceIdFromPath() {
-            const parts = window.location.pathname.split('/').filter(Boolean);
-            // expected: [..., 'workspaces', '{id}', 'execute']
-            const idx = parts.indexOf('workspaces');
-            if (idx >=0 && parts.length > idx+1) return parts[idx+1];
-            return null;
-        }
+    <!-- Libs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/mode-sql.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/theme-dracula.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
-        const workspaceId = getWorkspaceIdFromPath();
-        const editor = ace.edit('editor');
-        editor.setTheme('ace/theme/dracula');
-        editor.session.setMode('ace/mode/sql');
-        editor.setOptions({ readOnly: true, highlightActiveLine: false, showGutter: true, fontSize: '12px' });
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+        const { createRoot } = ReactDOM;
 
-        const executeBtn = document.getElementById('execute-btn');
-        const resultTable = document.getElementById('result-table');
-        const resultMessage = document.getElementById('result-message');
-        const downloadCsvBtn = document.getElementById('download-csv');
-        const downloadXlsxBtn = document.getElementById('download-xlsx');
+        function App() {
+            const [workspaceData, setWorkspaceData] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [executing, setExecuting] = useState(false);
+            const [result, setResult] = useState(null);
+            const [error, setError] = useState(null);
+            
+            const editorContainerRef = useRef(null);
+            const aceEditorInstance = useRef(null);
+            const workspaceIdRef = useRef(null);
 
-        if (!workspaceId) {
-            resultMessage.textContent = 'Unable to determine workspace id from URL.';
-            executeBtn.disabled = true;
-        }
+            // Helper to get ID from URL
+            const getWorkspaceIdFromPath = () => {
+                const parts = window.location.pathname.split('/').filter(Boolean);
+                // expected: [..., 'workspaces', '{id}', 'execute']
+                const idx = parts.indexOf('workspaces');
+                if (idx >=0 && parts.length > idx+1) return parts[idx+1];
+                return null;
+            };
 
-        async function fetchWorkspace() {
-            const res = await fetch(`/api/get_workspace_by_id/${workspaceId}`, { credentials: 'same-origin' });
-            if (!res.ok) {
-                resultMessage.textContent = 'Workspace load error: ' + (await res.text());
-                executeBtn.disabled = true;
-                return;
-            }
-            const data = await res.json();
-            document.getElementById('ws-name').textContent = data.name || 'Workspace';
-            document.getElementById('db-info').textContent = `${data.servername} / ${data.database_name} • status: ${data.status}`;
-            editor.setValue(data.query || '', -1);
-        }
+            // Init Workspace
+            useEffect(() => {
+                const id = getWorkspaceIdFromPath();
+                workspaceIdRef.current = id;
 
-        function renderResults(sqlResponse) {
-            // clear
-            resultTable.innerHTML = '';
-            if (!sqlResponse || sqlResponse.response_type !== 'data' || !sqlResponse.data || sqlResponse.data.length === 0) {
-                resultMessage.textContent = (sqlResponse && sqlResponse.message) ? sqlResponse.message : 'No rows returned.';
-                downloadCsvBtn.disabled = true;
-                downloadXlsxBtn.disabled = true;
-                return;
-            }
-
-            const rows = sqlResponse.data;
-            const cols = Object.keys(rows[0]);
-
-            // Header
-            const thead = document.createElement('thead');
-            const hrow = document.createElement('tr');
-            cols.forEach(c => { const th = document.createElement('th'); th.textContent = c; hrow.appendChild(th); });
-            thead.appendChild(hrow);
-            resultTable.appendChild(thead);
-
-            // Body
-            const tbody = document.createElement('tbody');
-            rows.forEach(r => {
-                const tr = document.createElement('tr');
-                cols.forEach(c => {
-                    const td = document.createElement('td');
-                    const v = r[c];
-                    td.textContent = v === null || v === undefined ? '' : String(v);
-                    tr.appendChild(td);
-                });
-                tbody.appendChild(tr);
-            });
-            resultTable.appendChild(tbody);
-
-            resultMessage.textContent = `Returned ${rows.length} row(s).`;
-            downloadCsvBtn.disabled = false;
-            downloadXlsxBtn.disabled = false;
-
-            // wire download actions
-            downloadCsvBtn.onclick = () => downloadCSV(rows, cols, `workspace_${workspaceId}.csv`);
-            downloadXlsxBtn.onclick = () => downloadXLSX(rows, cols, `workspace_${workspaceId}.xlsx`);
-        }
-
-        function downloadCSV(rows, cols, filename) {
-            const lines = [cols.join(',')];
-            rows.forEach(r => {
-                const vals = cols.map(c => {
-                    const v = r[c];
-                    if (v === null || v === undefined) return '';
-                    const s = String(v).replace(/"/g, '""');
-                    return '"' + s + '"';
-                });
-                lines.push(vals.join(','));
-            });
-            const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = filename;
-            link.click();
-        }
-
-        function downloadXLSX(rows, cols, filename) {
-            const aoa = [cols];
-            rows.forEach(r => aoa.push(cols.map(c => r[c] === undefined ? '' : r[c])));
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet(aoa);
-            XLSX.utils.book_append_sheet(wb, ws, 'Results');
-            XLSX.writeFile(wb, filename);
-        }
-
-        executeBtn.addEventListener('click', async () => {
-            executeBtn.disabled = true;
-            resultMessage.textContent = 'Executing...';
-            resultTable.innerHTML = '';
-            try {
-                const res = await fetch(`/api/execute_workspace/${workspaceId}`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    credentials: 'same-origin',
-                    body: JSON.stringify({})
-                });
-                const json = await res.json();
-                if (!res.ok) {
-                    resultMessage.textContent = json.detail || json.error || 'Execution failed';
-                } else {
-                    renderResults(json);
+                if (!id) {
+                    setError('Workspace ID URL\'den alınamadı.');
+                    setLoading(false);
+                    return;
                 }
-            } catch (err) {
-                resultMessage.textContent = 'Network or execution error: ' + err;
-            } finally {
-                executeBtn.disabled = false;
-            }
-        });
 
-        // Init
-        fetchWorkspace();
+                const fetchWorkspace = async () => {
+                    try {
+                        const res = await fetch(`/api/get_workspace_by_id/${id}`, { credentials: 'same-origin' });
+                        if (!res.ok) throw new Error(await res.text());
+                        const data = await res.json();
+                        setWorkspaceData(data);
+                    } catch (err) {
+                        setError(err.message);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+
+                fetchWorkspace();
+            }, []);
+
+            // Init Ace Editor (Read Only)
+            useEffect(() => {
+                if (editorContainerRef.current && !aceEditorInstance.current) {
+                    aceEditorInstance.current = ace.edit(editorContainerRef.current);
+                    aceEditorInstance.current.setTheme("ace/theme/dracula");
+                    aceEditorInstance.current.session.setMode("ace/mode/sql");
+                    aceEditorInstance.current.setOptions({
+                        readOnly: true,
+                        showLineNumbers: true,
+                        tabSize: 2,
+                        wrap: false,
+                        highlightActiveLine: false
+                    });
+                }
+            }, []);
+
+            // Update editor content when data loads
+            useEffect(() => {
+                if (aceEditorInstance.current && workspaceData) {
+                    aceEditorInstance.current.setValue(workspaceData.query || '', -1);
+                }
+            }, [workspaceData]);
+
+            // Execute Logic
+            const handleExecute = async () => {
+                setExecuting(true);
+                setResult(null);
+                setError(null);
+
+                try {
+                    const res = await fetch(`/api/execute_workspace/${workspaceIdRef.current}`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        credentials: 'same-origin',
+                        body: JSON.stringify({})
+                    });
+                    const json = await res.json();
+                    
+                    if (!res.ok) {
+                        setError(json.detail || json.error || 'Execution failed');
+                    } else {
+                        if (json.response_type !== 'data' || !json.data || json.data.length === 0) {
+                            setResult({ message: json.message || 'No rows returned.', data: [] });
+                        } else {
+                            setResult(json);
+                        }
+                    }
+                } catch (err) {
+                    setError('Network or execution error: ' + err.message);
+                } finally {
+                    setExecuting(false);
+                }
+            };
+
+            // Download Helpers
+            const downloadCSV = () => {
+                if (!result || !result.data || !result.data.length) return;
+                const rows = result.data;
+                const cols = Object.keys(rows[0]);
+                
+                const lines = [cols.join(',')];
+                rows.forEach(r => {
+                    const vals = cols.map(c => {
+                        const v = r[c];
+                        if (v === null || v === undefined) return '';
+                        const s = String(v).replace(/"/g, '""');
+                        return '"' + s + '"';
+                    });
+                    lines.push(vals.join(','));
+                });
+                
+                const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `workspace_${workspaceIdRef.current}.csv`;
+                link.click();
+            };
+
+            const downloadXLSX = () => {
+                if (!result || !result.data || !result.data.length) return;
+                const rows = result.data;
+                const cols = Object.keys(rows[0]);
+                
+                const aoa = [cols];
+                rows.forEach(r => aoa.push(cols.map(c => r[c] === undefined ? '' : r[c])));
+                
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.aoa_to_sheet(aoa);
+                XLSX.utils.book_append_sheet(wb, ws, 'Results');
+                XLSX.writeFile(wb, `workspace_${workspaceIdRef.current}.xlsx`);
+            };
+
+            if (loading) {
+                return (
+                    <div className="min-h-screen bg-gray-900 text-gray-100 flex items-center justify-center">
+                        <div className="text-xl">Loading workspace...</div>
+                    </div>
+                );
+            }
+
+            const hasResults = result && result.data && result.data.length > 0;
+
+            return (
+                <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
+                    {/* Navbar */}
+                    <nav className="navbar navbar-dark-custom py-2 px-4 shadow-lg fixed-top">
+                        <div className="container-fluid flex justify-between items-center">
+                            <div className="d-flex align-items-center gap-3">
+                                <a className="navbar-brand text-xl font-bold" href="/home">WEBQuery</a>
+                                {workspaceData && (
+                                    <span className="text-gray-400 text-sm border-l border-gray-600 pl-3 hidden md:inline">
+                                        {workspaceData.name} 
+                                        <span className="mx-2">•</span> 
+                                        {workspaceData.servername} / {workspaceData.database_name}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="d-flex gap-2">
+                                <button
+                                    onClick={handleExecute}
+                                    disabled={executing}
+                                    className={`btn ${executing ? 'bg-gray-600' : 'bg-indigo-600 hover:bg-indigo-700'} text-white font-medium py-1 px-3 rounded text-sm shadow-lg transition-all`}
+                                >
+                                    {executing ? (
+                                        <span><span className="spinner-border spinner-border-sm me-2"></span>Running...</span>
+                                    ) : (
+                                        'Execute Query'
+                                    )}
+                                </button>
+                                
+                                <button
+                                    onClick={downloadCSV}
+                                    disabled={!hasResults}
+                                    className={`btn ${!hasResults ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-yellow-600 hover:bg-yellow-700 text-white'} font-medium py-1 px-3 rounded text-sm shadow-lg transition-all`}
+                                >
+                                    Download CSV
+                                </button>
+
+                                <button
+                                    onClick={downloadXLSX}
+                                    disabled={!hasResults}
+                                    className={`btn ${!hasResults ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 text-white'} font-medium py-1 px-3 rounded text-sm shadow-lg transition-all`}
+                                >
+                                    Download Excel
+                                </button>
+                            </div>
+                        </div>
+                    </nav>
+
+                    {/* Main Content */}
+                    <div className="p-4 md:p-8 flex-grow flex items-center justify-center pt-8">
+                        <div className="bg-gray-800 p-6 md:p-8 rounded-xl shadow-2xl w-full max-w-full lg:w-[95vw]">
+                            
+                            <div className="flex flex-col md:flex-row gap-6">
+                                {/* Left Side: Read-only Editor */}
+                                <div className="md:w-5/12 min-w-0">
+                                    <label className="block text-gray-300 text-sm font-semibold mb-2">
+                                        Saved Query
+                                    </label>
+                                    <div ref={editorContainerRef} className="w-full rounded-xl shadow-md bg-gray-900" style={{ height: '700px' }}></div>
+                                </div>
+
+                                {/* Right Side: Results */}
+                                <div className="md:w-7/12 min-w-0 flex flex-col">
+                                    <label className="block text-gray-300 text-sm font-semibold mb-2">Results</label>
+                                    
+                                    <div className="bg-gray-700 border border-gray-600 rounded-xl p-4 overflow-auto text-gray-100 text-sm shadow-inner flex-grow" style={{ height: '700px' }}>
+                                        {error && (
+                                            <div className="bg-red-900/50 border border-red-800 text-red-200 p-4 rounded-lg">
+                                                <strong>Error:</strong> {error}
+                                            </div>
+                                        )}
+
+                                        {!error && !result && !executing && (
+                                            <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                                                <svg className="w-12 h-12 mb-3 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                </svg>
+                                                <p>Execute butonuna basarak sonuçları görüntüleyin.</p>
+                                            </div>
+                                        )}
+
+                                        {result && (
+                                            <>
+                                                {result.message && (
+                                                    <div className="mb-3 text-emerald-400 font-medium p-2 bg-emerald-900/20 rounded border border-emerald-900/30">
+                                                        {result.message}
+                                                    </div>
+                                                )}
+                                                
+                                                {result.data && result.data.length > 0 ? (
+                                                    <table className="result-table w-full">
+                                                        <thead>
+                                                            <tr>
+                                                                {Object.keys(result.data[0]).map((key) => (
+                                                                    <th key={key} className="px-3 py-2 border border-gray-600 bg-gray-800 text-gray-100 font-semibold text-left">
+                                                                        {key}
+                                                                    </th>
+                                                                ))}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {result.data.map((row, idx) => (
+                                                                <tr key={idx} className={idx % 2 === 0 ? 'bg-gray-800' : 'bg-gray-700/50'}>
+                                                                    {Object.values(row).map((val, cIdx) => (
+                                                                        <td key={cIdx} className="px-3 py-2 border border-gray-600 text-left">
+                                                                            {val === null ? 'NULL' : String(val)}
+                                                                        </td>
+                                                                    ))}
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                ) : (
+                                                    !result.message && <p className="text-gray-400">No data returned.</p>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
