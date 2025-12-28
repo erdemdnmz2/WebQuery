@@ -1,15 +1,18 @@
 from notification.config import message_format, approval_message_format, SLACK_URL
+from slack_integration.schemas import create_approval_message
 import httpx
+from typing import List, Dict, Any, Optional
 
 
 class NotificationService:
-    def __init__(self):
+    def __init__(self, ):
         self.message_format = message_format
         self.approval_message_format = approval_message_format
         self.slack_url = SLACK_URL
 
     async def send_approval_notifivation(
         self,
+        request_id,
         username,
         request_time,
         database_name,
@@ -17,18 +20,18 @@ class NotificationService:
         risk_type,
         query,
     ) -> bool:
-        message = self.approval_message_format.format(
+        blocks = create_approval_message(
+            request_id=request_id,
             username=username,
-            request_time=request_time,
-            database_name=database_name,
-            servername=servername,
-            risk_type=risk_type,
+            machine_name=servername,
+            database=database_name,
             query=query,
+            risk_score=risk_type
         )
 
-        return await self._send_message_to_slack(message)
+        return await self._send_message_to_slack(blocks=blocks)
 
-    async def _send_message_to_slack(self, text: str) -> bool:
+    async def _send_message_to_slack(self, text: str = None, blocks: List[Dict[str, Any]] = None) -> bool:
         """
         Send a message to Slack using httpx.AsyncClient.
         Returns True on success, False on failure.
@@ -38,9 +41,18 @@ class NotificationService:
             return False
 
         headers = {"Content-Type": "application/json; charset=utf-8"}
-        MAX_LEN = 39000
-        safe_text = text if len(text) <= MAX_LEN else (text[:MAX_LEN] + "\n... (truncated)")
-        payload = {"text": safe_text}
+        payload = {}
+
+        if text:
+            MAX_LEN = 39000
+            safe_text = text if len(text) <= MAX_LEN else (text[:MAX_LEN] + "\n... (truncated)")
+            payload["text"] = safe_text
+        
+        if blocks:
+            payload["blocks"] = blocks
+            
+        if not payload:
+            return False
 
         try:
             async with httpx.AsyncClient(timeout=8.0) as client:
