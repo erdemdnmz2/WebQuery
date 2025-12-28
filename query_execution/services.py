@@ -118,6 +118,7 @@ class QueryService:
                     if self.notification_service:
                         request_time = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
                         await self.notification_service.send_approval_notifivation(
+                            request_id=query_uuid,
                             username=getattr(user, 'username', str(getattr(user, 'id', 'unknown'))),
                             request_time=request_time,
                             database_name=database_name,
