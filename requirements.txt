@@ -69,3 +69,10 @@ pycparser==2.22
 typing_extensions==4.14.1
 packaging==25.0
 setuptools==80.9.0
+
+# Async HTTP Client (Required for Slack Bolt AsyncApp)
+aiohttp==3.9.5
+
+# Slack Integration
+slack-bolt==1.23.0
+slack-sdk==3.35.0
