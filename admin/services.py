@@ -3,44 +3,69 @@ Admin Service Layer
 Riskli query'lerin admin onayı ve yönetimi işlemleri
 """
 from sqlalchemy.sql import select, text
-from app_database.models import QueryData, Workspace, User
+from app_database.models import QueryData, Workspace, User, Databases
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
 from .schemas import *
 
-class AdminService:
+class BaseAdminService:
     """
-    Admin query onay ve yönetim servisi
+    Tüm admin servisleri için temel sınıf (Super Class).
+    Veritabanı bağlantılarını yönetir.
+    Java'daki Abstract Class mantığına benzer.
+    Subclass'lar __init__ metodunu tekrar yazmak zorunda kalmaz.
+    """
+    def __init__(self, app_db: AppDatabase, db_provider: DatabaseProvider):
+        self.app_db = app_db
+        self.db_provider = db_provider
+
+class AdminService(BaseAdminService):
+    """
+    Ana Admin Servisi
     
-    Riskli olarak işaretlenen query'lerin admin tarafından onaylanması,
-    reddedilmesi veya çalıştırılması işlemlerini yönetir.
-    
-    Attributes:
-        app_db: Uygulama veritabanı instance
-        db_provider: Veritabanı bağlantı sağlayıcı
+    Diğer alt servisleri (Approval, vb.) birleştirir ve dışarıya tek bir arayüz sunar.
+    Facade Pattern benzeri bir yapı.
     """
     
     def __init__(self, app_db: AppDatabase, db_provider: DatabaseProvider):
-        """
-        AdminService'i başlatır
+        # Base class'ın __init__'ini çağırarak bağlantıları kur
+        super().__init__(app_db, db_provider)
         
-        Args:
-            app_db: AppDatabase instance
-            db_provider: DatabaseProvider instance
-        """
-        self.app_db = app_db
-        self.db_provider = db_provider
+        # Alt servisleri initialize et
+        self.approval_service = AdminApprovalService(app_db, db_provider)
+        self.db_addition_service = AdminDBAdditionService(app_db, db_provider)
+        
+        # İleride eklenecek diğer servisler buraya gelebilir
+        # self.report_service = AdminReportService(app_db, db_provider)
+
+    # --- Approval Service Delegations ---
+    # Router'da kullanılan metodları burada wrapper olarak tanımlıyoruz
+    # Böylece router kodunu değiştirmek zorunda kalmıyoruz.
+
+    async def get_workspaces_for_approval(self):
+        return await self.approval_service.get_workspaces_for_approval()
+
+    async def execute_for_preview(self, workspace_id: int, admin_user: User):
+        return await self.approval_service.execute_for_preview(workspace_id, admin_user)
+
+    async def reject_query_by_workspace_id(self, workspace_id: int):
+        return await self.approval_service.reject_query_by_workspace_id(workspace_id)
+            
+    async def approve(self, workspace_id: int, show_results: bool):
+        return await self.approval_service.approve(workspace_id, show_results)
+
+class AdminApprovalService(BaseAdminService):
+    """
+    Admin onay işlemlerini yürüten alt servis.
+    
+    BaseAdminService'den miras aldığı için __init__ metodunu 
+    tekrar yazmamıza gerek YOKTUR.
+    self.app_db ve self.db_provider otomatik olarak gelir.
+    """
 
     async def get_workspaces_for_approval(self):
         """
         Admin onayı bekleyen workspace'leri getirir
-        
-        Returns:
-            List[AdminApprovals]: Onay bekleyen query listesi
-            
-        Note:
-            Status = "waiting_for_approval" olan kayıtları getirir
-            Her kayıt için user, workspace ve query bilgileri birleştirilir
         """
         result_list = []
         try:
@@ -79,35 +104,6 @@ class AdminService:
     async def execute_for_preview(self, workspace_id: int, admin_user: User):
         """
         Admin için query'yi çalıştırır ve önizler
-        
-        Henüz ONAYLANMAZ, sadece sonuçları döndürür.
-        Query execution loglama yapılır (admin user ile).
-        
-        İş Akışı:
-            1. Workspace ve ilişkili query'yi bul
-            2. User bilgilerini al
-            3. Query'yi hedef veritabanında çalıştır (MAX_ROW_COUNT_LIMIT ile)
-            4. Sonuçları döndür
-        
-        Args:
-            workspace_id: Preview edilecek workspace ID'si
-            admin_user: Preview yapan admin kullanıcı
-        
-        Returns:
-            Dict: {
-                "success": bool,
-                "data": List[Dict] (query sonuçları),
-                "row_count": int,
-                "query": str,
-                "database": str,
-                "servername": str,
-                "error": str (başarısızsa)
-            }
-        
-        Note:
-            - Query çalıştırılır ama loglama yapılmaz (preview)
-            - MAX_ROW_COUNT_LIMIT kontrolü uygulanır
-            - Status değiştirilmez
         """
         log_id = None
         
@@ -192,20 +188,6 @@ class AdminService:
     async def reject_query_by_workspace_id(self, workspace_id: int):
         """
         Query'yi reddeder
-        
-        Args:
-            workspace_id: Reddedilecek workspace ID'si
-        
-        Returns:
-            Dict: {
-                "success": bool,
-                "error": str (başarısızsa)
-            }
-        
-        Note:
-            - Query status = "rejected" olarak güncellenir
-            - Workspace description'a red mesajı yazılır
-            - Query çalıştırılmaz
         """
         async with self.app_db.get_app_db() as db:
             try:
@@ -232,29 +214,9 @@ class AdminService:
             
     async def approve(self, workspace_id: int, show_results: bool):
         """
-        Query'yi onaylar (EXECUTE ETMEZ, sadece işaretler)
-        
-        Args:
-            workspace_id: Onaylanacak workspace ID'si
-            show_results: 
-                - TRUE → Workspace "executable" olarak işaretlenir
-                - FALSE → Workspace "approved but not executable"
-        
-        Returns:
-            Dict: {
-                "success": bool,
-                "status": str,
-                "message": str,
-                "error": str (başarısızsa)
-            }
-        
-        Note:
-            - Query ÇALIŞTIRILMAZ
-            - Sadece status + show_results güncellenir
-            - Admin daha önce execute_for_preview ile sonuçları görmüş olmalı
+        Query'yi onaylar
         """
         try:
-            # Validation - raw SQL ile query_id al
             async with self.app_db.get_app_db() as db:
                 result = await db.execute(
                     text("SELECT query_id FROM Workspaces WHERE id = :workspace_id"),
@@ -265,7 +227,6 @@ class AdminService:
                     return {"success": False, "error": "Workspace not found"}
                 query_id = row[0]
             
-            # Validation - query_data var mı kontrol et
             async with self.app_db.get_app_db() as db:
                 result = await db.execute(
                     text("SELECT id FROM QueryData WHERE id = :query_id"),
@@ -274,7 +235,6 @@ class AdminService:
                 if not result.first():
                     return {"success": False, "error": "Query data not found"}
             
-            # Update - tek context'te her şeyi güncelle
             if show_results:
                 new_status = "approved_with_results"
                 new_desc = "Admin onayladı - Kullanıcı çalıştırabilir (executable)"
@@ -289,16 +249,13 @@ class AdminService:
                     text("UPDATE QueryData SET status = :status WHERE id = :id"),
                     {"status": new_status, "id": query_id}
                 )
-                print(f"QueryData update affected rows: {result1.rowcount}")
                 
                 result2 = await db.execute(
                     text("UPDATE Workspaces SET show_results = :show, description = :desc WHERE id = :id"),
                     {"show": show_results_val, "desc": new_desc, "id": workspace_id}
                 )
-                print(f"Workspace update affected rows: {result2.rowcount}")
                 
                 await db.commit()
-                print(f"Commit successful - Status: {new_status}, Workspace: {workspace_id}")
             
             return {
                 "success": True,
@@ -312,3 +269,31 @@ class AdminService:
                 "success": False,
                 "error": f"Approval failed: {str(e)}"
             }
+
+class AdminDBAdditionService(BaseAdminService):
+    """
+    Yeni veritabanı ekleme servisimiz. 
+    BaseAdminService'den türediği için __init__ yazmadık.
+    """
+    async def add_database(self, servername: str, database_name: str, tech_name: str):
+        """
+        Yeni bir veritabanı ekler
+        """
+        async with self.app_db.get_app_db() as db:
+            try:
+                # Önce var mı diye kontrol et
+                existing = await db.execute(select(Databases).where(
+                    Databases.servername == servername, 
+                    Databases.database_name == database_name
+                ))
+                if existing.scalars().first():
+                    return {"success": False, "error": "Database already exists"}
+
+                database = Databases(servername=servername, database_name=database_name, tech_name=tech_name)
+                db.add(database)
+                await db.commit()
+                return {"success": True, "message": "Database added successfully"}
+            except Exception as e:
+                await db.rollback()
+                print(f"Error adding database: {e}")
+                return {"success": False, "error": str(e)}

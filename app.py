@@ -4,6 +4,7 @@ AppDatabase ve DatabaseProvider ile temiz dependency injection
 """
 import os
 from dotenv import load_dotenv
+import asyncio
 
 # .env dosyasını yükle (production için .env.production kullanabilirsiniz)
 env_file = os.getenv("ENV_FILE", ".env")
@@ -24,6 +25,8 @@ from app_database import AppDatabase
 from database_provider import DatabaseProvider
 from session import SessionCache
 from middlewares import AuthMiddleware
+
+from slack_integration import SlackListener
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -49,6 +52,17 @@ async def lifespan(app: FastAPI):
         print(f"   Uygulama başlatılamıyor!\n")
         await app.state.app_db.app_engine.dispose() if hasattr(app.state, 'app_db') else None
         raise SystemExit(1)
+    
+    try:
+        app_db = app.state.app_db
+        # Slack Listener'ı başlat (Socket Mode)
+        app.state.slack_listener = SlackListener(app_db=app_db)
+        slack_listener = app.state.slack_listener
+        asyncio.create_task(slack_listener.start())
+
+    except Exception as e:
+        print(f"⚠️ Slack entegrasyonu başlatılamadı: {e}")
+        print("   Slack özellikleri devre dışı kalacak, ancak uygulama çalışmaya devam edecek.")
 
     try:
         app.state.db_provider = DatabaseProvider()
@@ -125,8 +139,8 @@ app.include_router(admin_router, tags=["Admin"])
 from workspaces.router import router as workspace_router
 app.include_router(workspace_router, tags=["Workspace"])
 
-from static_files.router import router as static_router
-app.include_router(static_router, tags=["Static Files"])
+# from static_files.router import router as static_router
+# app.include_router(static_router, tags=["Static Files"])
 
 @app.get("/health")
 async def health_check():
