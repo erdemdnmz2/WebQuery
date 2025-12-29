@@ -1,6 +1,6 @@
 """
 Workspace Service Layer
-Kullanıcı workspace (kaydedilmiş query) yönetim işlemleri
+User workspace (saved query) management operations
 """
 from app_database.models import QueryData, Workspace
 from app_database.app_database import AppDatabase
@@ -16,18 +16,18 @@ from app_database.models import User
 
 class WorkspaceService:
     """
-    Workspace CRUD işlemleri servisi
+    Workspace CRUD operations service
     
-    Kullanıcıların query'lerini workspace'lerde saklaması, düzenlemesi,
-    silmesi ve listelemesi işlemlerini yönetir.
+    Manages users' operations of storing, editing, deleting,
+    and listing queries in workspaces.
     
     Attributes:
-        app_db: Uygulama veritabanı instance
+        app_db: Application database instance
     """
 
     def __init__(self, app_db: AppDatabase):
         """
-        WorkspaceService'i başlatır
+        Initializes WorkspaceService
         
         Args:
             app_db: AppDatabase instance
@@ -36,29 +36,15 @@ class WorkspaceService:
 
     async def create_workspace(self, db: AsyncSession, workspace_data: WorkspaceCreate, user_id: int):
         """
-        Yeni workspace oluşturur
-        
-        İş Akışı:
-            1. queryData kaydı oluştur (UUID ile)
-            2. Workspace kaydı oluştur (queryData'ya bağlı)
-            3. İki tabloyu da commit et
+        Creates a new workspace.
         
         Args:
             db: Async database session
-            workspace_data: Workspace oluşturma şeması
-            user_id: Workspace'i oluşturan kullanıcı ID'si
+            workspace_data: Workspace creation schema
+            user_id: ID of the user creating the workspace
         
         Returns:
-            Dict: {
-                "success": bool,
-                "workspace_id": int (başarılıysa),
-                "error": str (başarısızsa)
-            }
-        
-        Note:
-            - Her workspace bir queryData kaydına bağlıdır (1:1)
-            - Status: "saved_in_workspace"
-            - UUID otomatik oluşturulur
+            Dict: Result with workspace_id or error
         """
         try:
             new_query_data = QueryData(
@@ -73,7 +59,7 @@ class WorkspaceService:
             db.add(new_query_data)
             await db.flush()
 
-            """Workspace oluşturma işlemi"""
+            """Workspace creation operation"""
             workspace = Workspace(
                 name=workspace_data.name,
                 description=workspace_data.description,
@@ -91,22 +77,14 @@ class WorkspaceService:
         
     async def get_workspace_by_id(self, db: AsyncSession, user_id: int):
         """
-        Kullanıcının tüm workspace'lerini getirir
-        
-        İş Akışı:
-            1. User'a ait workspace'leri bul
-            2. İlişkili queryData kayıtlarını getir (join)
-            3. WorkspaceInfo DTO'larını oluştur
+        Retrieves all workspaces for the user.
         
         Args:
             db: Async database session
-            user_id: Workspace'leri getirilecek kullanıcı ID'si
+            user_id: ID of the user whose workspaces will be retrieved
         
         Returns:
-            List[WorkspaceInfo]: Workspace listesi (boş liste olabilir)
-        
-        Note:
-            queryData bulunamazsa o workspace atlanır
+            List[WorkspaceInfo]: List of workspaces (can be empty)
         """
         
         results = await db.execute(
@@ -144,18 +122,14 @@ class WorkspaceService:
     
     async def delete_workspace_by_id(self, workspace_id: int, db: AsyncSession):
         """
-        Workspace'i ve ilişkili queryData'yı siler
+        Deletes workspace and related queryData.
         
         Args:
-            workspace_id: Silinecek workspace ID'si
+            workspace_id: ID of the workspace to delete
             db: Async database session
         
         Returns:
-            bool: Başarılı ise True, değilse False
-        
-        Note:
-            - Workspace ve queryData cascade delete (her ikisi de silinir)
-            - Workspace bulunamazsa False döner
+            bool: True if successful, False otherwise
         """
         try:
             workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
@@ -182,21 +156,16 @@ class WorkspaceService:
     
     async def update_workspace(self, db: AsyncSession, workspace_id: int, query: str = None, status: str = None):
         """
-        Workspace'in query veya status'ünü günceller
+        Updates workspace query or status.
         
         Args:
             db: Async database session
-            workspace_id: Güncellenecek workspace ID'si
-            query: Yeni query (opsiyonel)
-            status: Yeni status (opsiyonel, ör: "waiting_for_approval")
+            workspace_id: ID of the workspace to update
+            query: New query (optional)
+            status: New status (optional)
         
         Returns:
-            bool: Başarılı ise True, değilse False
-        
-        Note:
-            - queryData tablosunu günceller (workspace değil)
-            - En az bir parametre verilmelidir
-            - Workspace veya queryData bulunamazsa False döner
+            bool: True if successful, False otherwise
         """
         try:
             workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
@@ -222,19 +191,15 @@ class WorkspaceService:
     
     async def get_workspace_detail_by_id(self, db: AsyncSession, workspace_id: int, user_id: int):
         """
-        Belirli bir workspace'in detaylarını getirir
+        Retrieves details of a specific workspace.
         
         Args:
             db: Async database session
-            workspace_id: Detayı getirilecek workspace ID'si
-            user_id: İstek yapan kullanıcı ID'si (yetki kontrolü için)
+            workspace_id: ID of the workspace to retrieve details for
+            user_id: ID of the requesting user (for authorization check)
         
         Returns:
-            Dict | None: Workspace detayları veya None (bulunamazsa/yetkisizse)
-        
-        Note:
-            - Workspace sahibi kontrolü yapar (user_id eşleşmeli)
-            - Workspace veya queryData bulunamazsa None döner
+            Dict | None: Workspace details or None
         """
         workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
         workspace = workspace_result.scalars().first()
@@ -259,16 +224,16 @@ class WorkspaceService:
 
     async def execute_workspace(self, workspace_id: int, current_user: User, session_cache: SessionCache, db_provider: DatabaseProvider):
         """
-        Execute a stored workspace query after enforcing workspace-level approval rules.
+        Executes a stored workspace query after enforcing approval rules.
 
         Args:
             workspace_id: ID of the workspace to execute
-            current_user: calling user (must have valid session in session_cache)
-            session_cache: SessionCache instance to validate session and retrieve password
-            db_provider: DatabaseProvider to open a session against target DB
+            current_user: Calling user
+            session_cache: SessionCache instance
+            db_provider: DatabaseProvider instance
 
         Returns:
-            Dict: same shape as QueryService.execute_query (response_type, data, message, error)
+            Dict: Execution result
         """
         # Session validation
         from authentication import config as auth_config

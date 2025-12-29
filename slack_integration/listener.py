@@ -23,7 +23,7 @@ class SlackListener:
 
     async def start(self):
         if not SLACK_APP_TOKEN:
-            print("⚠️ SLACK_APP_TOKEN eksik, Slack Socket Mode başlatılamadı.")
+            print("⚠️ SLACK_APP_TOKEN missing, Slack Socket Mode could not be started.")
             return
             
         self.handler = AsyncSocketModeHandler(self.app, SLACK_APP_TOKEN)
@@ -38,7 +38,7 @@ class SlackListener:
             channel=body["channel"]["id"],
             ts=body["message"]["ts"],
             blocks=[],
-            text=f"✅ Sorgu <@{user_id}> tarafından onaylandı (Sonuçlar Gösterilecek). (ID: {request_id})"
+            text=f"✅ Query approved by <@{user_id}> (Results will be shown). (ID: {request_id})"
         )
         
         async with self.app_db.get_app_db() as session:
@@ -65,7 +65,7 @@ class SlackListener:
             channel=body["channel"]["id"],
             ts=body["message"]["ts"],
             blocks=[],
-            text=f"❌ Sorgu <@{user_id}> tarafından reddedildi. (ID: {request_id})"
+            text=f"❌ Query rejected by <@{user_id}>. (ID: {request_id})"
         )
         
         async with self.app_db.get_app_db() as session:

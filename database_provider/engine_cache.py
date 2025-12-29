@@ -8,7 +8,7 @@ from datetime import datetime
 
 
 class EngineCacheEntry(BaseModel):
-    """Cached engine entry with metadata"""
+    """Cached engine entry with metadata."""
     engine: AsyncEngine
     last_accessed: datetime = Field(default_factory=datetime.now)
     owner_id: Optional[int] = None
@@ -40,14 +40,14 @@ class EngineCache:
         return hash
 
     def _is_engine_active(self, engine: AsyncEngine) -> bool:
-        """Engine üzerinde aktif transaction/connection var mı kontrol eder"""
+        """Checks if there are active transactions/connections on the engine."""
         try:
             return engine.sync_engine.pool.checkedout() > 0
         except Exception:
             return False
 
     async def _evict_lru(self):
-        """LRU Eviction: Yer açmak için en eski ve boşta olan engine'i siler"""
+        """LRU Eviction: Removes the oldest idle engine to free up space."""
         idle_engines = {
             k: v for k, v in self._cache.items() 
             if not self._is_engine_active(v.engine)

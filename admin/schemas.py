@@ -8,17 +8,17 @@ from typing import Dict, Any
 
 class AdminApprovals(BaseModel):
     """
-    Admin onayı bekleyen query bilgisi
+    Query information waiting for admin approval
     
     Attributes:
-        user_id: Query'yi gönderen kullanıcı ID'si
-        workspace_id: İlişkili workspace ID'si
-        username: Kullanıcı adı
-        query: Onay bekleyen SQL query
-        database: Hedef veritabanı
-        status: Query durumu ("waiting_for_approval", etc.)
-        risk_type: Risk tipi (opsiyonel, analyzer'dan gelen)
-        servername: Hedef SQL Server (opsiyonel)
+        user_id: ID of the user sending the query
+        workspace_id: Related workspace ID
+        username: Username
+        query: SQL query waiting for approval
+        database: Target database
+        status: Query status ("waiting_for_approval", etc.)
+        risk_type: Risk type (optional, from analyzer)
+        servername: Target SQL Server (optional)
     """
     user_id: int
     workspace_id: int
@@ -30,23 +30,23 @@ class AdminApprovals(BaseModel):
     servername: Optional[str] = None
 
 class AdminApprovalsList(BaseModel):
-    """Admin onay listesi response şeması"""
+    """Admin approval list response schema"""
     waiting_approvals: List[AdminApprovals]
 
 
 class AdminPreviewResponse(BaseModel):
     """
-    Admin tarafından preview (önizleme) sonucu
+    Preview result by admin
 
     Attributes:
-        response_type: "data" veya "error"
-        data: Satır listesi (her satır bir dict)
-        columns: Opsiyonel, sütun isimleri listesi
-        row_count: Dönen satır sayısı
-        message: Opsiyonel mesaj (ör. "truncated to MAX_ROW_COUNT")
-        error: Hata mesajı (varsa)
+        response_type: "data" or "error"
+        data: List of rows (each row is a dict)
+        columns: Optional, list of column names
+        row_count: Returned row count
+        message: Optional message (e.g. "truncated to MAX_ROW_COUNT")
+        error: Error message (if any)
     """
-    response_type: str  # "data" veya "error"
+    response_type: str  # "data" or "error"
     data: List[Dict[str, Any]]
     columns: Optional[List[str]] = None
     row_count: Optional[int] = None
@@ -56,9 +56,22 @@ class AdminPreviewResponse(BaseModel):
 
 class ApprovalRequest(BaseModel):
     """
-    Admin onay isteği: frontend approve butonundan gönderilecek body
+    Admin approval request schema.
 
     Attributes:
-        show_results: bool - true ise workspace executable yapılacak
+        show_results: bool - if true, workspace becomes executable
     """
     show_results: bool
+
+class DatabaseAddRequest(BaseModel):
+    """
+    Schema for adding a new database.
+    
+    Attributes:
+        servername: Server instance name
+        database_name: Database name
+        tech_name: Technology name (e.g., mssql)
+    """
+    servername: str
+    database_name: str
+    tech_name: str

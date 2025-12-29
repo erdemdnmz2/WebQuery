@@ -76,3 +76,4 @@ aiohttp==3.9.5
 # Slack Integration
 slack-bolt==1.23.0
 slack-sdk==3.35.0
+slack_bolt==1.21.2

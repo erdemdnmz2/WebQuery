@@ -1,12 +1,12 @@
 """
 Query Analyzer
-SQL query güvenlik ve performans analizi
+SQL query security and performance analysis
 """
 import re
 from enum import Enum
 
 class RiskLevel(Enum):
-    """Query risk seviyeleri"""
+    """Query risk levels"""
     SQL_INJECTION = "sql_injection_risk"
     DDL_PATTERN = "ddl_pattern"
     RISKY_PATTERN = "risky_pattern"
@@ -14,17 +14,17 @@ class RiskLevel(Enum):
 
 class QueryAnalyzer:
     """
-    SQL query'lerini güvenlik ve performans açısından analiz eder
+    Analyzes SQL queries for security and performance
     
-    Kontrol edilen riskler:
-        - SQL Injection saldırıları
-        - DDL komutları (CREATE, DROP, ALTER, TRUNCATE)
-        - Riskli DML komutları (WHERE clause olmayan DELETE/UPDATE)
-        - Performans sorunları (çoklu JOIN, CROSS JOIN, wildcard LIKE)
+    Checked risks:
+        - SQL Injection attacks
+        - DDL commands (CREATE, DROP, ALTER, TRUNCATE)
+        - Risky DML commands (DELETE/UPDATE without WHERE clause)
+        - Performance issues (multiple JOINs, CROSS JOIN, wildcard LIKE)
     """
     
     def __init__(self):
-        """Query pattern'lerini tanımlar ve regex'leri derler"""
+        """Defines query patterns and compiles regexes"""
         self.sql_injection_patterns = [
             re.compile(r"'.*\s+OR\s+.*='", re.IGNORECASE),
             re.compile(r"'.*;\s*DROP\s+TABLE\s+", re.IGNORECASE),
@@ -52,25 +52,25 @@ class QueryAnalyzer:
 
     def analyze(self, query: str):
         """
-        SQL query'sini analiz eder ve risk değerlendirmesi yapar
+        Analyzes SQL query and performs risk assessment
         
         Args:
-            query: Analiz edilecek SQL query
+            query: SQL query to analyze
         
         Returns:
             Dict: {
-                "risk_type": str | None (risk tipi, yoksa None),
-                "return": bool (query çalıştırılabilir mi?)
+                "risk_type": str | None (risk type, None if none),
+                "return": bool (can query be executed?)
             }
         
-        Risk Öncelik Sırası:
-            1. SQL Injection (en yüksek risk)
-            2. DDL Pattern (veritabanı yapısı değişikliği)
-            3. Risky Pattern (WHERE clause olmadan DELETE/UPDATE)
-            4. Performance Risk (yavaş çalışabilir)
+        Risk Priority Order:
+            1. SQL Injection (highest risk)
+            2. DDL Pattern (database structure change)
+            3. Risky Pattern (DELETE/UPDATE without WHERE clause)
+            4. Performance Risk (may run slow)
         
         Note:
-            İlk bulunan risk için False döner, risk yoksa True döner
+            Returns False for the first risk found, True if no risk
         """
         result = {}
         q = query.strip()

@@ -1,6 +1,6 @@
 """
 Authentication Router
-Login, register ve user bilgisi endpoint'leri
+Login, register and user information endpoints
 """
 from fastapi import APIRouter, HTTPException, Response, Request, Depends
 from datetime import datetime
@@ -33,13 +33,9 @@ async def login(
     fernet: Fernet = Depends(get_fernet)
 ):
     """
-    Kullanıcı girişi endpoint'i
+    User login endpoint.
     
-    1. Email ve password ile kullanıcı doğrulama
-    2. JWT token oluşturma ve cookie'ye kaydetme
-    3. Login log oluşturma
-    4. Session cache'e kullanıcı bilgilerini kaydetme
-    5. DatabaseProvider'a kullanıcıyı ekleme (engine cache)
+    Verifies credentials, creates JWT token, and initializes user session.
     """
     async with app_db.get_app_db() as db:
         from app_database.models import User
@@ -54,7 +50,7 @@ async def login(
         user_id = int(authenticated_user.id)
         username = str(authenticated_user.username)
         
-        # JWT token oluştur
+        # Create JWT token
         user_to_login = {"sub": str(user_id)}
         token = create_access_token(user_to_login)
         
@@ -85,11 +81,9 @@ async def register(
     db_provider: DatabaseProvider = Depends(get_db_provider)
 ):
     """
-    Yeni kullanıcı kaydı endpoint'i
+    New user registration endpoint.
     
-    1. Email kontrolü (daha önce kayıtlı mı?)
-    2. Yeni kullanıcı oluşturma
-    3. DatabaseProvider'a kullanıcıyı ekleme
+    Registers a new user if the email is not already taken.
     """
     async with app_db.get_app_db() as db:
         from app_database.models import User
@@ -120,7 +114,7 @@ async def register(
 @router.get("/me", response_model=schemas.User)
 async def read_users_me(current_user=Depends(get_current_user)):
     """
-    Mevcut kullanıcı bilgilerini döndürür
+    Returns current user information.
     """
     return schemas.User(
         username=current_user.username,
@@ -137,13 +131,11 @@ async def logout(
     session_cache: SessionCache = Depends(get_session_cache)
 ):
     """
-    Kullanıcı çıkışı endpoint'i
+    User logout endpoint.
     
-    1. Cookie'den token'ı sil
-    2. Logout log güncelle
-    3. DatabaseProvider'dan kullanıcı engine'lerini kapat
+    Clears auth cookie, updates logs, and closes user database connections.
     """
-    # Cookie'den token'ı sil
+    # Clear token from cookie
     response.delete_cookie(
         key="access_token",
         secure=False,

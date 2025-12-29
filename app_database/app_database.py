@@ -1,6 +1,6 @@
 """
 Application Database Manager
-Uygulama veritabanı işlemleri (kullanıcı, log, workspace CRUD)
+Application database operations (user, log, workspace CRUD)
 """
 from app_database.config import DATABASE_URL
 
@@ -17,26 +17,15 @@ from typing import Dict, Any
 
 class AppDatabase:
     """
-    Uygulama veritabanı yönetim sınıfı
+    Application database management class.
     
-    Kullanıcı yönetimi, query loglama, login loglama ve workspace işlemlerini yapar.
-    Connection pool ile optimize edilmiş async database bağlantısı sağlar.
-    
-    Attributes:
-        app_engine: SQLAlchemy async engine (connection pool ile)
-        AsyncSessionLocal: Async session factory
+    Handles user management, logging, and workspace operations.
+    Manages async database connections.
     """
     
     def __init__(self):
         """
-        AppDatabase'i başlatır ve connection pool'u konfigüre eder
-        
-        Pool Configuration:
-            - pool_size: 20 (normal operasyonlar için)
-            - max_overflow: 30 (yoğun zamanlarda ekstra bağlantı)
-            - pool_timeout: 20 saniye
-            - pool_recycle: 3600 saniye (1 saat)
-            - pool_pre_ping: True (bağlantı kontrolü)
+        Initializes AppDatabase and configures the connection pool.
         """
         self.app_engine = create_async_engine(
             DATABASE_URL,
@@ -52,14 +41,7 @@ class AppDatabase:
     @asynccontextmanager
     async def get_app_db(self):
         """
-        Async database session context manager
-        
-        Yields:
-            AsyncSession: SQLAlchemy async session
-        
-        Example:
-            async with app_db.get_app_db() as session:
-                result = await session.execute(query)
+        Async database session context manager.
         """
         async with self.AsyncSessionLocal() as session:
             try:
@@ -69,25 +51,21 @@ class AppDatabase:
 
     async def create_tables(self):
         """
-        Veritabanında tüm tabloları oluşturur (yoksa)
-        Development ortamında kullanılır
+        Creates all tables in the database if they don't exist.
         """
         async with self.app_engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
     async def create_user(db: AsyncSession, user: UserCreate):
         """
-        Yeni kullanıcı oluşturur (static method)
+        Creates a new user.
         
         Args:
             db: Async database session
-            user: Kullanıcı oluşturma şeması
+            user: User creation schema
         
         Returns:
-            Dict: {"success": bool, "message": str}
-        
-        Note:
-            Şifre bcrypt ile hash'lenerek saklanır
+            Dict: Result message
         """
         created_user = User(
             username = user.username,
@@ -105,18 +83,18 @@ class AppDatabase:
 
     async def create_log(self, user: User, query: str, machine_name: str, approved_execution: bool = False):
         """
-        Query execution log'u oluşturur (başlangıç kaydı)
+        Creates query execution log (initial record)
         
         Args:
-            user: Query'yi çalıştıran kullanıcı
-            query: Çalıştırılan SQL query
-            machine_name: SQL Server instance adı
+            user: User executing the query
+            query: Executed SQL query
+            machine_name: SQL Server instance name
         
         Returns:
-            ActionLogging: Oluşturulan log kaydı
+            ActionLogging: Created log record
         
         Note:
-            Log başlangıçta oluşturulur, sonuç update_log ile güncellenir
+            Log is created initially, result is updated with update_log
         """
         async with self.get_app_db() as db:
             async with db.begin():
@@ -135,17 +113,17 @@ class AppDatabase:
     
     async def update_log(self, log_id, successfull: bool, error: str = None, row_count: int = None):
         """
-        Query execution log'unu günceller (sonuç kaydı)
+        Updates query execution log (result record)
         
         Args:
-            log_id: Güncellenecek log ID'si
-            successfull: Query başarılı mı?
-            error: Hata mesajı (başarısızsa)
-            row_count: Dönen satır sayısı (başarılıysa)
+            log_id: Log ID to update
+            successfull: Is query successful?
+            error: Error message (if failed)
+            row_count: Returned row count (if successful)
         
         Note:
-            - Başarısızsa: ErrorMessage ve isSuccessfull güncellenir
-            - Başarılıysa: ExecutionDurationMS, isSuccessfull ve row_count güncellenir
+            - If failed: ErrorMessage and isSuccessfull are updated
+            - If successful: ExecutionDurationMS, isSuccessfull and row_count are updated
         """
         async with self.get_app_db() as db:
             async with db.begin():
@@ -164,14 +142,14 @@ class AppDatabase:
 
     async def create_login_log(self, user_id: int, client_ip):
         """
-        Kullanıcı login log'u oluşturur
+        Creates user login log
         
         Args:
-            user_id: Giriş yapan kullanıcının ID'si
-            client_ip: İstek IP adresi
+            user_id: ID of the user logging in
+            client_ip: Request IP address
         
         Note:
-            logout_date başlangıçta NULL, logout'ta update_login_log ile güncellenir
+            logout_date is initially NULL, updated with update_login_log on logout
         """
         async with self.get_app_db() as db:
             async with db.begin():
@@ -184,15 +162,15 @@ class AppDatabase:
 
     async def update_login_log(self, user_id: int):
         """
-        Kullanıcı logout log'unu günceller
+        Updates user logout log
         
         Args:
-            user_id: Çıkış yapan kullanıcının ID'si
+            user_id: ID of the user logging out
         
         Note:
-            - logout_date NULL olan (aktif) log kaydını bulur
-            - logout_date ve login_duration_ms günceller
-            - Aktif kayıt bulunamazsa warning yazdırır
+            - Finds the active log record where logout_date is NULL
+            - Updates logout_date and login_duration_ms
+            - Prints warning if active record is not found
         """
         async with self.get_app_db() as db:
             async with db.begin():
@@ -211,8 +189,8 @@ class AppDatabase:
         
     async def get_db_info(self) -> Dict[str, Dict[str, Any]]:
         """
-        Veritabanı bilgilerini server bazında döndürür.
-        Her server için database listesi ve technology bilgisini içerir.
+        Returns database information per server.
+        Includes database list and technology information for each server.
         
         Returns:
             Dict[str, Dict[str, Any]]: {

@@ -1,6 +1,6 @@
 """
 Admin Router
-Admin query onay/red işlemleri endpoint'leri
+Admin query approval/rejection endpoints
 """
 from fastapi import APIRouter, Depends, status, HTTPException, Response
 from .schemas import *
@@ -17,15 +17,7 @@ async def get_queries_to_approve(
     service: AdminService = Depends(get_admin_service)
 ):
     """
-    Onay bekleyen query'lerin listesini döndürür
-    
-    Admin yetkisi gerektirir.
-    
-    Returns:
-        AdminApprovalsList: Onay bekleyen query'ler ve detayları
-    
-    Raises:
-        HTTPException 403: Admin yetkisi yoksa
+    Returns the list of queries waiting for approval.
     """
     workspaces = await service.get_workspaces_for_approval()
     return {"waiting_approvals": workspaces}
@@ -38,22 +30,7 @@ async def approve_query(
     service: AdminService = Depends(get_admin_service)
 ):
     """
-    Query'yi onaylar ve çalıştırır
-    
-    Admin yetkisi gerektirir.
-    
-    Args:
-        workspace_id: Onaylanacak workspace ID'si
-    
-    Returns:
-        Dict: Query sonuçları ve metadata
-    
-    Raises:
-        HTTPException 403: Admin yetkisi yoksa
-        HTTPException 400: Onaylama/çalıştırma başarısızsa
-    
-    Note:
-        Query çalıştırılır ve sonuç döndürülür
+    Approves and executes the query.
     """
     # call service approve (sets show_results and query status)
     result = await service.approve(workspace_id, approval.show_results)
@@ -73,22 +50,7 @@ async def reject_query(
     service: AdminService = Depends(get_admin_service)
 ):
     """
-    Query'yi reddeder
-    
-    Admin yetkisi gerektirir.
-    
-    Args:
-        workspace_id: Reddedilecek workspace ID'si
-    
-    Returns:
-        Response: 200 OK (başarılı)
-    
-    Raises:
-        HTTPException 403: Admin yetkisi yoksa
-        HTTPException 400: Reddetme başarısızsa
-    
-    Note:
-        Query çalıştırılmaz, sadece status güncellenir
+    Rejects the query.
     """
     result = await service.reject_query_by_workspace_id(workspace_id)
     
@@ -117,3 +79,26 @@ async def execute_for_preview(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("error"))
     
     return result
+
+@router.post("/add_database")
+async def add_database(
+    request: DatabaseAddRequest,
+    current_admin: User = Depends(admin_required),
+    service: AdminService = Depends(get_admin_service)
+):
+    """
+    Adds a new database to the system.
+    """
+    result = await service.db_addition_service.add_database(
+        servername=request.servername,
+        database_name=request.database_name,
+        tech_name=request.tech_name
+    )
+    
+    if result.get("success"):
+        return {"message": result.get("message")}
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error", "Failed to add database")
+        )

@@ -16,46 +16,36 @@ from .engine_cache import EngineCache
 
 class DatabaseProvider:
     """
-    SQL Server veritabanı bağlantılarını yöneten sınıf.
-    Her kullanıcı için ayrı engine cache tutar ve lazy initialization kullanır.
+    Manages SQL Server database connections.
     """
     
     def __init__(self):
-        """DatabaseProvider'ı başlatır ve cache yapılarını oluşturur."""
+        """Initializes DatabaseProvider."""
         self.engine_cache: EngineCache = EngineCache()
         self.db_info: Dict[str, Dict[str, Any]] = {}
         # Format: {servername: {"databases": [list], "technology": str}}
 
     def set_db_info(self, info: Dict[str, Dict[str, Any]]):
         """
-        Veritabanı bilgilerini ayarlar
+        Sets database configuration information.
         
         Args:
-            info: {servername: {"databases": [list], "technology": str}}
+            info: Database configuration dictionary
         """
         self.db_info = info
     
     @asynccontextmanager
     async def get_session(self, user: models.User, servername: str, database_name: str):
         """
-        Kullanıcıya özel async database session'ı sağlar (context manager).
-        Engine yoksa lazy initialization ile oluşturur.
-        Database technology'sini db_info'dan otomatik olarak alır.
+        Provides user-specific async database session.
         
         Args:
-            user: Kullanıcı modeli (username ve password içerir)
-            servername: Server instance adı
-            database_name: Bağlanılacak veritabanı adı
+            user: User model
+            servername: Server instance name
+            database_name: Target database name
             
         Yields:
             AsyncSession: SQLAlchemy async session
-            
-        Raises:
-            ValueError: Server veya database db_info'da bulunamazsa
-            
-        Example:
-            async with db_provider.get_session(user, "localhost", "mydb") as session:
-                result = await session.execute(query)
         """
         
         # Server validation

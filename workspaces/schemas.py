@@ -7,16 +7,16 @@ from typing import Optional, List
 
 class WorkspaceInfo(BaseModel):
     """
-    Workspace bilgisi (response)
+    Workspace information (response)
     
     Attributes:
         id: Workspace ID
-        name: Workspace adı
-        description: Workspace açıklaması (opsiyonel)
-        query: Kaydedilmiş SQL query
-        servername: Hedef SQL Server
-        database_name: Hedef veritabanı
-        status: Query durumu (saved_in_workspace, waiting_for_approval, etc.)
+        name: Workspace name
+        description: Workspace description (optional)
+        query: Saved SQL query
+        servername: Target SQL Server
+        database_name: Target database
+        status: Query status (saved_in_workspace, waiting_for_approval, etc.)
     """
     id: int
     name: str
@@ -31,14 +31,14 @@ class WorkspaceInfo(BaseModel):
 
 class WorkspaceCreate(BaseModel):
     """
-    Workspace oluşturma şeması
+    Workspace creation schema
     
     Attributes:
-        name: Workspace adı
-        description: Workspace açıklaması (opsiyonel)
-        query: Kaydedilecek SQL query
-        servername: Hedef SQL Server
-        database_name: Hedef veritabanı
+        name: Workspace name
+        description: Workspace description (optional)
+        query: SQL query to save
+        servername: Target SQL Server
+        database_name: Target database
     """
     name: str
     description: Optional[str] = None
@@ -47,16 +47,16 @@ class WorkspaceCreate(BaseModel):
     database_name: str
 
 class WorkspaceList(BaseModel):
-    """Workspace listesi response şeması"""
+    """Workspace list response schema"""
     workspaces: List[WorkspaceInfo]
 
 class WorkspaceUpdate(BaseModel):
     """
-    Workspace güncelleme şeması
+    Workspace update schema
     
     Attributes:
-        query: Güncellenecek SQL query
-        status: Güncellenecek status (opsiyonel)
+        query: SQL query to update
+        status: Status to update (optional)
     """
     query: str
     status: Optional[str] = None
