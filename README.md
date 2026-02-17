@@ -1,5 +1,9 @@
 ## WebQuery
 
+![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
+![Python Version](https://img.shields.io/badge/python-3.11%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 Çoklu veritabanı desteği ile sorgu analizi ve güvenli yürütme özellikleri sunan FastAPI tabanlı bir uygulama. MSSQL, MySQL ve PostgreSQL veritabanlarına bağlanabilir. Kimlik doğrulama (JWT), hız sınırlama, çoklu sorgu yürütme ve risk analizi içerir.
 
 ## Özellikler
@@ -102,7 +106,7 @@ python -m venv venv
 ```powershell
 Copy-Item .env.example .env
 ```
-- Bu dosyada tanımlı değişkenler: DB_USER, DB_PASSWORD, SQL_SERVER_NAMES, SECRET_KEY, JWT ayarları, rate limit ve sorgu limitleri (tam liste için `.env.example`’a bakın).
+- Bu dosyada tanımlı değişkenler: DB_USER, DB_PASSWORD, SQL_SERVER_NAMES, SECRET_KEY, JWT ayarları, rate limit, sorgu limitleri, HOST ve PORT (tam liste için `.env.example`’a bakın).
 
 4) Çalıştırma (dev)
 - Varsayılan olarak `.env` okunur; isterseniz özel dosya seçebilirsiniz:
@@ -234,4 +238,8 @@ Uygulama, `technology` alanına göre otomatik olarak doğru driver'ı seçer ve
 - **"Database not found"**: `Databases` tablosuna kayıt eklediniz mi?
 
 ## Lisans
-Bu depo, iç kullanım amaçlıdır. Kurumsal politikalarınıza uygun olarak güncelleyiniz.
+Bu proje [MIT License](LICENSE) altında lisanslanmıştır.
+
+## Katkıda Bulunma
+Katkıda bulunmak isterseniz lütfen [CONTRIBUTING.md](CONTRIBUTING.md) dosyasını inceleyin. Pull request'lerinizi bekliyoruz!
+

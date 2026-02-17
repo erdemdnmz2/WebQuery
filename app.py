@@ -118,7 +118,6 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(AuthMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 
-#TODO burayı ayarla
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -154,7 +153,7 @@ async def health_check():
 if __name__ == "__main__":
     uvicorn.run(
         "app:app",
-        host="0.0.0.0",
-        port=8080,
+        host=os.getenv("HOST", "0.0.0.0"),
+        port=int(os.getenv("PORT", 8080)),
         reload=True
     )

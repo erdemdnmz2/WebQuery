@@ -6,7 +6,6 @@ from .config import TIME_INTERVAL_FOR_CACHE
 from pydantic import BaseModel, Field
 from datetime import datetime
 
-
 class EngineCacheEntry(BaseModel):
     """Cached engine entry with metadata"""
     engine: AsyncEngine

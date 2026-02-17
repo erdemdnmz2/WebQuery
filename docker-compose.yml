@@ -4,12 +4,14 @@ services:
   web:
     build: .
     ports:
-      - "8080:8080"
+      - "${PORT:-8080}:${PORT:-8080}"
     env_file:
       - .env
     environment:
       - DB_SERVER=db
       - APP_DATABASE_URL=mssql+aioodbc://${DB_USER:-sa}:${DB_PASSWORD}@db/dba_application_db?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes&connection timeout=30
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-8080}
     depends_on:
       - db
     volumes:

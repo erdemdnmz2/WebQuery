@@ -28,4 +28,4 @@ RUN chmod +x entrypoint.sh
 EXPOSE 8080
 
 ENTRYPOINT ["/bin/bash", "./entrypoint.sh"]
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["python", "app.py"]
