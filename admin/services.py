@@ -1,6 +1,6 @@
 """
 Admin Service Layer
-Riskli query'lerin admin onayı ve yönetimi işlemleri
+Admin approval and management operations for risky queries
 """
 from sqlalchemy.sql import select, text
 from app_database.models import QueryData, Workspace, User, Databases
@@ -10,10 +10,8 @@ from .schemas import *
 
 class BaseAdminService:
     """
-    Tüm admin servisleri için temel sınıf (Super Class).
-    Veritabanı bağlantılarını yönetir.
-    Java'daki Abstract Class mantığına benzer.
-    Subclass'lar __init__ metodunu tekrar yazmak zorunda kalmaz.
+    Base class for all admin services.
+    Manages database connections for subclasses.
     """
     def __init__(self, app_db: AppDatabase, db_provider: DatabaseProvider):
         self.app_db = app_db
@@ -21,26 +19,25 @@ class BaseAdminService:
 
 class AdminService(BaseAdminService):
     """
-    Ana Admin Servisi
+    Main Admin Service.
     
-    Diğer alt servisleri (Approval, vb.) birleştirir ve dışarıya tek bir arayüz sunar.
-    Facade Pattern benzeri bir yapı.
+    Combines sub-services (Approval, DB Addition) to provide a unified interface.
     """
     
     def __init__(self, app_db: AppDatabase, db_provider: DatabaseProvider):
-        # Base class'ın __init__'ini çağırarak bağlantıları kur
+        # Establish connections by calling the Base class's __init__
         super().__init__(app_db, db_provider)
         
-        # Alt servisleri initialize et
+        # Initialize sub-services
         self.approval_service = AdminApprovalService(app_db, db_provider)
         self.db_addition_service = AdminDBAdditionService(app_db, db_provider)
         
-        # İleride eklenecek diğer servisler buraya gelebilir
+        # Other services to be added in the future can go here
         # self.report_service = AdminReportService(app_db, db_provider)
 
     # --- Approval Service Delegations ---
-    # Router'da kullanılan metodları burada wrapper olarak tanımlıyoruz
-    # Böylece router kodunu değiştirmek zorunda kalmıyoruz.
+    # We define the methods used in the router as wrappers here
+    # So we don't have to change the router code.
 
     async def get_workspaces_for_approval(self):
         return await self.approval_service.get_workspaces_for_approval()
@@ -56,16 +53,12 @@ class AdminService(BaseAdminService):
 
 class AdminApprovalService(BaseAdminService):
     """
-    Admin onay işlemlerini yürüten alt servis.
-    
-    BaseAdminService'den miras aldığı için __init__ metodunu 
-    tekrar yazmamıza gerek YOKTUR.
-    self.app_db ve self.db_provider otomatik olarak gelir.
+    Sub-service handling admin approval operations.
     """
 
     async def get_workspaces_for_approval(self):
         """
-        Admin onayı bekleyen workspace'leri getirir
+        Retrieves workspaces waiting for admin approval.
         """
         result_list = []
         try:
@@ -103,7 +96,7 @@ class AdminApprovalService(BaseAdminService):
         
     async def execute_for_preview(self, workspace_id: int, admin_user: User):
         """
-        Admin için query'yi çalıştırır ve önizler
+        Executes and previews the query for the admin.
         """
         log_id = None
         
@@ -187,7 +180,7 @@ class AdminApprovalService(BaseAdminService):
 
     async def reject_query_by_workspace_id(self, workspace_id: int):
         """
-        Query'yi reddeder
+        Rejects the query.
         """
         async with self.app_db.get_app_db() as db:
             try:
@@ -202,7 +195,7 @@ class AdminApprovalService(BaseAdminService):
                     return {"success": False, "error": "Query data not found"}
                 
                 query_data.status = "rejected"
-                workspace.description = "Admin tarafından reddedildi"
+                workspace.description = "Rejected by admin"
                 
                 await db.commit()
                 return {"success": True}
@@ -214,7 +207,7 @@ class AdminApprovalService(BaseAdminService):
             
     async def approve(self, workspace_id: int, show_results: bool):
         """
-        Query'yi onaylar
+        Approves the query.
         """
         try:
             async with self.app_db.get_app_db() as db:
@@ -237,11 +230,11 @@ class AdminApprovalService(BaseAdminService):
             
             if show_results:
                 new_status = "approved_with_results"
-                new_desc = "Admin onayladı - Kullanıcı çalıştırabilir (executable)"
+                new_desc = "Approved by admin - User can execute"
                 show_results_val = 1
             else:
                 new_status = "approved"
-                new_desc = "Admin onayladı - Kullanıcı çalıştıramaz (not executable)"
+                new_desc = "Approved by admin - User cannot execute"
                 show_results_val = 0
             
             async with self.app_db.get_app_db() as db:
@@ -272,16 +265,15 @@ class AdminApprovalService(BaseAdminService):
 
 class AdminDBAdditionService(BaseAdminService):
     """
-    Yeni veritabanı ekleme servisimiz. 
-    BaseAdminService'den türediği için __init__ yazmadık.
+    Service for adding new databases.
     """
     async def add_database(self, servername: str, database_name: str, tech_name: str):
         """
-        Yeni bir veritabanı ekler
+        Adds a new database.
         """
         async with self.app_db.get_app_db() as db:
             try:
-                # Önce var mı diye kontrol et
+                # Check if it already exists
                 existing = await db.execute(select(Databases).where(
                     Databases.servername == servername, 
                     Databases.database_name == database_name

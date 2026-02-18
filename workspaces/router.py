@@ -1,6 +1,6 @@
 """
 Workspace Router
-Kullanıcı workspace (kaydedilmiş query) yönetimi endpoint'leri
+User workspace (saved query) management endpoints
 """
 from fastapi import APIRouter, Depends, status, HTTPException, Response, Request
 from fastapi.responses import FileResponse
@@ -26,16 +26,16 @@ async def create_workspace(
     app_db: AppDatabase = Depends(get_app_db)
 ):
     """
-    Yeni workspace oluşturur
+    Creates a new workspace
     
     Args:
-        request: Workspace oluşturma verisi (name, query, servername, database)
+        request: Workspace creation data (name, query, servername, database)
     
     Returns:
         Dict: {"success": true, "workspace_id": int}
     
     Raises:
-        HTTPException 400: Workspace oluşturulamazsa
+        HTTPException 400: If workspace cannot be created
     """
     async with app_db.get_app_db() as db:
         result = await service.create_workspace(db=db, workspace_data=request, user_id=current_user.id)
@@ -51,10 +51,10 @@ async def get_workspaces(
     app_db: AppDatabase = Depends(get_app_db)
 ):
     """
-    Kullanıcının tüm workspace'lerini listeler
+    Lists all workspaces of the user
     
     Returns:
-        WorkspaceList: Kullanıcıya ait workspace listesi
+        WorkspaceList: List of workspaces belonging to the user
     """
     async with app_db.get_app_db() as db:
         workspaces = await service.get_workspace_by_id(db, current_user.id)
@@ -68,19 +68,19 @@ async def delete_workspace(
     app_db: AppDatabase = Depends(get_app_db)
 ):
     """
-    Workspace'i siler
+    Deletes a workspace
     
     Args:
-        workspace_id: Silinecek workspace ID'si
+        workspace_id: ID of the workspace to delete
     
     Returns:
         Response: 200 OK
     
     Raises:
-        HTTPException 400: Workspace silinemezse
+        HTTPException 400: If workspace cannot be deleted
     
     Note:
-        İlişkili queryData kaydı da silinir
+        Related queryData record is also deleted
     """
     async with app_db.get_app_db() as db:
         success = await service.delete_workspace_by_id(workspace_id, db=db)
@@ -98,17 +98,17 @@ async def update_workspace(
     app_db: AppDatabase = Depends(get_app_db)
 ):
     """
-    Workspace'i günceller (query ve/veya status)
+    Updates workspace (query and/or status)
     
     Args:
-        workspace_id: Güncellenecek workspace ID'si
-        request: Güncelleme verisi (query, status)
+        workspace_id: ID of the workspace to update
+        request: Update data (query, status)
     
     Returns:
         Response: 200 OK
     
     Raises:
-        HTTPException 400: Workspace güncellenemezse
+        HTTPException 400: If workspace cannot be updated
     """
     async with app_db.get_app_db() as db:
         success = await service.update_workspace(db, workspace_id, query=request.query, status=request.status)
@@ -125,19 +125,19 @@ async def get_workspace_by_id(
     app_db: AppDatabase = Depends(get_app_db)
 ):
     """
-    Workspace detaylarını ID ile getirir
+    Retrieves workspace details by ID
     
     Args:
-        workspace_id: Detayı getirilecek workspace ID'si
+        workspace_id: ID of the workspace to retrieve details for
     
     Returns:
-        Dict: Workspace detayları (name, query, servername, database, status)
+        Dict: Workspace details (name, query, servername, database, status)
     
     Raises:
-        HTTPException 404: Workspace bulunamazsa veya kullanıcıya ait değilse
+        HTTPException 404: If workspace is not found or does not belong to the user
     
     Note:
-        Sadece workspace sahibi erişebilir
+        Only workspace owner can access
     """
     async with app_db.get_app_db() as db:
         result = await service.get_workspace_detail_by_id(db, workspace_id, _ws.user_id)

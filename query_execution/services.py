@@ -1,6 +1,6 @@
 """
 Query Execution Service Layer
-Query çalıştırma, analiz etme ve loglama işlemleri
+Query execution, analysis and logging operations
 """
 from sqlalchemy.sql import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,19 +20,19 @@ from notification import NotificationService
 
 class QueryService:
     """
-    Query execution ve loglama servisi
+    Query execution and logging service
     
-    SQL query'lerini çalıştırır, analiz eder ve sonuçları loglar.
-    Admin olmayan kullanıcılar için query güvenlik kontrolü yapar.
+    Executes SQL queries, analyzes them and logs the results.
+    Performs query security check for non-admin users.
     """
     
     def __init__(self, database_provider: DatabaseProvider, app_db: AppDatabase, notification_service: NotificationService):
         """
-        QueryService'i başlatır
+        Initializes QueryService
         
         Args:
-            database_provider: Veritabanı bağlantı sağlayıcı
-            app_db: Uygulama veritabanı (loglama için)
+            database_provider: Database connection provider
+            app_db: Application database (for logging)
         """
         self.database_provider = database_provider
         self.app_db = app_db
@@ -41,33 +41,16 @@ class QueryService:
 
     async def execute_query(self, query: str, user: User, server_name: str, database_name: str) -> Dict[str, Any]:
         """
-        SQL query'sini çalıştırır, analiz eder ve loglar
-        
-        İş Akışı:
-            1. Log kaydı oluştur
-            2. Query güvenlik analizi yap (admin değilse)
-            3. Query'yi çalıştır
-            4. Sonuçları limitleyerek döndür
-            5. Log'u güncelle (başarılı/hatalı)
+        Executes, analyzes, and logs the SQL query.
         
         Args:
-            query: Çalıştırılacak SQL query
-            user: Query'yi çalıştıran kullanıcı
-            server_name: SQL Server instance adı
-            database_name: Hedef veritabanı adı
+            query: SQL query to execute
+            user: User executing the query
+            server_name: SQL Server instance name
+            database_name: Target database name
         
         Returns:
-            Dict[str, Any]: {
-                "response_type": "data" | "error",
-                "data": List[Dict] (query sonuçları),
-                "message": str (bilgi mesajı),
-                "error": str (hata durumunda)
-            }
-        
-        Note:
-            - Admin olmayan kullanıcılar için riskli query'ler engellenir
-            - Sonuç satır sayısı MAX_ROW_COUNT_LIMIT ile sınırlandırılır
-            - MAX_ROW_COUNT_WARNING aşılırsa warning loglanır
+            Dict[str, Any]: Execution result
         """
         log_id = None
         try:
@@ -91,7 +74,7 @@ class QueryService:
                         db_session.add(query_data)
                         await db_session.flush()
                         
-                        # flush sonrası ID context içinde al
+                        # get ID in context after flush
                         query_data_id = query_data.id
                         
                         workspace_name = f"Pending: {query[:50]}..." if len(query) > 50 else f"Pending: {query}"
@@ -105,7 +88,7 @@ class QueryService:
                         db_session.add(workspace)
                         await db_session.flush()
                         
-                        # flush sonrası workspace ID'yi al
+                        # get workspace ID after flush
                         workspace_id = workspace.id
                         
                         await db_session.commit()
