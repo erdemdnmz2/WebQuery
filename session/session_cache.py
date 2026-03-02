@@ -5,105 +5,66 @@ Kullanıcı session'larını ve şifrelerini bellekte güvenli bir şekilde sakl
 from typing import Dict
 from cryptography.fernet import Fernet
 from datetime import datetime
+import os
+import redis
+
+import json
 
 class SessionCache:
-    """
-    Kullanıcı session yönetimi ve şifre cache'i
-    
-    Kullanıcı şifrelerini Fernet (symmetric encryption) ile şifreli olarak 
-    bellekte saklar ve session timeout kontrolü yapar.
-    
-    Attributes:
-        session_cache: {user_id: {"user_password": encrypted_bytes, "addition_time": datetime}}
-        fernet_instance: Şifreleme/deşifreleme için Fernet instance
-    """
-    
     def __init__(self, fernet: Fernet | None = None):
-        """
-        SessionCache'i başlatır
-        
-        Args:
-            fernet: Şifreleme için Fernet instance (opsiyonel, sonradan set edilebilir)
-        """
-        self.session_cache: Dict[int, Dict] = {}
+        redis_host = os.getenv("REDIS_HOST", "localhost")
+        redis_port = int(os.getenv("REDIS_PORT", 6379))
+        redis_db = int(os.getenv("REDIS_DB", 0))
+
+        self.client = redis.Redis(
+            host=redis_host,
+            port=redis_port,
+            db=redis_db,
+            decode_responses=True
+        )
         self.fernet_instance = fernet
-    
+
     def add_to_cache(self, password: str, user_id: int):
-        """
-        Kullanıcı şifresini şifreleyerek cache'e ekler
-        
-        Args:
-            password: Kullanıcının düz metin şifresi
-            user_id: Kullanıcı ID'si
-        
-        Raises:
-            RuntimeError: Fernet instance başlatılmamışsa
-        
-        Note:
-            Şifre Fernet ile symmetric encryption kullanılarak şifrelenir
-        """
         if not self.fernet_instance:
             raise RuntimeError("Fernet instance is not initialized")
+        
+        # Redis sadece string tutabildiği için dictionary'i JSON formatına çeviriyoruz.
+        # Fernet şifresi bytes döner, json için string'e çevirmeliyiz (.decode('utf-8'))
+        # Datetime objesini de iso string formatına çeviriyoruz (.isoformat())
         sub = {
-            "user_password": self.fernet_instance.encrypt(password.encode()),
-            "addition_time": datetime.now()
+            "user_password": self.fernet_instance.encrypt(password.encode()).decode('utf-8'),
+            "addition_time": datetime.now().isoformat()
         }
-        self.session_cache[user_id] = sub
+        self.client.set(user_id, json.dumps(sub))
 
     def get_password(self, user_id: int) -> str:
-        """
-        Kullanıcının şifresini deşifreleyerek döndürür
-        
-        Args:
-            user_id: Kullanıcı ID'si
-        
-        Returns:
-            str: Deşifrelenmiş düz metin şifre
-        
-        Raises:
-            RuntimeError: Fernet instance başlatılmamışsa
-            KeyError: Kullanıcı cache'te bulunamazsa
-        """
         if not self.fernet_instance:
             raise RuntimeError("Fernet instance is not initialized")
-        encoded_pw = self.session_cache[user_id]["user_password"]
+        
+        info_str = self.client.get(user_id)
+        if not info_str:
+            raise KeyError(f"Kullanıcı ({user_id}) cache üzerinde bulunamadı.")
+            
+        info = json.loads(info_str)
+        # JSON'dan gelen string formatındaki şifreli hali tekrar bytes'a çeviriyoruz (.encode('utf-8'))
+        encoded_pw = info["user_password"].encode('utf-8')
         password = self.fernet_instance.decrypt(encoded_pw).decode()
         return password
-    
+
     def remove(self, user_id: int):
-        """
-        Kullanıcıyı session cache'den çıkarır
-        
-        Args:
-            user_id: Çıkarılacak kullanıcının ID'si
-        
-        Note:
-            Kullanıcı yoksa hata vermez (safe removal)
-        """
-        self.session_cache.pop(user_id, None)
+        self.client.delete(user_id)
 
     def is_valid(self, user_id: int, timeout_minutes: int) -> bool:
-        """
-        Kullanıcının session'ının geçerli olup olmadığını kontrol eder
-        
-        Args:
-            user_id: Kontrol edilecek kullanıcının ID'si
-            timeout_minutes: Session timeout süresi (dakika)
-        
-        Returns:
-            bool: Session geçerliyse True, değilse False
-        
-        Note:
-            - Kullanıcı cache'te yoksa False döner
-            - Timeout aşılmışsa kullanıcı cache'ten otomatik silinir ve False döner
-            - Session geçerliyse True döner
-        """
-        info = self.session_cache.get(user_id)
-        if not info:
+        info_str = self.client.get(user_id)
+        if not info_str:
             return False
+            
+        info = json.loads(info_str)
         from datetime import datetime, timedelta
         timeout = timedelta(minutes=timeout_minutes)
-        if datetime.now() - info["addition_time"] > timeout:
+        addition_time = datetime.fromisoformat(info["addition_time"])
+        
+        if datetime.now() - addition_time > timeout:
             self.remove(user_id)
             return False
         return True
