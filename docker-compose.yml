@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   web:
-    build: .
+    build: ./web_api
     ports:
       - "${PORT:-8080}:${PORT:-8080}"
     env_file:
@@ -17,7 +17,15 @@ services:
       - db
       - redis
     volumes:
-      - .:/app
+      - ./web_api:/app
+    restart: always
+
+  ai_agent:
+    build: ./ai_service
+    env_file:
+      - .env
+    depends_on:
+      - redis
     restart: always
 
   redis:
