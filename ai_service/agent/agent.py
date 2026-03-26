@@ -14,7 +14,11 @@ class Agent:
         
         self.llm_with_tools = self.llm.bind_tools(self.tools)
 
+    def init_system_prompt():
+        pass
+
     def run(self, query: str):
+        messages = self.messages + [{"role": "user", "content": query}]
         return self.llm_with_tools.invoke(messages)
 
     def switch_model(self, model_name: str, model_provider: str):
