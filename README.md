@@ -137,6 +137,95 @@ venv\Scripts\python.exe -m uvicorn app:app --host 0.0.0.0 --port 8000
 docker run --env-file C:\path\to\.env.production -p 8000:8000 yourimage:tag
 ```
 
+## Docker ile Çalıştırma
+
+Proje, tüm bağımlılıkları (MSSQL, Redis, Nginx) içeren bir `docker-compose.yml` ile birlikte gelir. Tek komutla tüm sistemi ayağa kaldırabilirsiniz.
+
+### Servis Mimarisi
+```
+                    ┌─────────────┐
+         :80        │    Nginx    │
+  Kullanıcı ──────► │  (Reverse   │
+                    │   Proxy)    │
+                    └──────┬──────┘
+                   /       │        \
+            /api           │          \
+    ┌───────▼──────┐  ┌────▼─────┐  ┌──▼───────────┐
+    │  Backend     │  │ Frontend │  │              │
+    │  (FastAPI)   │  │ (React + │  │              │
+    │  :8080       │  │  Nginx)  │  │              │
+    └──┬───────┬───┘  └──────────┘  │              │
+       │       │                    │              │
+  ┌────▼──┐ ┌──▼────┐              │              │
+  │ MSSQL │ │ Redis │              │              │
+  │ :1433 │ │ :6379 │              │              │
+  └───────┘ └───────┘              └──────────────┘
+```
+
+### Ön Gereksinimler
+- [Docker](https://docs.docker.com/get-docker/) (20.10+)
+- [Docker Compose](https://docs.docker.com/compose/install/) (v2+)
+
+### Hızlı Başlangıç (Docker)
+1) `.env` dosyasını oluşturun:
+```bash
+cp .env.example .env
+# .env dosyasını düzenleyip en azından DB_PASSWORD ayarlayın
+```
+
+2) Tüm servisleri başlatın:
+```bash
+docker-compose up -d --build
+```
+
+3) Logları izleyin:
+```bash
+docker-compose logs -f web    # Backend logları
+docker-compose logs -f        # Tüm servisler
+```
+
+4) Erişim:
+   - **Uygulama**: http://localhost (Nginx üzerinden)
+   - **API**: http://localhost/api
+   - **Health Check**: http://localhost/api/health
+
+### Servisler ve Portlar
+
+| Servis | Image | Port | Açıklama |
+|--------|-------|------|----------|
+| `nginx` | nginx:latest | **80** → 80 | Reverse proxy (frontend + API) |
+| `web` | Dockerfile (root) | **8080** → 8080 | FastAPI backend |
+| `frontend` | Dockerfile (frontend/) | - | React SPA (Nginx ile serve) |
+| `db` | mssql/server:2022 | **1433** → 1433 | SQL Server veritabanı |
+| `redis` | redis:alpine | **6379** → 6379 | Session/cache store |
+
+### Docker Ortam Değişkenleri
+`docker-compose.yml` aşağıdaki değişkenleri `.env` dosyasından okur:
+
+| Değişken | Docker Default | Açıklama |
+|----------|---------------|----------|
+| `DB_PASSWORD` | *(zorunlu)* | SQL Server SA şifresi |
+| `DB_USER` | `sa` | SQL Server kullanıcısı |
+| `PORT` | `8080` | Backend port |
+| `HOST` | `0.0.0.0` | Backend bind adresi |
+
+> **Önemli:** `DB_PASSWORD` güçlü bir şifre olmalıdır (SQL Server 2022 gereksinimleri: en az 8 karakter, büyük-küçük harf, rakam veya özel karakter).
+
+### Yararlı Docker Komutları
+```bash
+# Servisleri durdur
+docker-compose down
+
+# Servisleri durdur ve veritabanı verisini sil
+docker-compose down -v
+
+# Sadece backend'i yeniden derle
+docker-compose up -d --build web
+
+# Container'a bağlan (debug)
+docker-compose exec web bash
+```
+
 ## Ortam Değişkenleri (dotenv)
 - Uygulama başında `app.py` içinde şu mantık vardır:
   - `ENV_FILE` değişkeni set edilmişse o dosya yüklenir (örn: `.env.production`)
