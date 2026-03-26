@@ -98,7 +98,7 @@ cd WebQuery
 2) Sanal ortam ve bağımlılıklar
 ```powershell
 python -m venv venv
-.\n+venv\Scripts\pip.exe install -r requirements.txt
+.\venv\Scripts\pip.exe install -r requirements.txt
 ```
 
 3) Ortam dosyası
@@ -112,8 +112,7 @@ Copy-Item .env.example .env
 - Varsayılan olarak `.env` okunur; isterseniz özel dosya seçebilirsiniz:
 ```powershell
 $env:ENV_FILE = ".env"          # veya ".env.staging" / ".env.production"
-.
-venv\Scripts\python.exe -m uvicorn app:app --reload --host 0.0.0.0 --port 8000
+.\venv\Scripts\python.exe -m uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ## Production Çalıştırma (Önerilen Yol)
@@ -123,13 +122,11 @@ venv\Scripts\python.exe -m uvicorn app:app --reload --host 0.0.0.0 --port 8000
 
 ```powershell
 python -m venv venv
-.
-venv\Scripts\pip.exe install -r requirements.txt
+.\venv\Scripts\pip.exe install -r requirements.txt
 
 # Uygulamaya hangi .env dosyasını kullanacağını söyleyin
 $env:ENV_FILE = ".env.production"
-.
-venv\Scripts\python.exe -m uvicorn app:app --host 0.0.0.0 --port 8000
+.\venv\Scripts\python.exe -m uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
 > Not: Docker kullanacaksanız gizli bilgileri imajın içine koymayın. Konfigürasyonu runtime’da verin:
@@ -148,18 +145,18 @@ Proje, tüm bağımlılıkları (MSSQL, Redis, Nginx) içeren bir `docker-compos
   Kullanıcı ──────► │  (Reverse   │
                     │   Proxy)    │
                     └──────┬──────┘
-                   /       │        \
-            /api           │          \
-    ┌───────▼──────┐  ┌────▼─────┐  ┌──▼───────────┐
-    │  Backend     │  │ Frontend │  │              │
-    │  (FastAPI)   │  │ (React + │  │              │
-    │  :8080       │  │  Nginx)  │  │              │
-    └──┬───────┬───┘  └──────────┘  │              │
-       │       │                    │              │
-  ┌────▼──┐ ┌──▼────┐              │              │
-  │ MSSQL │ │ Redis │              │              │
-  │ :1433 │ │ :6379 │              │              │
-  └───────┘ └───────┘              └──────────────┘
+                   /               \
+            /api /                   \ /
+    ┌───────▼──────┐           ┌─────▼───────┐
+    │  Backend     │           │  Frontend   │
+    │  (FastAPI)   │           │  (React +   │
+    │  :8080       │           │   Nginx)    │
+    └──┬───────┬───┘           └─────────────┘
+       │       │
+  ┌────▼──┐ ┌──▼────┐
+  │ MSSQL │ │ Redis │
+  │ :1433 │ │ :6379 │
+  └───────┘ └───────┘
 ```
 
 ### Ön Gereksinimler
