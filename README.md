@@ -116,26 +116,29 @@ $env:ENV_FILE = ".env"          # veya ".env.staging" / ".env.production"
 venv\Scripts\python.exe -m uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
 
-## Production Çalıştırma (Önerilen Yol)
-1) Kodu sunucuya kopyalayın (ENV dosyaları hariç)
-2) Sunucuda `.env.production` oluşturun ve güvenli değerleri yazın
-3) Sunucuda bağımlılıkları kurun ve uygulamayı başlatın
+## Sürüm 1.0: Açık Kaynak / Kendi Sunucunda Kur (Self-Hosted)
 
-```powershell
-python -m venv venv
-.
-venv\Scripts\pip.exe install -r requirements.txt
+Kurumsal veri güvenliği için WebQuery'i doğrudan kendi sunucunuza (intranet veya public) kurabilirsiniz. Gerekli olan tek şey **Docker** ve **Docker Compose** yüklü bir sunucudur.
 
-# Uygulamaya hangi .env dosyasını kullanacağını söyleyin
-$env:ENV_FILE = ".env.production"
-.
-venv\Scripts\python.exe -m uvicorn app:app --host 0.0.0.0 --port 8000
+1. **Repoyu Klonlayın:**
+```bash
+git clone https://github.com/erdemdnmz2/WebQuery
+cd WebQuery
 ```
 
-> Not: Docker kullanacaksanız gizli bilgileri imajın içine koymayın. Konfigürasyonu runtime’da verin:
-```powershell
-docker run --env-file C:\path\to\.env.production -p 8000:8000 yourimage:tag
+2. **Güvenlik ve Konfigürasyon Ayarlarını Yapın:**
+`.env.example` dosyasını `.env` olarak kopyalayın ve içerisindeki değerleri kendi ortamınıza göre düzenleyin.
+Özellikle `DB_PASSWORD`, `SECRET_KEY` ve `ALLOWED_ORIGINS` (uygulamanıza erişilecek domain adresi) alanlarını mutlaka değiştirin.
+```bash
+cp .env.example .env
 ```
+
+3. **Uygulamayı Başlatın:**
+Tek bir komutla web sunucusu, frontend, veritabanı(mssql) ve redis dahil tüm altyapıyı ayağa kaldırın.
+```bash
+docker-compose up -d --build
+```
+*Tebrikler! Uygulamanız Nginx üzerinden 80 portunda yayında.*
 
 ## Ortam Değişkenleri (dotenv)
 - Uygulama başında `app.py` içinde şu mantık vardır:

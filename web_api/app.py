@@ -117,11 +117,18 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(AuthMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 
-#TODO burayı ayarla
+# Configure CORS securely from environment variable
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
+if allowed_origins_env:
+    allowed_origins = [origin.strip() for origin in allowed_origins_env.split(",")]
+else:
+    # Default to localhost for development if nothing is provided
+    allowed_origins = ["http://localhost", "http://localhost:80", "http://localhost:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=allowed_origins,
+    allow_credentials=True, # Often needed for auth cookies if used later
     allow_methods=["*"],
     allow_headers=["*"],
 )
