@@ -27,13 +27,21 @@ class AppDatabase:
         """
         Initializes AppDatabase and configures the connection pool.
         """
+        kwargs = {
+            "pool_pre_ping": False
+        }
+        
+        if not DATABASE_URL.startswith("sqlite"):
+            kwargs.update({
+                "pool_size": 20,
+                "max_overflow": 30,
+                "pool_timeout": 20,
+                "pool_recycle": 3600
+            })
+
         self.app_engine = create_async_engine(
             DATABASE_URL,
-            pool_size=20,          
-            max_overflow=30,       
-            pool_timeout=20,
-            pool_recycle=3600,
-            pool_pre_ping=False
+            **kwargs
         )
 
         self.AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=True, bind=self.app_engine)

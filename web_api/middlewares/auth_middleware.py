@@ -53,7 +53,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/login", 
             "/register", 
             "/api/login", 
-            "/api/register"
+            "/api/register",
+            "/health"
         ]
         
         if any(request.url.path.startswith(path) for path in skip_auth_paths):
