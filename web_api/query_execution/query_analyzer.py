@@ -1,8 +1,9 @@
 """
 Query Analyzer
-SQL query security and performance analysis
+SQL query security and performance analysis via AST parsing
 """
-import re
+import sqlglot
+from sqlglot import exp
 from enum import Enum
 
 class RiskLevel(Enum):
@@ -14,45 +15,21 @@ class RiskLevel(Enum):
 
 class QueryAnalyzer:
     """
-    Analyzes SQL queries for security and performance
+    Analyzes SQL queries for security and performance using Abstract Syntax Trees (AST)
     
     Checked risks:
-        - SQL Injection attacks
+        - SQL Injection / Privilege Escalation (EXECUTE AS, EXEC)
         - DDL commands (CREATE, DROP, ALTER, TRUNCATE)
         - Risky DML commands (DELETE/UPDATE without WHERE clause)
         - Performance issues (multiple JOINs, CROSS JOIN, wildcard LIKE)
     """
     
     def __init__(self):
-        """Defines query patterns and compiles regexes"""
-        self.sql_injection_patterns = [
-            re.compile(r"'.*\s+OR\s+.*='", re.IGNORECASE),
-            re.compile(r"'.*;\s*DROP\s+TABLE\s+", re.IGNORECASE),
-            re.compile(r"'.*UNION\s+SELECT\s+", re.IGNORECASE),
-            re.compile(r"--", re.IGNORECASE),
-            re.compile(r"/\*.*\*/", re.IGNORECASE | re.DOTALL),
-        ]
-        self.ddl_patterns = [
-            re.compile(r'\bDROP\s+(?:TABLE|DATABASE|SCHEMA|INDEX)\s+\w+', re.IGNORECASE),
-            re.compile(r'\bCREATE\s+(?:TABLE|DATABASE|SCHEMA|INDEX)\s+\w+', re.IGNORECASE),
-            re.compile(r'\bALTER\s+TABLE\s+\w+\s+(?:ADD|DROP|MODIFY)', re.IGNORECASE),
-            re.compile(r'\bTRUNCATE\s+TABLE\s+\w+', re.IGNORECASE),
-        ]
-        self.risky_patterns = [
-            re.compile(r'\bDELETE\s+FROM\s+\w+\s*(?:;|$)', re.IGNORECASE),
-            re.compile(r'\bUPDATE\s+\w+\s+SET\s+.*(?:;|$)', re.IGNORECASE),
-            re.compile(r'\bSELECT\s+\*\s+FROM\s+\w+\s*(?:;|$)', re.IGNORECASE),
-        ]
-        self.performance_patterns = [
-            re.compile(r'\bSELECT\s+.*\bFROM\s+\w+\s+(?:\w+\s+)?JOIN\s+.*JOIN\s+.*JOIN', re.IGNORECASE),
-            re.compile(r'\bORDER\s+BY\s+\w+\s+DESC\s+LIMIT\s+\d{4,}', re.IGNORECASE),
-            re.compile(r'\bLIKE\s+[\'"]%.*%[\'"]', re.IGNORECASE),
-            re.compile(r'\bCROSS\s+JOIN\b', re.IGNORECASE),
-        ]
+        self.max_joins = 3
 
     def analyze(self, query: str):
         """
-        Analyzes SQL query and performs risk assessment
+        Analyzes SQL query and performs risk assessment using sqlglot
         
         Args:
             query: SQL query to analyze
@@ -62,38 +39,87 @@ class QueryAnalyzer:
                 "risk_type": str | None (risk type, None if none),
                 "return": bool (can query be executed?)
             }
-        
-        Risk Priority Order:
-            1. SQL Injection (highest risk)
-            2. DDL Pattern (database structure change)
-            3. Risky Pattern (DELETE/UPDATE without WHERE clause)
-            4. Performance Risk (may run slow)
-        
-        Note:
-            Returns False for the first risk found, True if no risk
         """
-        result = {}
+        result = {"risk_type": None, "return": True}
         q = query.strip()
-        for pattern in self.sql_injection_patterns:
-            if pattern.search(q):
+        
+        try:
+            # Parse all statements in the query.
+            # Using tsql dialect since WebQuery often interacts with MSSQL.
+            statements = sqlglot.parse(q, read="tsql")
+        except sqlglot.errors.ParseError:
+            # If the SQL is malformed or uses obfuscated syntax that breaks the parser,
+            # block it entirely to prevent bypasses.
+            result["risk_type"] = RiskLevel.SQL_INJECTION.value
+            result["return"] = False
+            return result
+            
+        for stmt in statements:
+            if not stmt:
+                continue
+                
+            if self._check_sql_injection(stmt):
                 result["risk_type"] = RiskLevel.SQL_INJECTION.value
                 result["return"] = False
                 return result
-        for pattern in self.ddl_patterns:
-            if pattern.search(q):
+                
+            if self._check_ddl(stmt):
                 result["risk_type"] = RiskLevel.DDL_PATTERN.value
                 result["return"] = False
                 return result
-        for pattern in self.risky_patterns:
-            if pattern.search(q):
+                
+            if self._check_risky_dml(stmt):
                 result["risk_type"] = RiskLevel.RISKY_PATTERN.value
                 result["return"] = False
                 return result
-        for pattern in self.performance_patterns:
-            if pattern.search(q):
+                
+            if self._check_performance(stmt):
                 result["risk_type"] = RiskLevel.PERFORMANCE.value
                 result["return"] = False
                 return result
-        result["risk_type"] = None
-        result["return"] = True
+                
         return result
+
+    def _check_sql_injection(self, stmt: exp.Expression) -> bool:
+        """Check for privilege escalation or dynamic execution."""
+        for cmd in stmt.find_all(exp.Command):
+            sql_upper = cmd.sql().upper()
+            if any(danger in sql_upper for danger in ["EXECUTE AS", "XP_CMDSHELL", "EXEC ", "EXEC("]):
+                return True
+        return False
+
+    def _check_ddl(self, stmt: exp.Expression) -> bool:
+        """Check for structural changes to the database."""
+        ddl_types = (exp.Drop, exp.Create, exp.AlterTable, exp.TruncateTable)
+        if isinstance(stmt, ddl_types):
+            return True
+        # Also check nested nodes
+        for _ in stmt.find_all(ddl_types):
+            return True
+        return False
+
+    def _check_risky_dml(self, stmt: exp.Expression) -> bool:
+        """Check for UPDATE or DELETE without a WHERE clause."""
+        dml_types = (exp.Delete, exp.Update)
+        for node in stmt.find_all(dml_types):
+            if not node.args.get("where"):
+                return True
+        return False
+
+    def _check_performance(self, stmt: exp.Expression) -> bool:
+        """Check for heavy joins or leading/trailing wildcards."""
+        joins = list(stmt.find_all(exp.Join))
+        
+        if len(joins) >= self.max_joins:
+            return True
+            
+        for j in joins:
+            if "CROSS" in j.sql().upper():
+                return True
+                
+        for like in stmt.find_all(exp.Like):
+            pattern = like.expression.name if hasattr(like.expression, 'name') else ""
+            if pattern.startswith("%") and pattern.endswith("%"):
+                return True
+                
+        return False
