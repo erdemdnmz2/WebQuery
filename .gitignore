@@ -6,8 +6,6 @@ __pycache__/
 # Virtual environments (your project has `myenv/`)
 myenv/
 env/
-.venv/
-venv/
 
 # Distribution / packaging
 build/

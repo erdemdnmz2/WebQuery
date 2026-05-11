@@ -2,7 +2,7 @@ from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from slack_integration.config import SLACK_APP_TOKEN, SLACK_BOT_TOKEN
 from app_database.app_database import AppDatabase
-from app_database.models import QueryData
+from app_database.models import QueryData, Workspace
 from sqlalchemy import select
 
 class SlackListener:
@@ -14,12 +14,12 @@ class SlackListener:
 
     def register_handlers(self):
         @self.app.action("approve_with_results")
-        async def approve(ack, body, client):
-            await self.handle_approve_with_results(ack, body, client)
+        async def approve(ack, body, respond):
+            await self.handle_approve_with_results(ack, body, respond)
 
         @self.app.action("reject_query")
-        async def reject(ack, body, client):
-            await self.handle_reject_query(ack, body, client)
+        async def reject(ack, body, respond):
+            await self.handle_reject_query(ack, body, respond)
 
     async def start(self):
         if not SLACK_APP_TOKEN:
@@ -29,14 +29,13 @@ class SlackListener:
         self.handler = AsyncSocketModeHandler(self.app, SLACK_APP_TOKEN)
         await self.handler.start_async()
 
-    async def handle_approve_with_results(self, ack, body, client):
+    async def handle_approve_with_results(self, ack, body, respond):
         await ack()
         user_id = body["user"]["id"]
         request_id = body["actions"][0]["value"]
         
-        await client.chat_update(
-            channel=body["channel"]["id"],
-            ts=body["message"]["ts"],
+        await respond(
+            replace_original=True,
             blocks=[],
             text=f"✅ Query approved by <@{user_id}> (Results will be shown). (ID: {request_id})"
         )
@@ -48,7 +47,15 @@ class SlackListener:
                 query_data = result.scalar_one_or_none()
                 
                 if query_data:
-                    query_data.status = "APPROVED"
+                    query_data.status = "approved_with_results"
+                    
+                    stmt_ws = select(Workspace).where(Workspace.query_id == query_data.id)
+                    result_ws = await session.execute(stmt_ws)
+                    workspace = result_ws.scalar_one_or_none()
+                    if workspace:
+                        workspace.show_results = True
+                        workspace.description = "Approved by admin via Slack"
+                        
                     await session.commit()
                     print(f"Query {request_id} approved by Slack user {user_id}")
                 else:
@@ -56,14 +63,13 @@ class SlackListener:
             except Exception as e:
                 print(f"Error processing approval for {request_id}: {e}")
 
-    async def handle_reject_query(self, ack, body, client):
+    async def handle_reject_query(self, ack, body, respond):
         await ack()
         user_id = body["user"]["id"]
         request_id = body["actions"][0]["value"]
         
-        await client.chat_update(
-            channel=body["channel"]["id"],
-            ts=body["message"]["ts"],
+        await respond(
+            replace_original=True,
             blocks=[],
             text=f"❌ Query rejected by <@{user_id}>. (ID: {request_id})"
         )
@@ -75,7 +81,15 @@ class SlackListener:
                 query_data = result.scalar_one_or_none()
                 
                 if query_data:
-                    query_data.status = "REJECTED"
+                    query_data.status = "rejected"
+                    
+                    stmt_ws = select(Workspace).where(Workspace.query_id == query_data.id)
+                    result_ws = await session.execute(stmt_ws)
+                    workspace = result_ws.scalar_one_or_none()
+                    if workspace:
+                        workspace.show_results = False
+                        workspace.description = "Rejected by admin via Slack"
+                        
                     await session.commit()
                     print(f"Query {request_id} rejected by Slack user {user_id}")
             except Exception as e:

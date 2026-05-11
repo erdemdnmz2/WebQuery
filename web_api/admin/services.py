@@ -7,7 +7,7 @@ from app_database.models import QueryData, Workspace, User, Databases
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
 from .schemas import *
-
+from query_execution import config
 class BaseAdminService:
     """
     Base class for all admin services.
@@ -130,13 +130,8 @@ class AdminApprovalService(BaseAdminService):
             async with self.db_provider.get_session(user, servername, database_name) as session:
                 sql_query = text(query_text)
                 result = await session.execute(sql_query)
-                rows = result.fetchall()
+                rows = result.fetchmany(size=config.MAX_ROW_COUNT_LIMIT)
                 row_count = len(rows)
-                
-                from query_execution import config
-                if row_count > config.MAX_ROW_COUNT_LIMIT:
-                    rows = rows[:config.MAX_ROW_COUNT_LIMIT]
-                    row_count = config.MAX_ROW_COUNT_LIMIT
 
                 result_data = [dict(row._mapping) for row in rows]
             
@@ -148,7 +143,6 @@ class AdminApprovalService(BaseAdminService):
 
             columns = list(result_data[0].keys()) if result_data else []
             message = None
-            from query_execution import config
             if row_count > 0 and row_count == config.MAX_ROW_COUNT_LIMIT:
                 message = f"Truncated to MAX_ROW_COUNT_LIMIT ({config.MAX_ROW_COUNT_LIMIT})"
 

@@ -74,7 +74,6 @@ class QueryService:
                         db_session.add(query_data)
                         await db_session.flush()
                         
-                        # get ID in context after flush
                         query_data_id = query_data.id
                         
                         workspace_name = f"Pending: {query[:50]}..." if len(query) > 50 else f"Pending: {query}"
@@ -88,7 +87,6 @@ class QueryService:
                         db_session.add(workspace)
                         await db_session.flush()
                         
-                        # get workspace ID after flush
                         workspace_id = workspace.id
                         
                         await db_session.commit()

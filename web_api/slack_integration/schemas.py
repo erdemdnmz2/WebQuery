@@ -50,12 +50,12 @@ def create_approval_message(request_id: str, username: str, machine_name: str, d
                     "type": "button",
                     "text": {
                         "type": "plain_text",
-                        "text": "▶️ Çalıştır",
+                        "text": "✅ Onayla",
                         "emoji": True
                     },
                     "style": "primary",
                     "value": str(request_id),
-                    "action_id": "execute_query"
+                    "action_id": "approve_with_results"
                 },
                 {
                     "type": "button",
