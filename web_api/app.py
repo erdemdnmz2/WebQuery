@@ -117,10 +117,12 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(AuthMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 
-#TODO burayı ayarla
+cors_origins_str = os.getenv("CORS_ALLOWED_ORIGINS", "*")
+cors_origins = [origin.strip() for origin in cors_origins_str.split(",")] if cors_origins_str else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -156,5 +158,5 @@ if __name__ == "__main__":
         host=os.getenv("HOST", "0.0.0.0"),
         port=int(os.getenv("PORT", 8080)),
         workers=int(os.getenv("WORKERS", 1)),
-        reload=True
+        reload=os.getenv("DEBUG", "True").lower() == "true"
     )

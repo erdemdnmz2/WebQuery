@@ -57,7 +57,7 @@ async def login(
         response.set_cookie(
             key="access_token",
             value=token,
-            secure=False,
+            secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
             samesite="strict",
             httponly=True,
             max_age=config.COOKIE_TOKEN_EXPIRE_MINUTES
@@ -138,7 +138,7 @@ async def logout(
     # Clear token from cookie
     response.delete_cookie(
         key="access_token",
-        secure=False,
+        secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
         samesite="strict",
         httponly=True
     )

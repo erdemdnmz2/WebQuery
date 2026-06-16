@@ -93,7 +93,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             response = RedirectResponse(url="/login", status_code=302)
             response.delete_cookie(
                 key="access_token",
-                secure=False,
+                secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
                 samesite="strict",
                 httponly=True
             )
