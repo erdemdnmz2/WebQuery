@@ -7,7 +7,7 @@ from typing import Any, List, Dict
 from app_database.models import QueryData, Workspace, User, Databases
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
-from .schemas import *
+from .schemas import AdminApprovals
 from query_execution import config
 
 class BaseAdminService:
@@ -132,21 +132,32 @@ class AdminApprovalService(BaseAdminService):
             async with self.db_provider.get_session(user, servername, database_name) as session:
                 sql_query = text(query_text)
                 result = await session.execute(sql_query)
-                rows = result.fetchmany(size=config.MAX_ROW_COUNT_LIMIT)
-                row_count = len(rows)
-
-                result_data = [dict(row._mapping) for row in rows]
+                
+                row_count: int = 0
+                message: str | None = None
+                result_data: list[dict[str, Any]] = []
+                columns: list[str] = []
+                
+                if result.returns_rows:
+                    rows = result.fetchmany(size=config.MAX_ROW_COUNT_LIMIT)
+                    row_count = len(rows)
+                    result_data = [dict(row._mapping) for row in rows]
+                    columns = list(result_data[0].keys()) if result_data else []
+                    if row_count >= config.MAX_ROW_COUNT_LIMIT:
+                        message = f"Truncated to MAX_ROW_COUNT_LIMIT ({config.MAX_ROW_COUNT_LIMIT})"
+                    else:
+                        message = f"{row_count} rows returned"
+                else:
+                    row_count = result.rowcount if result.rowcount is not None else 0
+                    message = f"{row_count} rows affected"
+                    result_data = []
+                    columns = []
             
             await self.app_db.update_log(
                 log_id=log_id,
                 successfull=True,
                 row_count=row_count
             )
-
-            columns = list(result_data[0].keys()) if result_data else []
-            message = None
-            if row_count > 0 and row_count == config.MAX_ROW_COUNT_LIMIT:
-                message = f"Truncated to MAX_ROW_COUNT_LIMIT ({config.MAX_ROW_COUNT_LIMIT})"
 
             return {
                 "response_type": "data",
@@ -212,8 +223,8 @@ class AdminApprovalService(BaseAdminService):
         Returns:
             dict[str, any]: A dictionary indicating success and the new query status.
         """
-        try:
-            async with self.app_db.get_app_db() as db:
+        async with self.app_db.get_app_db() as db:
+            try:
                 # 1. Fetch workspace by ID
                 workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
                 workspace: Workspace | None = workspace_result.scalars().first()
@@ -248,12 +259,13 @@ class AdminApprovalService(BaseAdminService):
                     "status": new_status,
                     "message": f"Query approved successfully ({'executable' if show_results else 'not executable'})"
                 }
-        except Exception as e:
-            print(f"Approval failed: {e}")
-            return {
-                "success": False,
-                "error": f"Approval failed: {str(e)}"
-            }
+            except Exception as e:
+                await db.rollback()
+                print(f"Approval failed: {e}")
+                return {
+                    "success": False,
+                    "error": f"Approval failed: {str(e)}"
+                }
 
 class AdminDBAdditionService(BaseAdminService):
     """

@@ -114,8 +114,12 @@ async def register(
             raise HTTPException(status_code=400, detail=str(e))
 
         db.add(new_user)
-        await db.commit()
-        await db.refresh(new_user)
+        try:
+            await db.commit()
+            await db.refresh(new_user)
+        except Exception as e:
+            await db.rollback()
+            raise HTTPException(status_code=500, detail=f"Database error during registration: {str(e)}")
         
         return {
             "success": True,

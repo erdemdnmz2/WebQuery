@@ -4,13 +4,12 @@ User workspace (saved query) management endpoints
 """
 from typing import Any
 from fastapi import APIRouter, Depends, status, HTTPException, Response, Request
-from fastapi.responses import FileResponse
-from .schemas import *
+from .schemas import WorkspaceCreate, WorkspaceUpdate, WorkspaceList
 
 from dependencies import get_app_db, get_workspace_service, ensure_owner, get_db_provider
 from authentication.services import get_current_user
 
-from app_database.models import User, Workspace, QueryData
+from app_database.models import User, Workspace
 from app_database import AppDatabase
 
 from .services import WorkspaceService
@@ -197,16 +196,3 @@ async def execute_workspace(
 
     return result
 
-
-@router.get("/workspaces/{workspace_id}/execute", response_class=FileResponse)
-def workspace_execute_page(
-    workspace_id: int,
-    current_user: User = Depends(get_current_user),
-    _ws: Workspace = Depends(ensure_owner)
-):
-    """
-    Serve a lightweight workspace execution page (static HTML).
-
-    Access is limited to the workspace owner by the `ensure_owner` dependency.
-    """
-    return FileResponse("templates/workspace_execute.html")

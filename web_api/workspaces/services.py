@@ -257,17 +257,23 @@ class WorkspaceService:
             async with db_provider.get_session(user=current_user, servername=query_data.servername, database_name=query_data.database_name) as session:
                 sql_query = text(query_data.query)
                 result = await session.execute(sql_query)
-                rows = result.fetchmany(size=query_config.MAX_ROW_COUNT_LIMIT)
-                row_count: int = len(rows)
-
+                
+                row_count: int = 0
                 message: str = ""
-                if row_count > query_config.MAX_ROW_COUNT_LIMIT:
-                    rows = rows[:query_config.MAX_ROW_COUNT_LIMIT]
-                    message = f"Truncated to MAX_ROW_COUNT_LIMIT ({query_config.MAX_ROW_COUNT_LIMIT})"
+                result_data: list[dict[str, Any]] = []
+                
+                if result.returns_rows:
+                    rows = result.fetchmany(size=query_config.MAX_ROW_COUNT_LIMIT)
+                    row_count = len(rows)
+                    if row_count >= query_config.MAX_ROW_COUNT_LIMIT:
+                        message = f"Truncated to MAX_ROW_COUNT_LIMIT ({query_config.MAX_ROW_COUNT_LIMIT})"
+                    else:
+                        message = f"{row_count} rows returned"
+                    result_data = [dict(row._mapping) for row in rows]
                 else:
+                    row_count = result.rowcount if result.rowcount is not None else 0
                     message = f"{row_count} rows affected"
-
-                result_data: list[dict[str, Any]] = [dict(row._mapping) for row in rows]
+                    result_data = []
 
             await self.app_db.update_log(log_id=log_id, successfull=True, row_count=row_count)
 

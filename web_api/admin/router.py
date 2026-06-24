@@ -3,9 +3,8 @@ Admin Router
 Admin query approval/rejection endpoints
 """
 from fastapi import APIRouter, Depends, status, HTTPException, Response
-from .schemas import *
+from .schemas import AdminApprovalsList, AdminPreviewResponse, ApprovalRequest, DatabaseAddRequest
 from dependencies import get_admin_service, admin_required
-from .schemas import ApprovalRequest
 from .services import AdminService
 from app_database.models import User
 

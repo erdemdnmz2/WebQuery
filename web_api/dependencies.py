@@ -4,12 +4,11 @@ Tüm router'lar bu fonksiyonları kullanarak app.state'ten instance'ları alır
 """
 from fastapi import Request
 from fastapi import Depends, HTTPException, status
-from cryptography.fernet import Fernet
 
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
 from authentication.services import get_current_user
-from app_database.models import Workspace, QueryData, User
+from app_database.models import Workspace, User
 
 from query_execution.services import QueryService
 from workspaces.services import WorkspaceService
@@ -42,7 +41,6 @@ def get_query_service(request: Request) -> QueryService:
     notification_service = get_notification_service(request)
     return QueryService(database_provider=db_provider, app_db=app_db, notification_service=notification_service)
 
-from workspaces.services import WorkspaceService
 
 def get_workspace_service(request: Request) -> WorkspaceService:
     """

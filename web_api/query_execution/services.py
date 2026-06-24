@@ -134,21 +134,31 @@ class QueryService:
             ) as session:
                 sql_query = text(query)
                 result = await session.execute(sql_query)
-                rows = result.fetchmany(size=config.MAX_ROW_COUNT_LIMIT)
-                row_count: int = len(rows)
                 
+                row_count: int = 0
                 message: str = ""
-                if row_count > config.MAX_ROW_COUNT_LIMIT:
-                    rows = rows[:config.MAX_ROW_COUNT_LIMIT]
-                    message = f"{row_count} rows found, showing first {config.MAX_ROW_COUNT_LIMIT}"
+                result_data: Dict[str, Any] = {}
+                
+                if result.returns_rows:
+                    rows = result.fetchmany(size=config.MAX_ROW_COUNT_LIMIT)
+                    row_count = len(rows)
+                    if row_count >= config.MAX_ROW_COUNT_LIMIT:
+                        message = f"Truncated to MAX_ROW_COUNT_LIMIT ({config.MAX_ROW_COUNT_LIMIT})"
+                    else:
+                        message = f"{row_count} rows returned"
+                    result_data = {
+                        "response_type": "data",
+                        "data": [dict(row._mapping) for row in rows],
+                        "message": message
+                    }
                 else:
+                    row_count = result.rowcount if result.rowcount is not None else 0
                     message = f"{row_count} rows affected"
-                    
-                result_data: Dict[str, Any] = {
-                    "response_type": "data",
-                    "data": [dict(row._mapping) for row in rows],
-                    "message": message
-                }
+                    result_data = {
+                        "response_type": "data",
+                        "data": [],
+                        "message": message
+                    }
                 
                 await self.app_db.update_log(
                     log_id=log_id,

@@ -3,22 +3,16 @@ Database Provider Module
 Manages database engines caching and session provisioning using centralized credentials.
 All functions and classes are strictly typed.
 """
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from typing import Dict, Any
-import os
-import  app_database.models as models
+import app_database.models as models
 from database_provider.config import (
-    SERVER_NAMES, 
     create_connection_string, 
-    get_master_connection_string,
     get_driver_for_technology,
     DB_USER,
     DB_PASSWORD
 )
-from sqlalchemy.future import select
 from contextlib import asynccontextmanager
-from sqlalchemy.exc import SQLAlchemyError
 from .engine_cache import EngineCache
 
 class DatabaseProvider:

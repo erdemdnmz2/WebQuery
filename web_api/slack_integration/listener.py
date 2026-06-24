@@ -61,6 +61,7 @@ class SlackListener:
                 else:
                     print(f"Query {request_id} not found in database.")
             except Exception as e:
+                await session.rollback()
                 print(f"Error processing approval for {request_id}: {e}")
 
     async def handle_reject_query(self, ack, body, respond):
@@ -93,6 +94,7 @@ class SlackListener:
                     await session.commit()
                     print(f"Query {request_id} rejected by Slack user {user_id}")
             except Exception as e:
+                await session.rollback()
                 print(f"Error processing rejection for {request_id}: {e}")
  
     async def execute_query(self, ack, body, client):
