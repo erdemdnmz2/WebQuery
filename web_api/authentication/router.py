@@ -108,7 +108,10 @@ async def register(
             username=user.username,
             email=user.email
         )
-        new_user.set_password(user.password)
+        try:
+            new_user.set_password(user.password)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
         db.add(new_user)
         await db.commit()
