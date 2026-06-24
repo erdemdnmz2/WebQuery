@@ -1,9 +1,10 @@
 """
-Query Execution Router
-SQL query çalıştırma endpoint'leri
+Query Execution Router Module
+FastAPI router for single and multiple SQL query execution.
+All routes are strictly typed and documented.
 """
 from fastapi import APIRouter, Depends, HTTPException, Request
-from typing import List
+from typing import List, Any
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -11,11 +12,10 @@ from query_execution import config
 from query_execution import schemas as query_models
 from query_execution.services import QueryService
 from authentication.services import get_current_user
-from dependencies import get_app_db, get_db_provider, get_session_cache, get_query_service
+from dependencies import get_app_db, get_db_provider, get_query_service
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
 from app_database.models import User
-from session.session_cache import SessionCache
 
 router = APIRouter(prefix="/api")
 
@@ -28,71 +28,56 @@ async def execute_query(
     request: Request,
     query_request: query_models.SQLQuery,
     current_user: User = Depends(get_current_user),
-    query_service: QueryService = Depends(get_query_service),
-    session_cache: SessionCache = Depends(get_session_cache)
-):
+    query_service: QueryService = Depends(get_query_service)
+) -> dict[str, Any]:
     """
-    Tek bir SQL query'sini çalıştırır
+    Executes a single SQL query via the query execution service.
     
-    1. Session kontrolü (kullanıcının session'ı hala geçerli mi?)
-    2. Query'yi çalıştır
-    3. Sonucu döndür
+    Args:
+        request: The FastAPI request object.
+        query_request: The SQL query execution request payload.
+        current_user: The authenticated user instance.
+        query_service: The query execution service instance.
+        
+    Returns:
+        dict[str, Any]: The query execution results or error response.
     """
-    from authentication import config
-    if session_cache.is_valid(current_user.id, timeout_minutes=config.SESSION_TIMEOUT):
-        try:
-            plain_pw = session_cache.get_password(current_user.id)
-            current_user.password = plain_pw
-        except Exception:
-            raise HTTPException(status_code=401, detail="Session password error")
-    else:
-        raise HTTPException(status_code=401, detail="Session expired")
-
-    # Query'yi çalıştır
-    result = await query_service.execute_query(
+    result: dict[str, Any] = await query_service.execute_query(
         query=query_request.query,
         user=current_user,
         server_name=query_request.servername,
         database_name=query_request.database_name
     )
-    
     return result
+
 
 @router.post("/multiple_query", response_model=query_models.MultipleQueryResponse)
 async def multiple_query(
     request: query_models.MultipleQueryRequest,
     current_user: User = Depends(get_current_user),
-    query_service: QueryService = Depends(get_query_service),
-    session_cache: SessionCache = Depends(get_session_cache)
-):
+    query_service: QueryService = Depends(get_query_service)
+) -> query_models.MultipleQueryResponse:
     """
-    Birden fazla SQL query'sini sırayla çalıştırır
+    Executes multiple SQL queries sequentially.
     
-    1. Session kontrolü
-    2. Query count kontrolü (max: config.MULTIPLE_QUERY_COUNT)
-    3. Her query'yi sırayla çalıştır
-    4. Tüm sonuçları döndür
+    Args:
+        request: The multiple SQL queries request payload.
+        current_user: The authenticated user instance.
+        query_service: The query execution service instance.
+        
+    Returns:
+        query_models.MultipleQueryResponse: The list of results for each executed query.
     """
-    from authentication import config
-    if session_cache.is_valid(current_user.id, timeout_minutes=config.SESSION_TIMEOUT):
-        try:
-            plain_pw = session_cache.get_password(current_user.id)
-            current_user.password = plain_pw
-        except Exception:
-            raise HTTPException(status_code=401, detail="Session password error")
-    else:
-        raise HTTPException(status_code=401, detail="Session expired")
-    
     if len(request.execution_info) > config.MULTIPLE_QUERY_COUNT:
         raise HTTPException(
             status_code=400,
             detail=f"Too many queries. Maximum: {config.MULTIPLE_QUERY_COUNT}"
         )
     
-    results = []
+    results: List[dict[str, Any]] = []
     
     for execution_info in request.execution_info:
-        result = await query_service.execute_query(
+        result: dict[str, Any] = await query_service.execute_query(
             query=execution_info.query,
             user=current_user,
             server_name=execution_info.servername,
@@ -102,17 +87,21 @@ async def multiple_query(
     
     return query_models.MultipleQueryResponse(results=results)
 
+
 @router.get("/database_information", response_model=query_models.DatabaseInformationResponse)
 async def get_database_information(
     current_user: User = Depends(get_current_user),
     db_provider: DatabaseProvider = Depends(get_db_provider)
-):
+) -> dict[str, Any]:
     """
-    Kullanıcının erişebildiği veritabanlarının listesini döndürür
+    Returns the list of databases accessible to the user per server.
     
+    Args:
+        current_user: The authenticated user instance.
+        db_provider: The database provider instance.
+        
     Returns:
-        {servername: [database_names]} formatında dictionary
+        dict[str, Any]: A mapping of servers to databases.
     """
-    db_info = db_provider.get_db_info_db()
-    
+    db_info: dict[str, Any] = db_provider.get_db_info_db()
     return {"db_info": db_info}

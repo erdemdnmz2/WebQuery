@@ -15,38 +15,42 @@ class RiskLevel(Enum):
 
 class QueryAnalyzer:
     """
-    Analyzes SQL queries for security and performance using Abstract Syntax Trees (AST)
-    
-    Checked risks:
-        - SQL Injection / Privilege Escalation (EXECUTE AS, EXEC)
-        - DDL commands (CREATE, DROP, ALTER, TRUNCATE)
-        - Risky DML commands (DELETE/UPDATE without WHERE clause)
-        - Performance issues (multiple JOINs, CROSS JOIN, wildcard LIKE)
+    Analyzes SQL queries for security and performance using Abstract Syntax Trees (AST).
+    All methods are strictly typed and documented.
     """
     
-    def __init__(self):
+    max_joins: int
+
+    def __init__(self) -> None:
+        """Initializes the QueryAnalyzer with risk thresholds."""
         self.max_joins = 3
 
-    def analyze(self, query: str):
+    def analyze(self, query: str, technology: str = "mssql") -> dict[str, any]:
         """
-        Analyzes SQL query and performs risk assessment using sqlglot
+        Analyzes SQL query and performs risk assessment using sqlglot with target database dialect.
         
         Args:
-            query: SQL query to analyze
+            query: SQL query to analyze.
+            technology: Target database technology (e.g., mssql, mysql, postgresql).
         
         Returns:
-            Dict: {
-                "risk_type": str | None (risk type, None if none),
-                "return": bool (can query be executed?)
-            }
+            dict[str, any]: A dictionary containing risk_type (str | None) and return (bool).
         """
-        result = {"risk_type": None, "return": True}
-        q = query.strip()
+        result: dict[str, any] = {"risk_type": None, "return": True}
+        q: str = query.strip()
+        
+        # Map technology to sqlglot dialect
+        dialect_map: dict[str, str] = {
+            "mssql": "tsql",
+            "mysql": "mysql",
+            "postgresql": "postgres",
+            "postgres": "postgres"
+        }
+        dialect: str = dialect_map.get(technology.lower().strip(), "tsql")
         
         try:
-            # Parse all statements in the query.
-            # Using tsql dialect since WebQuery often interacts with MSSQL.
-            statements = sqlglot.parse(q, read="tsql")
+            # Parse all statements in the query using the matched dialect.
+            statements = sqlglot.parse(q, read=dialect)
         except sqlglot.errors.ParseError:
             # If the SQL is malformed or uses obfuscated syntax that breaks the parser,
             # block it entirely to prevent bypasses.

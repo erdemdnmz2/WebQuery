@@ -3,6 +3,7 @@ Admin Service Layer
 Admin approval and management operations for risky queries
 """
 from sqlalchemy.sql import select, text
+from typing import Any, List, Dict
 from app_database.models import QueryData, Workspace, User, Databases
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
@@ -199,57 +200,53 @@ class AdminApprovalService(BaseAdminService):
                 print(f"Error rejecting query: {e}")
                 return {"success": False, "error": str(e)}
             
-    async def approve(self, workspace_id: int, show_results: bool):
+    async def approve(self, workspace_id: int, show_results: bool) -> dict[str, Any]:
         """
-        Approves the query.
+        Approves a query, enabling execution for the user.
+        
+        Args:
+            workspace_id: The ID of the workspace containing the query.
+            show_results: If True, the user can see execution results; otherwise, they cannot.
+            
+        Returns:
+            dict[str, any]: A dictionary indicating success and the new query status.
         """
         try:
             async with self.app_db.get_app_db() as db:
-                result = await db.execute(
-                    text("SELECT query_id FROM Workspaces WHERE id = :workspace_id"),
-                    {"workspace_id": workspace_id}
-                )
-                row = result.first()
-                if not row:
+                # 1. Fetch workspace by ID
+                workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+                workspace: Workspace | None = workspace_result.scalars().first()
+                if not workspace:
                     return {"success": False, "error": "Workspace not found"}
-                query_id = row[0]
-            
-            async with self.app_db.get_app_db() as db:
-                result = await db.execute(
-                    text("SELECT id FROM QueryData WHERE id = :query_id"),
-                    {"query_id": query_id}
-                )
-                if not result.first():
-                    return {"success": False, "error": "Query data not found"}
-            
-            if show_results:
-                new_status = "approved_with_results"
-                new_desc = "Approved by admin - User can execute"
-                show_results_val = 1
-            else:
-                new_status = "approved"
-                new_desc = "Approved by admin - User cannot execute"
-                show_results_val = 0
-            
-            async with self.app_db.get_app_db() as db:
-                result1 = await db.execute(
-                    text("UPDATE QueryData SET status = :status WHERE id = :id"),
-                    {"status": new_status, "id": query_id}
-                )
                 
-                result2 = await db.execute(
-                    text("UPDATE Workspaces SET show_results = :show, description = :desc WHERE id = :id"),
-                    {"show": show_results_val, "desc": new_desc, "id": workspace_id}
-                )
+                # 2. Fetch related QueryData
+                query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
+                query_data: QueryData | None = query_result.scalars().first()
+                if not query_data:
+                    return {"success": False, "error": "Query data not found"}
+                
+                # 3. Update status and description
+                new_status: str = ""
+                new_desc: str = ""
+                if show_results:
+                    new_status = "approved_with_results"
+                    new_desc = "Approved by admin - User can execute"
+                    workspace.show_results = True
+                else:
+                    new_status = "approved"
+                    new_desc = "Approved by admin - User cannot execute"
+                    workspace.show_results = False
+                
+                query_data.status = new_status
+                workspace.description = new_desc
                 
                 await db.commit()
-            
-            return {
-                "success": True,
-                "status": new_status,
-                "message": f"Query approved successfully ({'executable' if show_results else 'not executable'})"
-            }
-        
+                
+                return {
+                    "success": True,
+                    "status": new_status,
+                    "message": f"Query approved successfully ({'executable' if show_results else 'not executable'})"
+                }
         except Exception as e:
             print(f"Approval failed: {e}")
             return {
@@ -259,11 +256,19 @@ class AdminApprovalService(BaseAdminService):
 
 class AdminDBAdditionService(BaseAdminService):
     """
-    Service for adding new databases.
+    Service for adding new databases to the platform configuration.
     """
-    async def add_database(self, servername: str, database_name: str, tech_name: str):
+    async def add_database(self, servername: str, database_name: str, tech_name: str) -> dict[str, Any]:
         """
-        Adds a new database.
+        Adds a new database server and database configuration to the application databases.
+        
+        Args:
+            servername: The host/instance name of the SQL server.
+            database_name: The name of the database.
+            tech_name: The database technology/type (e.g., mssql, postgresql, mysql).
+            
+        Returns:
+            dict[str, any]: A dictionary containing execution status and a message or error.
         """
         async with self.app_db.get_app_db() as db:
             try:
@@ -272,10 +277,11 @@ class AdminDBAdditionService(BaseAdminService):
                     Databases.servername == servername, 
                     Databases.database_name == database_name
                 ))
-                if existing.scalars().first():
+                existing_db: Databases | None = existing.scalars().first()
+                if existing_db:
                     return {"success": False, "error": "Database already exists"}
 
-                database = Databases(servername=servername, database_name=database_name, tech_name=tech_name)
+                database: Databases = Databases(servername=servername, database_name=database_name, technology=tech_name)
                 db.add(database)
                 await db.commit()
                 return {"success": True, "message": "Database added successfully"}

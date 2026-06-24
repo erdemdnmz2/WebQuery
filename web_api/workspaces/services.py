@@ -2,6 +2,7 @@
 Workspace Service Layer
 User workspace (saved query) management operations
 """
+from typing import Any, List, Dict
 from app_database.models import QueryData, Workspace
 from app_database.app_database import AppDatabase
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +12,6 @@ from sqlalchemy.sql import select
 from sqlalchemy.sql import text
 from query_execution import config as query_config
 from database_provider import DatabaseProvider
-from session.session_cache import SessionCache
 from app_database.models import User
 
 class WorkspaceService:
@@ -222,46 +222,35 @@ class WorkspaceService:
             "is_owner": True
         }
 
-    async def execute_workspace(self, workspace_id: int, current_user: User, session_cache: SessionCache, db_provider: DatabaseProvider):
+    async def execute_workspace(self, workspace_id: int, current_user: User, db_provider: DatabaseProvider) -> dict[str, Any]:
         """
         Executes a stored workspace query after enforcing approval rules.
+        Uses centralized service account credentials, requiring no user password caching.
 
         Args:
-            workspace_id: ID of the workspace to execute
-            current_user: Calling user
-            session_cache: SessionCache instance
-            db_provider: DatabaseProvider instance
+            workspace_id: ID of the workspace to execute.
+            current_user: The authenticated calling user instance.
+            db_provider: The database connection provider.
 
         Returns:
-            Dict: Execution result
+            dict[str, Any]: A dictionary containing execution status and data or error details.
         """
-        # Session validation
-        from authentication import config as auth_config
-        try:
-            if session_cache.is_valid(current_user.id, timeout_minutes=auth_config.SESSION_TIMEOUT):
-                plain_pw = session_cache.get_password(current_user.id)
-                current_user.password = plain_pw
-            else:
-                return {"response_type": "error", "data": [], "error": "Session expired"}
-        except Exception:
-            return {"response_type": "error", "data": [], "error": "Session password error"}
-
         # Load workspace and query
         async with self.app_db.get_app_db() as db:
             workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
-            workspace = workspace_result.scalars().first()
+            workspace: Workspace | None = workspace_result.scalars().first()
             if not workspace:
                 return {"response_type": "error", "data": [], "error": "Workspace not found"}
 
             query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
-            query_data = query_result.scalars().first()
+            query_data: QueryData | None = query_result.scalars().first()
             if not query_data:
                 return {"response_type": "error", "data": [], "error": "Query data not found"}
             # enforce approval
             if not workspace.show_results or query_data.status != "approved_with_results":
                 return {"response_type": "error", "data": [], "error": "This workspace is not approved for execution"}
 
-        log_id = None
+        log_id: int | None = None
         try:
             log_id = await self.app_db.create_log(user=current_user, query=query_data.query, machine_name=query_data.servername, approved_execution=True)
 
@@ -269,15 +258,16 @@ class WorkspaceService:
                 sql_query = text(query_data.query)
                 result = await session.execute(sql_query)
                 rows = result.fetchmany(size=query_config.MAX_ROW_COUNT_LIMIT)
-                row_count = len(rows)
+                row_count: int = len(rows)
 
+                message: str = ""
                 if row_count > query_config.MAX_ROW_COUNT_LIMIT:
                     rows = rows[:query_config.MAX_ROW_COUNT_LIMIT]
                     message = f"Truncated to MAX_ROW_COUNT_LIMIT ({query_config.MAX_ROW_COUNT_LIMIT})"
                 else:
                     message = f"{row_count} rows affected"
 
-                result_data = [dict(row._mapping) for row in rows]
+                result_data: list[dict[str, Any]] = [dict(row._mapping) for row in rows]
 
             await self.app_db.update_log(log_id=log_id, successfull=True, row_count=row_count)
 

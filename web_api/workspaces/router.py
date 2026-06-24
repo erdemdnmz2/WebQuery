@@ -2,11 +2,12 @@
 Workspace Router
 User workspace (saved query) management endpoints
 """
+from typing import Any
 from fastapi import APIRouter, Depends, status, HTTPException, Response, Request
 from fastapi.responses import FileResponse
 from .schemas import *
 
-from dependencies import get_app_db, get_workspace_service, ensure_owner, get_session_cache, get_db_provider
+from dependencies import get_app_db, get_workspace_service, ensure_owner, get_db_provider
 from authentication.services import get_current_user
 
 from app_database.models import User, Workspace, QueryData
@@ -153,30 +154,39 @@ async def execute_workspace(
     current_user: User = Depends(get_current_user),
     workspace_service: WorkspaceService = Depends(get_workspace_service),
     app_db: AppDatabase = Depends(get_app_db),
-    session_cache = Depends(get_session_cache),
     db_provider: DatabaseProvider = Depends(get_db_provider)
-):
+) -> dict[str, Any]:
     """
-    Execute the stored query for a workspace server-side.
+    Execute the stored query for a workspace server-side using centralized credentials.
 
     Requirements:
-    - User must have a valid session.
+    - User must have a valid JWT session.
     - Workspace must exist.
     - Workspace.show_results must be True and queryData.status == 'approved_with_results'.
 
     Only the workspace_id is accepted from the client to avoid arbitrary SQL execution.
+    
+    Args:
+        workspace_id: ID of the workspace to execute.
+        request: The FastAPI request object.
+        current_user: The authenticated user instance.
+        workspace_service: The workspace service instance.
+        app_db: The application database manager.
+        db_provider: The database provider instance.
+        
+    Returns:
+        dict[str, Any]: The query execution results or error details.
     """
-    # Delegate execution to WorkspaceService which enforces approval rules (including session validation)
-    result = await workspace_service.execute_workspace(
+    # Delegate execution to WorkspaceService which enforces approval rules (using centralized credentials)
+    result: dict[str, Any] = await workspace_service.execute_workspace(
         workspace_id=workspace_id,
         current_user=current_user,
-        session_cache=session_cache,
         db_provider=db_provider
     )
 
     if result.get("response_type") == "error":
         # map to HTTP errors for common cases
-        err = result.get("error", "Execution failed")
+        err: str = str(result.get("error", "Execution failed"))
         if "not found" in err.lower():
             raise HTTPException(status_code=404, detail=err)
         if "not approved" in err.lower() or "not approved for execution" in err.lower():

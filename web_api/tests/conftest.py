@@ -15,8 +15,6 @@ pytestmark = pytest.mark.asyncio
 
 import pytest_asyncio
 from app_database import AppDatabase
-from cryptography.fernet import Fernet
-from session import SessionCache
 from database_provider import DatabaseProvider
 
 @pytest_asyncio.fixture
@@ -30,13 +28,7 @@ async def async_client():
     await app.state.app_db.create_tables()
     
     app.state.db_provider = DatabaseProvider()
-    app.state.fernet = Fernet(Fernet.generate_key())
-    import fakeredis
-    fake_redis = fakeredis.FakeRedis()
-    
-    # We monkeypatch the session cache's redis client
-    app.state.session_cache = SessionCache(fernet=app.state.fernet)
-    app.state.session_cache.client = fake_redis
+    await app.state.db_provider.start_cache_loop()
     
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
