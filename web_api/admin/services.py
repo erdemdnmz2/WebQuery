@@ -9,6 +9,7 @@ from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
 from .schemas import *
 from query_execution import config
+
 class BaseAdminService:
     """
     Base class for all admin services.
