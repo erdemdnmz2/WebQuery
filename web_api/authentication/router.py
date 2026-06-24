@@ -1,20 +1,21 @@
 """
-Authentication Router
-Login, register and user information endpoints
+Authentication Router Module
+FastAPI router for user login, registration, logout, and self-information.
+Strictly typed and documented.
 """
 from fastapi import APIRouter, HTTPException, Response, Request, Depends
 from datetime import datetime
-from cryptography.fernet import Fernet
+from typing import Any
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from authentication import config
 from authentication import schemas
 from authentication.services import create_access_token, get_current_user
-from dependencies import get_app_db, get_db_provider, get_session_cache, get_fernet
-from session.session_cache import SessionCache
+from dependencies import get_app_db, get_db_provider
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
+from app_database.models import User
 
 router = APIRouter(prefix="/api")
 
@@ -27,32 +28,35 @@ async def login(
     user: schemas.UserLogin,
     response: Response,
     request: Request,
-    app_db: AppDatabase = Depends(get_app_db),
-    db_provider: DatabaseProvider = Depends(get_db_provider),
-    session_cache: SessionCache = Depends(get_session_cache),
-    fernet: Fernet = Depends(get_fernet)
-):
+    app_db: AppDatabase = Depends(get_app_db)
+) -> dict[str, str]:
     """
     User login endpoint.
+    Verifies credentials, creates JWT token, and writes login logs.
     
-    Verifies credentials, creates JWT token, and initializes user session.
+    Args:
+        user: The user login credentials payload.
+        response: The FastAPI response object (used to set auth cookies).
+        request: The FastAPI request object (used for client IP logging).
+        app_db: The application database manager instance.
+        
+    Returns:
+        dict[str, str]: The access token response.
     """
     async with app_db.get_app_db() as db:
-        from app_database.models import User
         from sqlalchemy.future import select
         
         result = await db.execute(select(User).where(User.email == user.email))
-        authenticated_user = result.scalars().first()
+        authenticated_user: User | None = result.scalars().first()
         
         if not authenticated_user or not authenticated_user.check_password(user.password):
             raise HTTPException(status_code=400, detail="Invalid email or password")
         
-        user_id = int(authenticated_user.id)
-        username = str(authenticated_user.username)
+        user_id: int = int(authenticated_user.id)
         
         # Create JWT token
-        user_to_login = {"sub": str(user_id)}
-        token = create_access_token(user_to_login)
+        user_to_login: dict[str, str] = {"sub": str(user_id)}
+        token: str = create_access_token(user_to_login)
         
         response.set_cookie(
             key="access_token",
@@ -63,10 +67,8 @@ async def login(
             max_age=config.COOKIE_TOKEN_EXPIRE_MINUTES
         )
         
-        client_ip = request.client.host
+        client_ip: str = request.client.host if request.client else "unknown"
         await app_db.create_login_log(user_id=user_id, client_ip=client_ip)
-        
-        session_cache.add_to_cache(password=user.password, user_id=user_id)
         
         return {"access_token": token}
 
@@ -77,25 +79,31 @@ async def register(
     user: schemas.UserCreate,
     response: Response,
     request: Request,
-    app_db: AppDatabase = Depends(get_app_db),
-    db_provider: DatabaseProvider = Depends(get_db_provider)
-):
+    app_db: AppDatabase = Depends(get_app_db)
+) -> dict[str, Any]:
     """
     New user registration endpoint.
-    
     Registers a new user if the email is not already taken.
+    
+    Args:
+        user: The user registration details payload.
+        response: The FastAPI response object.
+        request: The FastAPI request object.
+        app_db: The application database manager instance.
+        
+    Returns:
+        dict[str, any]: A dictionary indicating success or failure.
     """
     async with app_db.get_app_db() as db:
-        from app_database.models import User
         from sqlalchemy.future import select
         
         result = await db.execute(select(User).where(User.email == user.email))
-        existing_user = result.scalars().first()
+        existing_user: User | None = result.scalars().first()
         
         if existing_user:
             raise HTTPException(status_code=400, detail="Email already registered")
         
-        new_user = User(
+        new_user: User = User(
             username=user.username,
             email=user.email
         )
@@ -112,9 +120,15 @@ async def register(
 
 
 @router.get("/me", response_model=schemas.User)
-async def read_users_me(current_user=Depends(get_current_user)):
+async def read_users_me(current_user: User = Depends(get_current_user)) -> schemas.User:
     """
-    Returns current user information.
+    Returns current authenticated user information.
+    
+    Args:
+        current_user: The authenticated user instance.
+        
+    Returns:
+        schemas.User: The user details schema.
     """
     return schemas.User(
         username=current_user.username,
@@ -125,15 +139,22 @@ async def read_users_me(current_user=Depends(get_current_user)):
 @router.post("/logout")
 async def logout(
     response: Response,
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     app_db: AppDatabase = Depends(get_app_db),
-    db_provider: DatabaseProvider = Depends(get_db_provider),
-    session_cache: SessionCache = Depends(get_session_cache)
-):
+    db_provider: DatabaseProvider = Depends(get_db_provider)
+) -> dict[str, str]:
     """
     User logout endpoint.
+    Clears auth cookie, updates logout logs, and closes user target database engines.
     
-    Clears auth cookie, updates logs, and closes user database connections.
+    Args:
+        response: The FastAPI response object.
+        current_user: The authenticated user instance.
+        app_db: The application database manager instance.
+        db_provider: The database provider instance.
+        
+    Returns:
+        dict[str, str]: A dictionary with success status.
     """
     # Clear token from cookie
     response.delete_cookie(
@@ -144,9 +165,6 @@ async def logout(
     )
     
     await app_db.update_login_log(user_id=current_user.id)
-    
     await db_provider.close_user_engines(current_user.id)
-
-    session_cache.remove(current_user.id)
 
     return {"message": "Successfully logged out"}

@@ -27,13 +27,26 @@ class User(Base):
     email = Column(String(50), unique=True)
     is_admin = Column(Boolean)
 
-    def set_password(self, plain_password):
-        """Hashes plain text password with bcrypt and stores it"""
-        salt = bcrypt.gensalt()
+    def set_password(self, plain_password: str) -> None:
+        """
+        Hashes plain text password with bcrypt and stores it.
+        
+        Args:
+            plain_password: The raw password string to hash.
+        """
+        salt: bytes = bcrypt.gensalt()
         self.password = bcrypt.hashpw(plain_password.encode('utf-8'), salt).decode('utf-8')
     
-    def check_password(self, plain_password):
-        """Compares plain text password with hashed password"""
+    def check_password(self, plain_password: str) -> bool:
+        """
+        Compares plain text password with hashed password.
+        
+        Args:
+            plain_password: The raw password string to check.
+            
+        Returns:
+            bool: True if password matches, False otherwise.
+        """
         return bcrypt.checkpw(plain_password.encode('utf-8'), self.password.encode('utf-8'))
 
 class ActionLogging(Base):
@@ -63,6 +76,7 @@ class LoginLogging(Base):
     login_date = Column(AppDateTime, nullable=False)
     client_ip = Column(String, nullable=False)
     logout_date = Column(AppDateTime, nullable=True)
+    login_duration_ms = Column(Integer, nullable=True)
 
 class QueryData(Base):
     """

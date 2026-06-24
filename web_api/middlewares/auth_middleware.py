@@ -8,48 +8,31 @@ from starlette.responses import Response as StarletteResponse
 from starlette.responses import RedirectResponse
 from fastapi import Request
 from authentication.services import verify_token, get_user_id_from_payload
-from dependencies import get_session_cache
 from fastapi.exceptions import HTTPException
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """
-    JWT token ve session doğrulama middleware'i
+    JWT token validation middleware.
     
-    Her request'te:
-        1. Public endpoint kontrolü (login, register)
-        2. Cookie'den JWT token alınır
-        3. Token doğrulanır
-        4. Session geçerliliği kontrol edilir
-        5. Token/session geçersizse redirect veya 401 döner
-    
-    Public Endpoints (authentication bypass):
-        - /login, /register
-        - /api/login, /api/register
-    
-    Error Handling:
-        - API endpoint'leri: 401 JSON response
-        - Web sayfaları: /login'e redirect (cookie silme ile)
+    For every request:
+        1. Public endpoint check (login, register, health)
+        2. Retrieves JWT token from access_token cookie
+        3. Validates the token
+        4. If invalid/missing, responds with 401 (for APIs) or redirects to /login (for web pages)
     """
     
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> StarletteResponse:
         """
-        Request'i işler, authentication kontrolü yapar
+        Processes the request, checking authentication.
         
         Args:
-            request: Gelen HTTP request
-            call_next: Sonraki middleware/endpoint handler
+            request: The incoming HTTP request.
+            call_next: The next middleware/endpoint handler.
         
         Returns:
-            StarletteResponse: Response nesnesi
-        
-        Flow:
-            1. Public endpoint ise -> direkt geç
-            2. Token yoksa -> 401 veya redirect
-            3. Token geçersizse -> 401 veya redirect (cookie sil)
-            4. Session expired ise -> 401 veya redirect
-            5. Her şey OK ise -> next middleware/handler
+            StarletteResponse: The HTTP response object.
         """
-        skip_auth_paths = [
+        skip_auth_paths: list[str] = [
             "/login", 
             "/register", 
             "/api/login", 
@@ -60,8 +43,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if any(request.url.path.startswith(path) for path in skip_auth_paths):
             return await call_next(request)
         
-        # Token'ı sadece cookie'den al
-        token = request.cookies.get("access_token")
+        token: str | None = request.cookies.get("access_token")
         if not token:
             if request.url.path.startswith("/api/"):
                 return StarletteResponse(
@@ -71,26 +53,21 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 )
             return RedirectResponse(url="/login", status_code=302)
         try:
-                payload = verify_token(token)
-                if not payload:
-                    raise HTTPException(status_code=401, detail="Invalid token")
-                user_id = get_user_id_from_payload(payload=payload)
-                if not user_id:
-                    raise HTTPException(status_code=401, detail="Invalid token")
-                session_cache = get_session_cache(request)
-                from authentication import config
-                if not session_cache.is_valid(int(user_id), timeout_minutes=config.SESSION_TIMEOUT):
-                    session_cache.remove(int(user_id))
-                    raise HTTPException(status_code=401, detail="Invalid session")
+            payload: dict | None = verify_token(token)
+            if not payload:
+                raise HTTPException(status_code=401, detail="Invalid token")
+            user_id: str | None = get_user_id_from_payload(payload=payload)
+            if not user_id:
+                raise HTTPException(status_code=401, detail="Invalid token")
         except Exception as e:
-            print(e)
+            print(f"Auth verification failed: {e}")
             if request.url.path.startswith("/api/"):
                 return StarletteResponse(
                     content='{"detail":"Invalid token"}',
                     status_code=401,
                     media_type="application/json"
                 )
-            response = RedirectResponse(url="/login", status_code=302)
+            response: RedirectResponse = RedirectResponse(url="/login", status_code=302)
             response.delete_cookie(
                 key="access_token",
                 secure=False,
@@ -99,5 +76,5 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
             return response
         
-        response = await call_next(request)
+        response: StarletteResponse = await call_next(request)
         return response
