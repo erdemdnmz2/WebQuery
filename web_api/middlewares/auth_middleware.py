@@ -7,6 +7,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response as StarletteResponse
 from starlette.responses import RedirectResponse
 from fastapi import Request
+import os
 from authentication.services import verify_token, get_user_id_from_payload
 from fastapi.exceptions import HTTPException
 
