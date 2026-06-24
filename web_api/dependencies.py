@@ -30,22 +30,7 @@ def get_db_provider(request: Request) -> DatabaseProvider:
     return request.app.state.db_provider
 
 
-from session.session_cache import SessionCache
-
-def get_session_cache(request: Request) -> SessionCache:
-    """
-    SessionCache instance'ını döndürür (kullanıcı şifrelerini geçici saklar).
-    Kullanım: session_cache: SessionCache = Depends(get_session_cache)
-    """
-    return request.app.state.session_cache
-
-
-def get_fernet(request: Request) -> Fernet:
-    """
-    Fernet şifreleme instance'ını döndürür.
-    Kullanım: fernet: Fernet = Depends(get_fernet)
-    """
-    return request.app.state.fernet
+# removed session cache and fernet dependencies as password caching is eliminated
 
 def get_query_service(request: Request) -> QueryService:
     """

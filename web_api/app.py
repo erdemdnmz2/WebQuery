@@ -18,12 +18,10 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import uvicorn
 from starlette.middleware.cors import CORSMiddleware
-from cryptography.fernet import Fernet
 from sqlalchemy import text
 
 from app_database import AppDatabase
 from database_provider import DatabaseProvider
-from session import SessionCache
 from middlewares import AuthMiddleware
 
 from slack_integration import SlackListener
@@ -67,7 +65,8 @@ async def lifespan(app: FastAPI):
         app.state.db_provider = DatabaseProvider()
         db_info = await app.state.app_db.get_db_info()
         app.state.db_provider.set_db_info(db_info)
-        print("✓ DatabaseProvider ready and db_info loaded")
+        await app.state.db_provider.start_cache_loop()
+        print("✓ DatabaseProvider ready, db_info loaded, and cache loop started")
     except Exception as e:
         print(f"\n❌ FATAL: DatabaseProvider initialization error!")
         print(f"   Error: {type(e).__name__}: {e}")
@@ -76,12 +75,6 @@ async def lifespan(app: FastAPI):
         # Cleanup
         await app.state.app_db.app_engine.dispose()
         raise SystemExit(1)
-
-    app.state.fernet = Fernet(Fernet.generate_key())
-    print("✓ Fernet encryption ready")
-
-    app.state.session_cache = SessionCache(fernet=app.state.fernet)
-    print("✓ Session cache ready")
 
     print("All services started successfully\n")
 

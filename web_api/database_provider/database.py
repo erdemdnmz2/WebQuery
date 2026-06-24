@@ -1,3 +1,8 @@
+"""
+Database Provider Module
+Manages database engines caching and session provisioning using centralized credentials.
+All functions and classes are strictly typed.
+"""
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSession, async_sessionmaker
 from typing import Dict, Any
@@ -7,7 +12,9 @@ from database_provider.config import (
     SERVER_NAMES, 
     create_connection_string, 
     get_master_connection_string,
-    get_driver_for_technology
+    get_driver_for_technology,
+    DB_USER,
+    DB_PASSWORD
 )
 from sqlalchemy.future import select
 from contextlib import asynccontextmanager
@@ -25,27 +32,27 @@ class DatabaseProvider:
         self.db_info: Dict[str, Dict[str, Any]] = {}
         # Format: {servername: {"databases": [list], "technology": str}}
 
-    def set_db_info(self, info: Dict[str, Dict[str, Any]]):
+    def set_db_info(self, info: Dict[str, Dict[str, Any]]) -> None:
         """
         Sets database configuration information.
         
         Args:
-            info: Database configuration dictionary
+            info: Database configuration dictionary.
         """
         self.db_info = info
     
     @asynccontextmanager
     async def get_session(self, user: models.User, servername: str, database_name: str):
         """
-        Provides user-specific async database session.
+        Provides user-specific async database session using centralized credentials.
         
         Args:
-            user: User model
-            servername: Server instance name
-            database_name: Target database name
+            user: User model.
+            servername: Server instance name.
+            database_name: Target database name.
             
         Yields:
-            AsyncSession: SQLAlchemy async session
+            AsyncSession: SQLAlchemy async session.
         """
         
         # Server validation
@@ -76,8 +83,8 @@ class DatabaseProvider:
             driver=driver,
             servername=servername,
             database=database_name,
-            username=user.username,
-            password=user.password,
+            username=DB_USER,
+            password=DB_PASSWORD,
         )
         
         engine = await self.engine_cache.get_engine(conn_str, owner_id=user.id)
@@ -89,33 +96,35 @@ class DatabaseProvider:
             finally:
                 await session.close()
 
-    async def close_engines(self):
+    async def start_cache_loop(self) -> None:
         """
-        Tüm kullanıcıların tüm engine'lerini kapatır ve kaynakları serbest bırakır.
-        Uygulama kapanırken çağrılmalıdır.
+        Starts the background engine cache cleanup loop.
+        Should be called during application startup.
+        """
+        await self.engine_cache.start_loop()
+
+    async def close_engines(self) -> None:
+        """
+        Closes all engines for all users and releases resources.
+        Should be called when the application shuts down.
         """
         await self.engine_cache.stop_loop()
 
-    async def close_user_engines(self, user_id: int):
+    async def close_user_engines(self, user_id: int) -> None:
         """
-        Belirli bir kullanıcının tüm engine'lerini kapatır.
-        Kullanıcı logout olduğunda çağrılır.
+        Closes all database engines for a specific user.
+        Called when a user logs out.
         
         Args:
-            user_id: Kapatılacak kullanıcının ID'si
+            user_id: The ID of the user whose engines should be closed.
         """
         await self.engine_cache.close_user_engines(user_id) 
     
-    def get_db_info_db(self):
+    def get_db_info_db(self) -> Dict[str, Dict[str, Any]]:
         """
-        Tüm sunuculardaki veritabanı bilgilerini döndürür.
+        Returns database configuration information for all servers.
         
         Returns:
-            Dict[str, Dict[str, Any]]: {
-                servername: {
-                    "databases": [database_names],
-                    "technology": str
-                }
-            }
+            Dict[str, Dict[str, Any]]: Configuration mapping of servers to their databases and technology.
         """
         return self.db_info
