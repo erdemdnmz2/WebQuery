@@ -10,7 +10,7 @@ class NotificationService:
         self.approval_message_format = approval_message_format
         self.slack_url = SLACK_URL
 
-    async def send_approval_notifivation(
+    async def send_approval_notification(
         self,
         request_id,
         username,

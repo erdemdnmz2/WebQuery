@@ -6,6 +6,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, T
 from sqlalchemy.dialects.mssql import DATETIME2, VARCHAR, NVARCHAR, UNIQUEIDENTIFIER, TEXT as MSSQL_TEXT
 from sqlalchemy.orm import relationship, declarative_base
 import bcrypt
+import re
 
 Base = declarative_base()
 
@@ -29,12 +30,20 @@ class User(Base):
 
     def set_password(self, plain_password: str) -> None:
         """
-        Hashes plain text password with bcrypt and stores it.
+        Hashes plain text password with bcrypt and stores it, enforcing B2B security policy.
         
         Args:
             plain_password: The raw password string to hash.
+            
+        Raises:
+            ValueError: If the password does not meet security policies.
         """
-        salt: bytes = bcrypt.gensalt()
+        if len(plain_password) < 12:
+            raise ValueError("Şifre en az 12 karakter olmalıdır.")
+        if not re.search(r'[A-Z]', plain_password) or not re.search(r'[0-9]', plain_password):
+            raise ValueError("Şifre en az bir büyük harf ve bir rakam içermelidir.")
+            
+        salt: bytes = bcrypt.gensalt(rounds=14)
         self.password = bcrypt.hashpw(plain_password.encode('utf-8'), salt).decode('utf-8')
     
     def check_password(self, plain_password: str) -> bool:
