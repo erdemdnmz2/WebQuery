@@ -4,11 +4,11 @@ FastAPI router for user login, registration, logout, and self-information.
 Strictly typed and documented.
 """
 from fastapi import APIRouter, HTTPException, Response, Request, Depends
-from datetime import datetime
 import os
 from typing import Any
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from common.limiter import limiter
+
+from authentication.exceptions import UserAlreadyExistsError
 
 from authentication import config
 from authentication import schemas
@@ -20,7 +20,7 @@ from app_database.models import User
 
 router = APIRouter(prefix="/api")
 
-limiter = Limiter(key_func=get_remote_address)
+# Using centralized limiter
 
 
 @router.post("/login", response_model=schemas.Token)
@@ -102,7 +102,7 @@ async def register(
         existing_user: User | None = result.scalars().first()
         
         if existing_user:
-            raise HTTPException(status_code=400, detail="Email already registered")
+            raise UserAlreadyExistsError("Email already registered")
         
         new_user: User = User(
             username=user.username,

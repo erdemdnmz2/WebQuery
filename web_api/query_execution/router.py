@@ -5,21 +5,19 @@ All routes are strictly typed and documented.
 """
 from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import List, Any
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from common.limiter import limiter
 
 from query_execution import config
 from query_execution import schemas as query_models
 from query_execution.services import QueryService
 from authentication.services import get_current_user
-from dependencies import get_app_db, get_db_provider, get_query_service
-from app_database.app_database import AppDatabase
+from dependencies import get_db_provider, get_query_service
 from database_provider import DatabaseProvider
 from app_database.models import User
 
 router = APIRouter(prefix="/api")
 
-limiter = Limiter(key_func=get_remote_address)
+# Using centralized limiter
 
 
 @router.post("/execute_query", response_model=query_models.SQLResponse)

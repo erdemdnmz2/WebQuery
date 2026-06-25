@@ -30,6 +30,10 @@ async def async_client():
     app.state.db_provider = DatabaseProvider()
     await app.state.db_provider.start_cache_loop()
     
+    # Disable rate limiter for testing to prevent 429 Too Many Requests
+    if hasattr(app.state, "limiter"):
+        app.state.limiter.enabled = False
+    
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
