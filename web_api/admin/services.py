@@ -3,7 +3,7 @@ Admin Service Layer
 Admin approval and management operations for risky queries
 """
 from sqlalchemy.sql import select, text
-from typing import Any, List, Dict
+from typing import Any
 from app_database.models import QueryData, Workspace, User, Databases
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
@@ -13,6 +13,7 @@ from query_execution import config
 import logging
 from common.exceptions import BaseServiceException
 from workspaces.exceptions import WorkspaceNotFoundError
+from .exceptions import DatabaseAlreadyExistsError
 
 logger = logging.getLogger(__name__)
 
@@ -298,7 +299,7 @@ class AdminDBAdditionService(BaseAdminService):
                 ))
                 existing_db: Databases | None = existing.scalars().first()
                 if existing_db:
-                    raise BaseServiceException("Database already exists")
+                    raise DatabaseAlreadyExistsError("Database already exists")
 
                 database: Databases = Databases(servername=servername, database_name=database_name, technology=tech_name)
                 db.add(database)
