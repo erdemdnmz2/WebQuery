@@ -1,21 +1,25 @@
 """
 Database Provider Configuration
-Erişilebilir SQL Server instance listesi ve connection string template
+List of accessible SQL Server instances and connection string templates.
 """
 import os
 from typing import List
 from dotenv import load_dotenv
 
-# .env dosyasını yükle
+# Load .env file
 load_dotenv()
 
-# Environment'tan virgülle ayrılmış server listesi al, yoksa default kullan
+# Retrieve comma-separated server list from environment, otherwise use default
 _server_list = os.getenv("SQL_SERVER_NAMES", "localhost")
 SERVER_NAMES: List[str] = [s.strip() for s in _server_list.split(",") if s.strip()]
 
 # SQL Server authentication credentials
 DB_USER = os.getenv("DB_USER", "sa")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+
+# Central service account credentials for executing queries on target databases
+CENTRAL_DB_USER: str = os.getenv("CENTRAL_DB_USER", DB_USER)
+CENTRAL_DB_PASSWORD: str = os.getenv("CENTRAL_DB_PASSWORD", DB_PASSWORD)
 
 # Engine Cache Cleanup Interval (seconds)
 # Default: 1800 seconds (30 minutes)
@@ -31,13 +35,13 @@ TECHNOLOGY_DRIVER_MAP = {
 
 def get_driver_for_technology(technology: str) -> str:
     """
-    Database technology'sine göre uygun driver'ı döndürür.
+    Returns the appropriate driver for a given database technology.
     
     Args:
-        technology: Database teknolojisi (mssql, mysql, postgresql, vb.)
+        technology: Database technology (e.g., mssql, mysql, postgresql, etc.).
         
     Returns:
-        str: İlgili driver adı (aioodbc, aiomysql, asyncpg)
+        str: Corresponding driver name (e.g., aioodbc, aiomysql, asyncpg).
         
     Example:
         >>> get_driver_for_technology("mssql")
@@ -50,22 +54,23 @@ def get_driver_for_technology(technology: str) -> str:
     tech = technology.lower().strip()
     return TECHNOLOGY_DRIVER_MAP.get(tech, "aioodbc")  # default: aioodbc
 
-# Connection string builder fonksiyonları
+
+# Connection string builder functions
 def create_connection_string(tech: str, driver: str, username: str, password: str, servername: str, database: str) -> str:
     """
-    Kullanıcıya özel database connection string oluşturur.
-    Technology'ye göre uygun format kullanır.
+    Generates a database connection string using centralized or custom credentials.
+    Formats the string dynamically based on the technology.
     
     Args:
-        tech: Kullanılacak teknoloji örn: mssql, mysql, postgresql
-        driver: Kullanılacak driver örn: aioodbc, aiomysql, asyncpg
-        username: Database kullanıcı adı
-        password: Database şifresi
-        servername: Database server adı (ör: localhost, server1)
-        database: Bağlanılacak veritabanı adı
+        tech: Database technology e.g., mssql, mysql, postgresql.
+        driver: Database driver e.g., aioodbc, aiomysql, asyncpg.
+        username: Database username.
+        password: Database password.
+        servername: Database server hostname or IP.
+        database: Target database name.
         
     Returns:
-        str: İstenilen connection string
+        str: Formatted connection string.
     """
     tech = tech.lower()
     
@@ -84,7 +89,7 @@ def create_connection_string(tech: str, driver: str, username: str, password: st
         # PostgreSQL
         return f"postgresql+{driver}://{username}:{password}@{servername}/{database}"
     else:
-        # Default olarak MSSQL formatını kullan
+        # Fallback to MSSQL format
         return (
             f"{tech}+{driver}://{username}:{password}@{servername}/{database}"
             "?driver=ODBC+Driver+18+for+SQL+Server"
@@ -92,19 +97,20 @@ def create_connection_string(tech: str, driver: str, username: str, password: st
             "&connection timeout=30"
         )
 
+
 def get_master_connection_string(server: str) -> str:
     """
-    Master database'e bağlanmak için connection string oluşturur.
-    Veritabanı listesini almak için kullanılır (sys.databases sorgusu).
+    Generates a connection string for connecting to the master database.
+    Used for administrative metadata retrieval (e.g., sys.databases query).
     
     Args:
-        server: SQL Server instance adı
+        server: SQL Server instance name or address.
         
     Returns:
-        str: Master database için connection string
+        str: Connection string for the master database.
         
     Note:
-        DB_USER ve DB_PASSWORD environment variable'larından alınır
+        DB_USER and DB_PASSWORD are fetched from the environment variables.
     """
     return (
         f"mssql+aioodbc://{DB_USER}:{DB_PASSWORD}@{server}/master"

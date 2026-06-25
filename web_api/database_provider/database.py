@@ -9,8 +9,8 @@ import app_database.models as models
 from database_provider.config import (
     create_connection_string, 
     get_driver_for_technology,
-    DB_USER,
-    DB_PASSWORD
+    CENTRAL_DB_USER,
+    CENTRAL_DB_PASSWORD
 )
 from contextlib import asynccontextmanager
 from .engine_cache import EngineCache
@@ -77,8 +77,8 @@ class DatabaseProvider:
             driver=driver,
             servername=servername,
             database=database_name,
-            username=DB_USER,
-            password=DB_PASSWORD,
+            username=CENTRAL_DB_USER,
+            password=CENTRAL_DB_PASSWORD,
         )
         
         engine = await self.engine_cache.get_engine(conn_str, owner_id=user.id)
