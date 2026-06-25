@@ -4,7 +4,7 @@ Authentication Service Config
 import os
 from dotenv import load_dotenv
 
-# .env dosyasını yükle
+# Load .env file
 load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here-change-in-production")
