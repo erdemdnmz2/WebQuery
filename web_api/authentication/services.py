@@ -1,11 +1,11 @@
 """
 Authentication Service Layer
-JWT token oluşturma, doğrulama ve kullanıcı yetkilendirme işlemleri
+JWT token generation, verification, and user authorization operations.
 """
 from datetime import datetime, timedelta, UTC
 from typing import Optional
 from jose import JWTError, jwt
-from fastapi import HTTPException, status, Request, Depends
+from fastapi import HTTPException, status, Request
 from sqlalchemy.future import select
 
 from authentication import config
@@ -16,14 +16,14 @@ from app_database.app_database import AppDatabase
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """
-    JWT access token oluşturur
+    Generates a new JWT access token.
     
     Args:
-        data: Token içeriği (genellikle {"sub": user_id})
-        expires_delta: Token geçerlilik süresi (varsayılan: config.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+        data: Payload content (typically {"sub": user_id}).
+        expires_delta: Token expiration duration (defaults to config.ACCESS_TOKEN_EXPIRE_MINUTES).
+        
     Returns:
-        JWT token string
+        str: Generated JWT token string.
     """
     to_encode = data.copy()
     expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=config.ACCESS_TOKEN_EXPIRE_MINUTES))
@@ -34,13 +34,13 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 def verify_token(token: str) -> Optional[dict]:
     """
-    JWT token'ı doğrular
+    Validates a JWT token.
     
     Args:
-        token: JWT token string
-    
+        token: JWT token string.
+        
     Returns:
-        Token payload veya None
+        Optional[dict]: Decoded token payload if valid, otherwise None.
     """
     try:
         payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
@@ -51,13 +51,13 @@ def verify_token(token: str) -> Optional[dict]:
 
 def get_user_id_from_payload(payload: dict) -> Optional[str]:
     """
-    Token payload'ından user_id çıkarır
+    Extracts the user_id (sub) from the token payload.
     
     Args:
-        payload: JWT token payload
-    
+        payload: Decoded JWT token payload.
+        
     Returns:
-        User ID string veya None
+        Optional[str]: User ID string if present, otherwise None.
     """
     try:
         user_id = payload.get("sub")
@@ -70,26 +70,26 @@ async def get_current_user(
     request: Request
 ) -> User:
     """
-    Request'ten JWT token alır, doğrular ve User nesnesini döndürür
+    Extracts JWT token from Request, validates it, and returns the User object.
     
     Args:
-        request: FastAPI Request nesnesi
-    
+        request: FastAPI Request object.
+        
     Returns:
-        User: Authenticated user
-    
+        User: Authenticated user.
+        
     Raises:
-        HTTPException: Token geçersiz veya kullanıcı bulunamaz ise
+        HTTPException: If token is invalid or user is not found.
     """
-    # AppDatabase instance'ını request state'den al (Circular import önlemek için)
+    # Retrieve AppDatabase instance from request state to prevent circular imports
     app_db: AppDatabase = request.app.state.app_db
 
-    # Token'ı sadece cookie'den al
+    # Retrieve token solely from cookies
     token = request.cookies.get("access_token")
     
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Geçersiz token",
+        detail="Invalid token",
         headers={"WWW-Authenticate": "Bearer"}
     )
     
@@ -106,7 +106,7 @@ async def get_current_user(
         print(f"JWT Error: {str(e)}")
         raise credentials_exception
     
-    # AppDatabase'den user'ı çek
+    # Retrieve user from AppDatabase
     async with app_db.get_app_db() as db:
         result = await db.execute(select(User).filter(User.id == int(token_data.sub)))
         user = result.scalars().first()
