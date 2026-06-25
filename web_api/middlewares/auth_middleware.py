@@ -77,5 +77,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
             return response
         
-        response: StarletteResponse = await call_next(request)
-        return response
+        user_token = None
+        if user_id:
+            request.state.user_id = user_id
+            from common.logging_config import user_id_var
+            user_token = user_id_var.set(user_id)
+        
+        try:
+            response: StarletteResponse = await call_next(request)
+            return response
+        finally:
+            if user_token:
+                from common.logging_config import user_id_var
+                user_id_var.reset(user_token)
