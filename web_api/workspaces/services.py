@@ -14,6 +14,12 @@ from query_execution import config as query_config
 from database_provider import DatabaseProvider
 from app_database.models import User
 
+import logging
+from common.exceptions import BaseServiceException
+from workspaces.exceptions import WorkspaceNotFoundError, WorkspaceAccessDeniedError
+
+logger = logging.getLogger(__name__)
+
 class WorkspaceService:
     """
     Workspace CRUD operations service
@@ -72,8 +78,8 @@ class WorkspaceService:
             return {"success": True, "workspace_id": workspace.id}
         except Exception as e:
             await db.rollback()
-            print(f"Error creating workspace: {e}")
-            return {"success": False, "error": str(e)}
+            logger.error(f"Error creating workspace: {e}")
+            raise BaseServiceException(f"Error creating workspace: {str(e)}", original_exception=e)
         
     async def get_workspace_by_id(self, db: AsyncSession, user_id: int):
         """
@@ -135,7 +141,7 @@ class WorkspaceService:
             workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
             workspace = workspace_result.scalars().first()
             if not workspace:
-                return False
+                raise WorkspaceNotFoundError("Workspace not found")
             
             query_id = workspace.query_id
             
@@ -149,10 +155,12 @@ class WorkspaceService:
             
             await db.commit()
             return True
+        except BaseServiceException:
+            raise
         except Exception as e:
             await db.rollback()
-            print(f"Error deleting workspace: {e}")
-            return False
+            logger.error(f"Error deleting workspace: {e}")
+            raise BaseServiceException(f"Error deleting workspace: {str(e)}", original_exception=e)
     
     async def update_workspace(self, db: AsyncSession, workspace_id: int, query: str = None, status: str = None):
         """
@@ -171,12 +179,12 @@ class WorkspaceService:
             workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
             workspace = workspace_result.scalars().first()
             if not workspace:
-                return False
+                raise WorkspaceNotFoundError("Workspace not found")
             
             query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
             query_data = query_result.scalars().first()
             if not query_data:
-                return False
+                raise WorkspaceNotFoundError("Query data not found for this workspace")
             
             if query:
                 query_data.query = query
@@ -184,10 +192,12 @@ class WorkspaceService:
                 query_data.status = status
             await db.commit()
             return True
+        except BaseServiceException:
+            raise
         except Exception as e:
             await db.rollback()
-            print(f"Error updating workspace: {e}")
-            return False
+            logger.error(f"Error updating workspace: {e}")
+            raise BaseServiceException(f"Error updating workspace: {str(e)}", original_exception=e)
     
     async def get_workspace_detail_by_id(self, db: AsyncSession, workspace_id: int, user_id: int):
         """
@@ -203,12 +213,16 @@ class WorkspaceService:
         """
         workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
         workspace = workspace_result.scalars().first()
-        if not workspace or workspace.user_id != user_id:
-            return None
+        if not workspace:
+            raise WorkspaceNotFoundError("Workspace not found")
+        if workspace.user_id != user_id:
+            raise WorkspaceAccessDeniedError("You do not own this workspace")
+            
         query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
         query_data = query_result.scalars().first()
         if not query_data:
-            return None
+            raise WorkspaceNotFoundError("Query data not found for this workspace")
+            
         return {
             "id": workspace.id,
             "name": workspace.name,
@@ -240,46 +254,55 @@ class WorkspaceService:
             workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
             workspace: Workspace | None = workspace_result.scalars().first()
             if not workspace:
-                return {"response_type": "error", "data": [], "error": "Workspace not found"}
+                raise WorkspaceNotFoundError("Workspace not found")
+
+            if workspace.user_id != current_user.id:
+                raise WorkspaceAccessDeniedError("You do not own this workspace")
 
             query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
             query_data: QueryData | None = query_result.scalars().first()
             if not query_data:
-                return {"response_type": "error", "data": [], "error": "Query data not found"}
+                raise WorkspaceNotFoundError("Query data not found for this workspace")
+                
             # enforce approval
             if not workspace.show_results or query_data.status != "approved_with_results":
-                return {"response_type": "error", "data": [], "error": "This workspace is not approved for execution"}
+                from query_execution.exceptions import QueryAnalysisRejectedError
+                raise QueryAnalysisRejectedError("This workspace is not approved for execution")
 
         log_id: int | None = None
         try:
+            logger.info(f"Executing approved workspace {workspace_id} on server '{query_data.servername}'")
             log_id = await self.app_db.create_log(user=current_user, query=query_data.query, machine_name=query_data.servername, approved_execution=True)
 
             async with db_provider.get_session(user=current_user, servername=query_data.servername, database_name=query_data.database_name) as session:
-                sql_query = text(query_data.query)
-                result = await session.execute(sql_query)
-                
-                row_count: int = 0
-                message: str = ""
-                result_data: list[dict[str, Any]] = []
-                
-                if result.returns_rows:
-                    rows = result.fetchmany(size=query_config.MAX_ROW_COUNT_LIMIT)
-                    row_count = len(rows)
-                    if row_count >= query_config.MAX_ROW_COUNT_LIMIT:
-                        message = f"Truncated to MAX_ROW_COUNT_LIMIT ({query_config.MAX_ROW_COUNT_LIMIT})"
-                    else:
-                        message = f"{row_count} rows returned"
-                    result_data = [dict(row._mapping) for row in rows]
-                else:
-                    row_count = result.rowcount if result.rowcount is not None else 0
-                    message = f"{row_count} rows affected"
-                    result_data = []
+                  sql_query = text(query_data.query)
+                  result = await session.execute(sql_query)
+                  
+                  row_count: int = 0
+                  message: str = ""
+                  result_data: list[dict[str, Any]] = []
+                  
+                  if result.returns_rows:
+                      rows = result.fetchmany(size=query_config.MAX_ROW_COUNT_LIMIT)
+                      row_count = len(rows)
+                      if row_count >= query_config.MAX_ROW_COUNT_LIMIT:
+                          message = f"Truncated to MAX_ROW_COUNT_LIMIT ({query_config.MAX_ROW_COUNT_LIMIT})"
+                      else:
+                          message = f"{row_count} rows returned"
+                      result_data = [dict(row._mapping) for row in rows]
+                  else:
+                      row_count = result.rowcount if result.rowcount is not None else 0
+                      message = f"{row_count} rows affected"
+                      result_data = []
 
             await self.app_db.update_log(log_id=log_id, successfull=True, row_count=row_count)
-
+            logger.info(f"Workspace {workspace_id} executed successfully. Result: {message}")
             return {"response_type": "data", "data": result_data, "message": message}
 
+        except BaseServiceException:
+            raise
         except Exception as e:
             if log_id:
                 await self.app_db.update_log(log_id=log_id, successfull=False, error=str(e))
-            return {"response_type": "error", "data": [], "error": str(e)}
+            from query_execution.exceptions import QueryExecutionError
+            raise QueryExecutionError(str(e), original_exception=e)

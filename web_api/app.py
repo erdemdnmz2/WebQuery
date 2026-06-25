@@ -10,12 +10,19 @@ import asyncio
 env_file = os.getenv("ENV_FILE", ".env")
 load_dotenv(env_file)
 
-from fastapi import FastAPI
+from common.logging_config import setup_logging
+setup_logging()
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from common.exceptions import BaseServiceException
+from middlewares.trace_middleware import TraceMiddleware
+import logging
 from contextlib import asynccontextmanager
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from common.limiter import limiter
 import uvicorn
 from starlette.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -103,11 +110,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(AuthMiddleware)
+app.add_middleware(TraceMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 
 cors_origins_str = os.getenv("CORS_ALLOWED_ORIGINS", "*")
@@ -120,6 +127,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(BaseServiceException)
+async def service_exception_handler(request: Request, exc: BaseServiceException):
+    logger = logging.getLogger("web_api.exception")
+    if exc.original_exception:
+        logger.error(
+            f"Service Exception [{exc.code}] on {request.url.path}: {exc.message} - "
+            f"Underlying Error: {type(exc.original_exception).__name__}: {exc.original_exception}",
+            exc_info=exc.original_exception
+        )
+    else:
+        logger.warning(f"Service Exception [{exc.code}] on {request.url.path}: {exc.message}")
+    
+    trace_id = getattr(request.state, "request_id", "-")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "error_code": exc.code,
+            "message": exc.message,
+            "error": exc.message,  # Backward compatibility
+            "trace_id": trace_id
+        }
+    )
 
 from authentication.router import router as auth_router
 app.include_router(auth_router, tags=["Authentication"])

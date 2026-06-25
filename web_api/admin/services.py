@@ -10,6 +10,12 @@ from database_provider import DatabaseProvider
 from .schemas import AdminApprovals
 from query_execution import config
 
+import logging
+from common.exceptions import BaseServiceException
+from workspaces.exceptions import WorkspaceNotFoundError
+
+logger = logging.getLogger(__name__)
+
 class BaseAdminService:
     """
     Base class for all admin services.
@@ -229,13 +235,13 @@ class AdminApprovalService(BaseAdminService):
                 workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
                 workspace: Workspace | None = workspace_result.scalars().first()
                 if not workspace:
-                    return {"success": False, "error": "Workspace not found"}
+                    raise WorkspaceNotFoundError("Workspace not found")
                 
                 # 2. Fetch related QueryData
                 query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
                 query_data: QueryData | None = query_result.scalars().first()
                 if not query_data:
-                    return {"success": False, "error": "Query data not found"}
+                    raise WorkspaceNotFoundError("Query data not found for this workspace")
                 
                 # 3. Update status and description
                 new_status: str = ""
@@ -254,18 +260,18 @@ class AdminApprovalService(BaseAdminService):
                 
                 await db.commit()
                 
+                logger.info(f"Query in workspace {workspace_id} approved by admin (Executable: {show_results})")
                 return {
                     "success": True,
                     "status": new_status,
                     "message": f"Query approved successfully ({'executable' if show_results else 'not executable'})"
                 }
+            except BaseServiceException:
+                raise
             except Exception as e:
                 await db.rollback()
-                print(f"Approval failed: {e}")
-                return {
-                    "success": False,
-                    "error": f"Approval failed: {str(e)}"
-                }
+                logger.error(f"Approval failed for workspace {workspace_id}: {e}")
+                raise BaseServiceException(f"Approval failed: {str(e)}", original_exception=e)
 
 class AdminDBAdditionService(BaseAdminService):
     """
@@ -292,13 +298,16 @@ class AdminDBAdditionService(BaseAdminService):
                 ))
                 existing_db: Databases | None = existing.scalars().first()
                 if existing_db:
-                    return {"success": False, "error": "Database already exists"}
+                    raise BaseServiceException("Database already exists")
 
                 database: Databases = Databases(servername=servername, database_name=database_name, technology=tech_name)
                 db.add(database)
                 await db.commit()
+                logger.info(f"Database '{database_name}' on server '{servername}' successfully added by admin")
                 return {"success": True, "message": "Database added successfully"}
+            except BaseServiceException:
+                raise
             except Exception as e:
                 await db.rollback()
-                print(f"Error adding database: {e}")
-                return {"success": False, "error": str(e)}
+                logger.error(f"Error adding database: {e}")
+                raise BaseServiceException(f"Error adding database: {str(e)}", original_exception=e)

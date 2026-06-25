@@ -18,6 +18,12 @@ from app_database.models import User, QueryData, Workspace
 from query_execution.query_analyzer import QueryAnalyzer
 from notification import NotificationService
 
+import logging
+from common.exceptions import BaseServiceException
+from query_execution.exceptions import QueryExecutionError, QueryAnalysisRejectedError
+
+logger = logging.getLogger(__name__)
+
 class QueryService:
     """
     Query execution, security analysis, and logging service.
@@ -59,6 +65,7 @@ class QueryService:
         """
         log_id: int | None = None
         try:
+            logger.info(f"Initiating query execution on server '{server_name}', database '{database_name}'")
             log_id = await self.app_db.create_log(user=user, query=query, machine_name=server_name)
             
             # Resolve target database technology from the database provider config
@@ -102,9 +109,9 @@ class QueryService:
                         workspace_id: int = workspace.id
                         await db_session.commit()
                         
-                    print(f"Query saved for approval - Workspace ID: {workspace_id}, UUID: {query_uuid}")
+                    logger.info(f"Query saved for approval - Workspace ID: {workspace_id}, UUID: {query_uuid}")
                 except Exception as save_exc:
-                    print(f"Failed to save query for approval: {type(save_exc).__name__}: {save_exc}")
+                    logger.error(f"Failed to save query for approval: {type(save_exc).__name__}: {save_exc}")
                 
                 try:
                     if self.notification_service:
@@ -119,13 +126,11 @@ class QueryService:
                             query=query
                         )
                 except Exception as notif_exc:
-                    print(f"Notification send error: {type(notif_exc).__name__}: {notif_exc}")
+                    logger.error(f"Notification send error: {type(notif_exc).__name__}: {notif_exc}")
                 
-                return {
-                    "response_type": "error",
-                    "data": [],
-                    "error": f"{error_msg}. Query saved to your workspaces and sent for admin approval."
-                }
+                raise QueryAnalysisRejectedError(
+                    message=f"{error_msg}. Query saved to your workspaces and sent for admin approval."
+                )
                 
             async with self.database_provider.get_session(
                 user=user,
@@ -167,21 +172,22 @@ class QueryService:
                 )
                 
                 if row_count > config.MAX_ROW_COUNT_WARNING:
-                    print(f"Warning: Query returned {row_count} rows")
+                    logger.warning(f"Query returned high row count: {row_count} rows")
+                
+                logger.info(f"Query executed successfully. Result: {message}")
                 return result_data
                 
+        except BaseServiceException:
+            # Re-raise already translated service exceptions
+            raise
         except Exception as e:
             error_msg: str = str(e)
-            print(f"Query execution error: {error_msg}")
+            logger.error(f"Query execution failed: {error_msg}")
             if log_id:
                 await self.app_db.update_log(
                     log_id=log_id,
                     successfull=False,
                     error=error_msg
                 )
-            return {
-                "response_type": "error",
-                "data": [],
-                "error": error_msg
-            }
+            raise QueryExecutionError(error_msg, original_exception=e)
  
