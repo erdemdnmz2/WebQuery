@@ -1,13 +1,13 @@
 """
 Application Database Configuration
 
-Uygulama veritabanı bağlantı ayarları.
-Kullanıcı yönetimi, loglama ve workspace verilerini tutan veritabanı için kullanılır.
+Application metadata database connection settings.
+Used for user management, auditing logs, and workspace configuration storage.
 
 Environment Variables:
-    DB_USER: SQL Server kullanıcı adı (default: "sa")
-    DB_PASSWORD: SQL Server şifresi (default: "")
-    APP_DATABASE_URL: Tam connection string (override için)
+    DB_USER: SQL Server username (default: "sa")
+    DB_PASSWORD: SQL Server password (default: "")
+    APP_DATABASE_URL: Full connection string (optional override)
 """
 import os
 from dotenv import load_dotenv

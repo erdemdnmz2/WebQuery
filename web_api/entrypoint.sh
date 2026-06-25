@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Veritabanı bağlantısını bekle (Retry mekanizması)
+# Wait for database connection (Retry mechanism)
 echo "Waiting for SQL Server to be ready..."
 max_retries=30
 count=0
@@ -21,5 +21,5 @@ if [ $count -eq $max_retries ]; then
     exit 1
 fi
 
-# Uygulamayı başlat
+# Start the application
 exec "$@"
