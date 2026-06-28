@@ -3,6 +3,7 @@ Workspace Service Layer
 User workspace (saved query) management operations
 """
 from typing import Any, List, Dict
+import json
 from app_database.models import QueryData, Workspace, Databases
 from app_database.app_database import AppDatabase
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,8 @@ from app_database.models import User
 import logging
 from common.exceptions import BaseServiceException
 from workspaces.exceptions import WorkspaceNotFoundError, WorkspaceAccessDeniedError
+from query_execution.exceptions import QueryAnalysisRejectedError, QueryExecutionError
+from common.security import mask_result_set
 
 logger = logging.getLogger(__name__)
 
@@ -267,7 +270,6 @@ class WorkspaceService:
                 
             # enforce approval
             if not workspace.show_results or query_data.status != "approved_with_results":
-                from query_execution.exceptions import QueryAnalysisRejectedError
                 raise QueryAnalysisRejectedError("This workspace is not approved for execution")
 
         log_id: int | None = None
@@ -313,14 +315,12 @@ class WorkspaceService:
                       
                       result_data = [dict(row._mapping) for row in rows]
                       if not current_user.is_admin and masking_cols:
-                          from common.security import mask_result_set
                           result_data = mask_result_set(result_data, masking_cols)
                   else:
                       row_count = result.rowcount if result.rowcount is not None else 0
                       message = f"{row_count} rows affected"
                       result_data = []
 
-            import json
             applied_rules_str = json.dumps(list(masking_cols)) if masking_cols else None
             await self.app_db.update_log(log_id=log_id, successfull=True, row_count=row_count, applied_masking_rules=applied_rules_str)
             
@@ -332,5 +332,4 @@ class WorkspaceService:
         except Exception as e:
             if log_id:
                 await self.app_db.update_log(log_id=log_id, successfull=False, error=str(e))
-            from query_execution.exceptions import QueryExecutionError
             raise QueryExecutionError(str(e), original_exception=e)

@@ -10,6 +10,7 @@ from fastapi import Request
 import os
 from authentication.services import verify_token, get_user_id_from_payload
 from fastapi.exceptions import HTTPException
+from common.logging_config import user_id_var
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """
@@ -88,7 +89,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         user_token = None
         if user_id:
             request.state.user_id = user_id
-            from common.logging_config import user_id_var
             user_token = user_id_var.set(user_id)
         
         try:
@@ -96,5 +96,4 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return response
         finally:
             if user_token:
-                from common.logging_config import user_id_var
                 user_id_var.reset(user_token)

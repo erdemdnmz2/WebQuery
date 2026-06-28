@@ -5,15 +5,18 @@ Strictly typed and documented.
 """
 from sqlalchemy.sql import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from datetime import datetime, timezone
 from typing import Dict, Any, List
+import json
 
 import uuid
 
 from query_execution import config
 from database_provider import DatabaseProvider
 from app_database.app_database import AppDatabase
-from app_database.models import User, QueryData, Workspace
+from app_database.models import User, QueryData, Workspace, Databases
+from common.security import mask_result_set
 
 from query_execution.query_analyzer import QueryAnalyzer
 from notification import NotificationService
@@ -73,8 +76,6 @@ class QueryService:
             db_id = None
             masking_cols = set()
             async with self.app_db.get_app_db() as db_session:
-                from sqlalchemy.future import select
-                from app_database.models import Databases
                 db_result = await db_session.execute(
                     select(Databases).where(Databases.servername == server_name, Databases.database_name == database_name)
                 )
@@ -177,7 +178,6 @@ class QueryService:
                     
                     raw_data = [dict(row._mapping) for row in rows]
                     if not user.is_admin and masking_cols:
-                        from common.security import mask_result_set
                         raw_data = mask_result_set(raw_data, masking_cols)
                         
                     result_data = {
@@ -194,7 +194,6 @@ class QueryService:
                         "message": message
                     }
                 
-                import json
                 applied_rules_str = json.dumps(list(masking_cols)) if masking_cols else None
                 await self.app_db.update_log(
                     log_id=log_id,
@@ -228,8 +227,6 @@ class QueryService:
         Retrieves column names that are persistently masked for a given server and database.
         """
         async with self.app_db.get_app_db() as db:
-            from sqlalchemy.future import select
-            from app_database.models import Databases
             db_result = await db.execute(
                 select(Databases).where(Databases.servername == servername, Databases.database_name == database_name)
             )

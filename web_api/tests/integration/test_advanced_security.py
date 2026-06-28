@@ -3,6 +3,7 @@ from httpx import AsyncClient
 from unittest.mock import MagicMock, AsyncMock, patch
 from contextlib import asynccontextmanager
 from sqlalchemy.future import select
+from sqlalchemy import text, delete
 from datetime import datetime
 
 from app import app
@@ -102,7 +103,6 @@ async def test_encryption_at_rest(async_client: AsyncClient):
     
     # 2. Query the raw SQLite database directly to verify the db_password column is encrypted (not plaintext)
     async with app_db.app_engine.connect() as conn:
-        from sqlalchemy import text
         raw_result = await conn.execute(text("SELECT db_password FROM Databases WHERE database_name = 'secure_db'"))
         raw_password = raw_result.scalar()
         
@@ -140,7 +140,6 @@ async def test_dynamic_data_masking(async_client: AsyncClient, mock_db_session):
     # 1. Register DB and setup persistent masking rules for "email" and "phone"
     async with app_db.get_app_db() as db:
         # Clear existing DB entries to prevent conflict
-        from sqlalchemy import delete
         await db.execute(delete(Databases).where(Databases.database_name == "mask_db"))
         await db.execute(delete(MaskingRule))
         

@@ -2,6 +2,11 @@
 Authentication Service Layer
 JWT token generation, verification, and user authorization operations.
 """
+import base64
+import os
+import re
+import bcrypt
+import uuid
 from datetime import datetime, timedelta, UTC
 from typing import Optional
 from jose import JWTError, jwt
@@ -27,7 +32,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     """
     to_encode = data.copy()
     expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=config.ACCESS_TOKEN_EXPIRE_MINUTES))
-    import uuid
     jti = uuid.uuid4().hex
     to_encode.update({"exp": expire, "jti": jti})
     encoded_jwt = jwt.encode(to_encode, config.SECRET_KEY, algorithm=config.ALGORITHM)

@@ -6,6 +6,9 @@ Strictly typed and documented.
 from fastapi import APIRouter, HTTPException, Response, Request, Depends
 import os
 from typing import Any
+from datetime import datetime, timezone
+from jose import jwt
+from sqlalchemy.future import select
 from common.limiter import limiter
 
 from authentication.exceptions import UserAlreadyExistsError
@@ -45,8 +48,6 @@ async def login(
         dict[str, str]: The access token response.
     """
     async with app_db.get_app_db() as db:
-        from sqlalchemy.future import select
-        
         result = await db.execute(select(User).where(User.email == user.email))
         authenticated_user: User | None = result.scalars().first()
         
@@ -96,8 +97,6 @@ async def register(
         dict[str, any]: A dictionary indicating success or failure.
     """
     async with app_db.get_app_db() as db:
-        from sqlalchemy.future import select
-        
         result = await db.execute(select(User).where(User.email == user.email))
         existing_user: User | None = result.scalars().first()
         
@@ -170,10 +169,6 @@ async def logout(
     token = request.cookies.get("access_token")
     if token:
         try:
-            from jose import jwt
-            from authentication import config
-            from datetime import datetime, timezone
-            
             payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
             jti = payload.get("jti")
             exp = payload.get("exp")
