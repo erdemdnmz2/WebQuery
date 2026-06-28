@@ -24,7 +24,7 @@ const Login: React.FC = () => {
         navigate('/');
       } else {
         const data = await response?.json();
-        setError(data?.error || "Connection refused. Ensure the backend is running.");
+        setError(data?.detail || data?.error || "Connection refused. Ensure the backend is running.");
       }
     } catch (err) {
       setError("Network error occurred while attempting to establish connection.");

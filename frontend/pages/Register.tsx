@@ -26,7 +26,7 @@ const Register: React.FC = () => {
         setTimeout(() => navigate('/login'), 2000);
       } else {
         const data = await response?.json();
-        setMessage({ type: 'error', text: data?.error || 'Registration failed.' });
+        setMessage({ type: 'error', text: data?.detail || data?.error || 'Registration failed.' });
       }
     } catch (err) {
       setMessage({ type: 'error', text: 'A network error occurred.' });

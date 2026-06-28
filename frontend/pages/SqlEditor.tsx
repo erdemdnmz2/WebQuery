@@ -21,6 +21,12 @@ const SqlEditor: React.FC = () => {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null);
 
+  // --- Ad-hoc Masking State ---
+  const [persistentMaskedCols, setPersistentMaskedCols] = useState<string[]>([]);
+  const [adHocMaskCols, setAdHocMaskCols] = useState<string[]>([]);
+  const [newAdHocCol, setNewAdHocCol] = useState('');
+  const [showMaskingModal, setShowMaskingModal] = useState(false);
+
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [saveDesc, setSaveDesc] = useState('');
@@ -36,6 +42,28 @@ const SqlEditor: React.FC = () => {
       loadWorkspace(parseInt(workspaceId));
     }
   }, [workspaceId]);
+
+  // Fetch persistently masked columns for the active server/database
+  useEffect(() => {
+    if (selectedServer && selectedDatabase) {
+      fetchPersistentMaskingRules();
+    } else {
+      setPersistentMaskedCols([]);
+    }
+    setAdHocMaskCols([]); // Clear ad-hoc columns when changing server or database
+  }, [selectedServer, selectedDatabase]);
+
+  const fetchPersistentMaskingRules = async () => {
+    try {
+      const res = await authenticatedFetch(`/api/masking_rules?servername=${selectedServer}&database_name=${selectedDatabase}`);
+      if (res?.ok) {
+        const data = await res.json();
+        setPersistentMaskedCols(data || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch persistent masking rules:", e);
+    }
+  };
 
   useEffect(() => {
     if (selectedServer && servers[selectedServer]) {
@@ -104,7 +132,12 @@ const SqlEditor: React.FC = () => {
       const res = await authenticatedFetch('/api/execute_query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, servername: selectedServer, database_name: selectedDatabase })
+        body: JSON.stringify({ 
+          query, 
+          servername: selectedServer, 
+          database_name: selectedDatabase,
+          ad_hoc_mask_columns: adHocMaskCols
+        })
       });
       if (res) {
         const data = await res.json();
@@ -281,6 +314,22 @@ const SqlEditor: React.FC = () => {
           >
             {loading ? '...' : (currentWorkspace ? 'UPDATE' : 'SAVE')}
           </button>
+          <button
+            onClick={() => setShowMaskingModal(true)}
+            disabled={!selectedServer || !selectedDatabase || loading}
+            className="bg-amber-600/10 hover:bg-amber-600 text-amber-400 hover:text-white px-4 py-2 rounded-lg border border-amber-600/30 transition shadow-lg text-sm font-bold disabled:opacity-50 flex items-center gap-1.5"
+            title="Maskeleme Ayarları"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            MASKELEME
+            {(persistentMaskedCols.length > 0 || adHocMaskCols.length > 0) && (
+              <span className="bg-amber-500 text-gray-950 text-[10px] font-extrabold px-1.5 py-0.2 rounded-full leading-none">
+                {persistentMaskedCols.length + adHocMaskCols.length}
+              </span>
+            )}
+          </button>
           <button onClick={executeQuery} disabled={loading} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2 rounded-lg text-sm font-black shadow-xl transition-all flex items-center gap-2 tracking-widest active:scale-95 disabled:opacity-50">
             {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : 'RUN'}
           </button>
@@ -390,6 +439,107 @@ const SqlEditor: React.FC = () => {
             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-lg font-black shadow-xl transition-all disabled:opacity-30 tracking-widest"
           >
             {loading ? 'SAVING...' : 'SAVE WORKSPACE'}
+          </button>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showMaskingModal} onClose={() => setShowMaskingModal(false)} title="Veri Maskeleme Ayarları">
+        <div className="space-y-4">
+          <div className="text-xs text-gray-400 leading-relaxed">
+            Bu sorgu çalıştırılırken maskelenecek kolonları yönetin. Admin tarafından tanımlanmış kalıcı kurallar otomatik olarak uygulanır ve devre dışı bırakılamaz. Ek olarak geçici ad-hoc kurallar tanımlayabilirsiniz.
+          </div>
+
+          {/* Persistent Admin Masking Rules (Read-only) */}
+          <div>
+            <label className="block text-[10px] text-gray-500 font-black uppercase mb-2 tracking-wider">Yönetici Maskeleme Kuralları (Kalıcı)</label>
+            {persistentMaskedCols.length === 0 ? (
+              <div className="bg-gray-950 border border-gray-850 p-3 rounded-lg text-xs text-gray-500 italic">
+                Bu veritabanı için yönetici tarafından tanımlanmış kalıcı maskeleme kuralı bulunmuyor.
+              </div>
+            ) : (
+              <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                {persistentMaskedCols.map(col => (
+                  <div key={col} className="flex items-center justify-between bg-gray-950 border border-gray-850/60 px-3 py-2 rounded-lg text-xs">
+                    <span className="font-mono text-gray-300">{col}</span>
+                    <span className="text-[9px] font-bold uppercase bg-red-950/45 text-red-400 border border-red-900/30 px-2 py-0.5 rounded-full select-none">
+                      Kalıcı Maskeli
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* User Ad-Hoc Masking Rules */}
+          <div>
+            <label className="block text-[10px] text-gray-500 font-black uppercase mb-2 tracking-wider">Geçici Maskeleme Kuralları (Ad-Hoc)</label>
+            
+            {/* Input field to add custom columns */}
+            <div className="flex gap-2 mb-3">
+              <input
+                type="text"
+                value={newAdHocCol}
+                onChange={e => setNewAdHocCol(e.target.value)}
+                placeholder="örn. email, salary, phone_number"
+                className="flex-1 bg-gray-950 border border-gray-850 focus:border-indigo-500 rounded-lg px-3 py-2 text-white outline-none text-xs font-mono"
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (newAdHocCol.trim()) {
+                      const trimmed = newAdHocCol.trim().toLowerCase();
+                      if (!persistentMaskedCols.includes(trimmed) && !adHocMaskCols.includes(trimmed)) {
+                        setAdHocMaskCols([...adHocMaskCols, trimmed]);
+                      }
+                      setNewAdHocCol('');
+                    }
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (newAdHocCol.trim()) {
+                    const trimmed = newAdHocCol.trim().toLowerCase();
+                    if (!persistentMaskedCols.includes(trimmed) && !adHocMaskCols.includes(trimmed)) {
+                      setAdHocMaskCols([...adHocMaskCols, trimmed]);
+                    }
+                    setNewAdHocCol('');
+                  }
+                }}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 rounded-lg text-xs font-bold transition"
+              >
+                Ekle
+              </button>
+            </div>
+
+            {adHocMaskCols.length === 0 ? (
+              <div className="bg-gray-950 border border-gray-850 p-3 rounded-lg text-xs text-gray-500 italic">
+                Sadece bu işlem için geçerli olmak üzere ek maskelenecek kolon adı girin.
+              </div>
+            ) : (
+              <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                {adHocMaskCols.map(col => (
+                  <div key={col} className="flex items-center justify-between bg-gray-950 border border-gray-850/60 px-3 py-2 rounded-lg text-xs">
+                    <span className="font-mono text-indigo-300">{col}</span>
+                    <button
+                      type="button"
+                      onClick={() => setAdHocMaskCols(adHocMaskCols.filter(c => c !== col))}
+                      className="text-gray-500 hover:text-red-400 transition-all font-bold text-xs"
+                      title="Kuralı kaldır"
+                    >
+                      Kaldır
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => setShowMaskingModal(false)}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-2.5 rounded-lg font-bold text-xs transition tracking-widest uppercase mt-2 shadow-lg"
+          >
+            Tamam
           </button>
         </div>
       </Modal>
