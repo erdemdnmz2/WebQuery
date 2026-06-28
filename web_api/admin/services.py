@@ -2,9 +2,10 @@
 Admin Service Layer
 Admin approval and management operations for risky queries
 """
+from sqlalchemy import inspect, delete
 from sqlalchemy.sql import select, text
 from typing import Any
-from app_database.models import QueryData, Workspace, User, Databases
+from app_database.models import QueryData, Workspace, User, Databases, MaskingRule
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
 from .schemas import AdminApprovals
@@ -14,6 +15,7 @@ import logging
 from common.exceptions import BaseServiceException
 from workspaces.exceptions import WorkspaceNotFoundError
 from .exceptions import DatabaseAlreadyExistsError
+from common.security import generate_secure_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +61,90 @@ class AdminService(BaseAdminService):
             
     async def approve(self, workspace_id: int, show_results: bool):
         return await self.approval_service.approve(workspace_id, show_results)
+
+    async def list_databases(self) -> list[Databases]:
+        async with self.app_db.get_app_db() as db:
+            result = await db.execute(select(Databases))
+            return list(result.scalars().all())
+
+    async def discover_schema(self, database_id: int, admin_user: User) -> dict[str, list[str]]:
+        async with self.app_db.get_app_db() as db:
+            db_entry = await db.get(Databases, database_id)
+            if not db_entry:
+                return {}
+            servername = db_entry.servername
+            database_name = db_entry.database_name
+            
+        db_info = await self.app_db.get_db_info()
+        self.db_provider.set_db_info(db_info)
+        
+        try:
+            async with self.db_provider.get_session(admin_user, servername, database_name) as session:
+                def get_schema(connection):
+                    inspector = inspect(connection)
+                    schema = {}
+                    
+                    # Retrieve all schemas in the database
+                    schemas = inspector.get_schema_names()
+                    system_schemas = {
+                        'sys', 'information_schema', 'guest', 'db_owner', 'db_accessadmin',
+                        'db_securityadmin', 'db_ddladmin', 'db_backupoperator',
+                        'db_datareader', 'db_datawriter', 'db_denydatareader', 'db_denydatawriter'
+                    }
+                    
+                    for schema_name in schemas:
+                        # Skip database role and system schemas
+                        if schema_name.lower() in system_schemas or schema_name.lower().startswith('db_'):
+                            continue
+                        
+                        try:
+                            # Retrieve all tables in this schema
+                            tables = inspector.get_table_names(schema=schema_name)
+                            for table_name in tables:
+                                # Format table names as "schema_name.table_name" for clear identification
+                                full_table_name = f"{schema_name}.{table_name}"
+                                schema[full_table_name] = [
+                                    col["name"] for col in inspector.get_columns(table_name, schema=schema_name)
+                                ]
+                        except Exception as e:
+                            logger.warning(f"Failed to inspect schema '{schema_name}' for database {database_id}: {e}")
+                            continue
+                            
+                    return schema
+
+                connection = await session.connection()
+                schema = await connection.run_sync(get_schema)
+                return schema
+        except Exception as e:
+            logger.error(f"Failed to discover schema for database {database_id}: {e}")
+            return {}
+
+    async def get_all_masking_rules(self, database_id: int) -> list[MaskingRule]:
+        async with self.app_db.get_app_db() as db:
+            result = await db.execute(
+                select(MaskingRule).where(MaskingRule.database_id == database_id)
+            )
+            return list(result.scalars().all())
+
+    async def save_masking_rules(self, database_id: int, rules_data: list) -> bool:
+        async with self.app_db.get_app_db() as db:
+            try:
+                await db.execute(delete(MaskingRule).where(MaskingRule.database_id == database_id))
+                for rule in rules_data:
+                    new_rule = MaskingRule(
+                        database_id=database_id,
+                        table_name=rule.table_name,
+                        column_name=rule.column_name,
+                        masking_type=rule.masking_type,
+                        is_active=rule.is_active
+                    )
+                    db.add(new_rule)
+                await db.commit()
+                return True
+            except Exception as e:
+                await db.rollback()
+                logger.error(f"Failed to save masking rules for database {database_id}: {e}")
+                return False
 
 class AdminApprovalService(BaseAdminService):
     """
@@ -301,11 +387,29 @@ class AdminDBAdditionService(BaseAdminService):
                 if existing_db:
                     raise DatabaseAlreadyExistsError("Database already exists")
 
-                database: Databases = Databases(servername=servername, database_name=database_name, technology=tech_name)
+                db_username, db_password = generate_secure_credentials()
+
+                database: Databases = Databases(
+                    servername=servername, 
+                    database_name=database_name, 
+                    technology=tech_name,
+                    db_username=db_username,
+                    db_password=db_password
+                )
                 db.add(database)
                 await db.commit()
-                logger.info(f"Database '{database_name}' on server '{servername}' successfully added by admin")
-                return {"success": True, "message": "Database added successfully"}
+                
+                # Refresh db_provider db_info dynamically
+                db_info = await self.app_db.get_db_info()
+                self.db_provider.set_db_info(db_info)
+                
+                logger.info(f"Database '{database_name}' on server '{servername}' successfully added by admin with generated credentials")
+                return {
+                    "success": True, 
+                    "message": "Database added successfully",
+                    "db_username": db_username,
+                    "db_password": db_password
+                }
             except BaseServiceException:
                 raise
             except Exception as e:

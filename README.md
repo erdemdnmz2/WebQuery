@@ -138,6 +138,28 @@ The API will be accessible at `http://localhost:8080` with interactive Swagger d
 
 ---
 
+## Frontend Setup (Development)
+
+The WebQuery frontend is a modern React application built with Vite, TypeScript, and Tailwind CSS.
+
+### 1. Navigate to the Frontend Directory
+```bash
+cd frontend
+```
+
+### 2. Install Dependencies
+```bash
+npm install
+```
+
+### 3. Run the Development Server
+```bash
+npm run dev
+```
+The application will be accessible at `http://localhost:5173` (or the port specified by Vite) and will automatically proxy API requests to the backend server running at `http://localhost:8080`.
+
+---
+
 ## Testing
 
 WebQuery comes with a comprehensive testing suite that executes completely in memory using an SQLite async memory database (`sqlite+aiosqlite:///:memory:`) to verify routes, middlewares, error translation, and SQL execution without modifying any external resources.

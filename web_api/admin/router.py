@@ -3,7 +3,17 @@ Admin Router
 Admin query approval/rejection endpoints
 """
 from fastapi import APIRouter, Depends, status, HTTPException, Response
-from .schemas import AdminApprovalsList, AdminPreviewResponse, ApprovalRequest, DatabaseAddRequest
+from typing import List
+from .schemas import (
+    AdminApprovalsList, 
+    AdminPreviewResponse, 
+    ApprovalRequest, 
+    DatabaseAddRequest,
+    DatabaseListResponse,
+    DatabaseResponseSchema,
+    MaskingRuleSchema,
+    MaskingRulesSaveRequest
+)
 from dependencies import get_admin_service, admin_required
 from .services import AdminService
 from app_database.models import User
@@ -95,9 +105,84 @@ async def add_database(
     )
     
     if result.get("success"):
-        return {"message": result.get("message")}
+        return {
+            "message": result.get("message"),
+            "db_username": result.get("db_username"),
+            "db_password": result.get("db_password")
+        }
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=result.get("error", "Failed to add database")
+        )
+
+@router.get("/databases", response_model=DatabaseListResponse)
+async def list_databases(
+    current_admin: User = Depends(admin_required),
+    service: AdminService = Depends(get_admin_service)
+):
+    """
+    Lists all registered databases in the system.
+    """
+    dbs = await service.list_databases()
+    return {"databases": [
+        DatabaseResponseSchema(
+            id=db.id,
+            servername=db.servername,
+            database_name=db.database_name,
+            technology=db.technology,
+            db_username=db.db_username
+        )
+        for db in dbs
+    ]}
+
+@router.get("/databases/{database_id}/discover_schema")
+async def discover_schema(
+    database_id: int,
+    current_admin: User = Depends(admin_required),
+    service: AdminService = Depends(get_admin_service)
+):
+    """
+    Inspects and returns the schema (tables and columns) of a database.
+    """
+    schema = await service.discover_schema(database_id, current_admin)
+    return schema
+
+@router.get("/databases/{database_id}/masking_rules", response_model=List[MaskingRuleSchema])
+async def get_masking_rules(
+    database_id: int,
+    current_admin: User = Depends(admin_required),
+    service: AdminService = Depends(get_admin_service)
+):
+    """
+    Gets all masking rules for a database.
+    """
+    rules = await service.get_all_masking_rules(database_id)
+    return [
+        MaskingRuleSchema(
+            table_name=r.table_name,
+            column_name=r.column_name,
+            masking_type=r.masking_type,
+            is_active=r.is_active
+        )
+        for r in rules
+    ]
+
+@router.post("/databases/{database_id}/masking_rules")
+async def save_masking_rules(
+    database_id: int,
+    request: MaskingRulesSaveRequest,
+    current_admin: User = Depends(admin_required),
+    service: AdminService = Depends(get_admin_service)
+):
+    """
+    Saves/updates the masking rules for a database.
+    """
+    success = await service.save_masking_rules(database_id, request.rules)
+    if success:
+        return {"success": True, "message": "Masking rules saved successfully"}
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to save masking rules"
         )

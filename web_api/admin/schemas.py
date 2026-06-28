@@ -75,3 +75,26 @@ class DatabaseAddRequest(BaseModel):
     servername: str
     database_name: str
     tech_name: str
+
+
+class MaskingRuleSchema(BaseModel):
+    table_name: str
+    column_name: str
+    masking_type: str = "default"
+    is_active: bool = True
+
+
+class MaskingRulesSaveRequest(BaseModel):
+    rules: List[MaskingRuleSchema]
+
+
+class DatabaseResponseSchema(BaseModel):
+    id: int
+    servername: str
+    database_name: str
+    technology: str
+    db_username: Optional[str] = None
+
+
+class DatabaseListResponse(BaseModel):
+    databases: List[DatabaseResponseSchema]
