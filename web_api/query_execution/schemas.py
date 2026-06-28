@@ -11,6 +11,7 @@ class SQLQuery(BaseModel):
     servername: str
     database_name: str
     query: str
+    ad_hoc_mask_columns: Optional[List[str]] = None
 
 
 class SQLResponse(BaseModel):
@@ -26,6 +27,7 @@ class ExecutionInfo(BaseModel):
     servername: str
     database_name: str
     query: str
+    ad_hoc_mask_columns: Optional[List[str]] = None
 
 
 class MultipleQueryRequest(BaseModel):

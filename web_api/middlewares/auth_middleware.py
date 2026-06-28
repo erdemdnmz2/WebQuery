@@ -60,6 +60,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
             user_id: str | None = get_user_id_from_payload(payload=payload)
             if not user_id:
                 raise HTTPException(status_code=401, detail="Invalid token")
+                
+            # Check JTI blacklist
+            jti = payload.get("jti")
+            if jti:
+                app_db = request.app.state.app_db
+                is_blacklisted = await app_db.is_token_blacklisted(jti)
+                if is_blacklisted:
+                    raise HTTPException(status_code=401, detail="Token has been revoked")
         except Exception as e:
             print(f"Auth verification failed: {e}")
             if request.url.path.startswith("/api/"):

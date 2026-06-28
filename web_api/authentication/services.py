@@ -27,7 +27,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     """
     to_encode = data.copy()
     expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=config.ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
+    import uuid
+    jti = uuid.uuid4().hex
+    to_encode.update({"exp": expire, "jti": jti})
     encoded_jwt = jwt.encode(to_encode, config.SECRET_KEY, algorithm=config.ALGORITHM)
     return encoded_jwt
 
@@ -99,12 +101,19 @@ async def get_current_user(
     try:
         payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
         user_id: str = payload.get("sub")
+        jti: str = payload.get("jti")
         if user_id is None:
             raise credentials_exception
         token_data = TokenData(sub=user_id)
     except JWTError as e:
         print(f"JWT Error: {str(e)}")
         raise credentials_exception
+        
+    # Check if token is blacklisted
+    if jti:
+        is_blacklisted = await app_db.is_token_blacklisted(jti)
+        if is_blacklisted:
+            raise credentials_exception
     
     # Retrieve user from AppDatabase
     async with app_db.get_app_db() as db:

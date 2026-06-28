@@ -3,7 +3,7 @@ Workspace Service Layer
 User workspace (saved query) management operations
 """
 from typing import Any, List, Dict
-from app_database.models import QueryData, Workspace
+from app_database.models import QueryData, Workspace, Databases
 from app_database.app_database import AppDatabase
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
@@ -236,7 +236,7 @@ class WorkspaceService:
             "is_owner": True
         }
 
-    async def execute_workspace(self, workspace_id: int, current_user: User, db_provider: DatabaseProvider) -> dict[str, Any]:
+    async def execute_workspace(self, workspace_id: int, current_user: User, db_provider: DatabaseProvider, ad_hoc_mask_columns: list[str] = None) -> dict[str, Any]:
         """
         Executes a stored workspace query after enforcing approval rules.
         Uses centralized service account credentials, requiring no user password caching.
@@ -245,6 +245,7 @@ class WorkspaceService:
             workspace_id: ID of the workspace to execute.
             current_user: The authenticated calling user instance.
             db_provider: The database connection provider.
+            ad_hoc_mask_columns: Temporary columns to mask for this transaction (optional).
 
         Returns:
             dict[str, Any]: A dictionary containing execution status and data or error details.
@@ -274,6 +275,26 @@ class WorkspaceService:
             logger.info(f"Executing approved workspace {workspace_id} on server '{query_data.servername}'")
             log_id = await self.app_db.create_log(user=current_user, query=query_data.query, machine_name=query_data.servername, approved_execution=True)
 
+            # Fetch persistent database masking rules & merge with user ad-hoc rules
+            db_id = None
+            masking_cols = set()
+            async with self.app_db.get_app_db() as db_session:
+                db_result = await db_session.execute(
+                    select(Databases).where(Databases.servername == query_data.servername, Databases.database_name == query_data.database_name)
+                )
+                db_entry = db_result.scalars().first()
+                if db_entry:
+                    db_id = db_entry.id
+            
+            if db_id:
+                rules = await self.app_db.get_masking_rules(db_id)
+                for rule in rules:
+                    masking_cols.add(rule.column_name.lower())
+            
+            if ad_hoc_mask_columns:
+                for col in ad_hoc_mask_columns:
+                    masking_cols.add(col.lower())
+
             async with db_provider.get_session(user=current_user, servername=query_data.servername, database_name=query_data.database_name) as session:
                   sql_query = text(query_data.query)
                   result = await session.execute(sql_query)
@@ -289,13 +310,20 @@ class WorkspaceService:
                           message = f"Truncated to MAX_ROW_COUNT_LIMIT ({query_config.MAX_ROW_COUNT_LIMIT})"
                       else:
                           message = f"{row_count} rows returned"
+                      
                       result_data = [dict(row._mapping) for row in rows]
+                      if not current_user.is_admin and masking_cols:
+                          from common.security import mask_result_set
+                          result_data = mask_result_set(result_data, masking_cols)
                   else:
                       row_count = result.rowcount if result.rowcount is not None else 0
                       message = f"{row_count} rows affected"
                       result_data = []
 
-            await self.app_db.update_log(log_id=log_id, successfull=True, row_count=row_count)
+            import json
+            applied_rules_str = json.dumps(list(masking_cols)) if masking_cols else None
+            await self.app_db.update_log(log_id=log_id, successfull=True, row_count=row_count, applied_masking_rules=applied_rules_str)
+            
             logger.info(f"Workspace {workspace_id} executed successfully. Result: {message}")
             return {"response_type": "data", "data": result_data, "message": message}
 

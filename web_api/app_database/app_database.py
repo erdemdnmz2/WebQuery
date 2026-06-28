@@ -2,16 +2,15 @@
 Application Database Manager
 Application database operations (user, log, workspace CRUD)
 """
-from app_database.config import DATABASE_URL
+from .config import DATABASE_URL
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from datetime import datetime
 from contextlib import asynccontextmanager
 from sqlalchemy.sql import select
 
-from app_database.models import User, ActionLogging, LoginLogging, QueryData, Workspace, Base, Databases
-from database_provider import DatabaseProvider
-from app_database.schemas import UserCreate
+from .models import User, ActionLogging, LoginLogging, Base, Databases, BlacklistedToken, MaskingRule
+from .schemas import UserCreate
 from typing import Dict, Any
 
 
@@ -64,7 +63,7 @@ class AppDatabase:
         async with self.app_engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
-    async def create_user(db: AsyncSession, user: UserCreate):
+    async def create_user(self, db: AsyncSession, user: UserCreate):
         """
         Creates a new user.
         
@@ -119,7 +118,7 @@ class AppDatabase:
                 log_id = created_log.id
             return log_id
     
-    async def update_log(self, log_id, successfull: bool, error: str = None, row_count: int = None):
+    async def update_log(self, log_id, successfull: bool, error: str = None, row_count: int = None, applied_masking_rules: str = None):
         """
         Updates query execution log (result record)
         
@@ -128,6 +127,7 @@ class AppDatabase:
             successfull: Is query successful?
             error: Error message (if failed)
             row_count: Returned row count (if successful)
+            applied_masking_rules: JSON string of applied masking rules (optional)
         
         Note:
             - If failed: ErrorMessage and isSuccessfull are updated
@@ -147,6 +147,8 @@ class AppDatabase:
                         log.ExecutionDurationMS = int(duration.total_seconds() * 1000)
                         log.isSuccessfull = True
                         log.row_count = row_count
+                        if applied_masking_rules:
+                            log.applied_masking_rules = applied_masking_rules
 
     async def create_login_log(self, user_id: int, client_ip):
         """
@@ -193,7 +195,7 @@ class AppDatabase:
                     duration = datetime.now() - log.login_date
                     log.login_duration_ms = int(duration.total_seconds() * 1000)
                 else:
-                    print(f"Active login record for user {user_id}")
+                    print(f"Active login record NOT found for user {user_id}")
         
     async def get_db_info(self) -> Dict[str, Dict[str, Any]]:
         """
@@ -230,12 +232,40 @@ class AppDatabase:
                 
                 for database in databases:
                     servername = database.servername
-                    
                     if servername not in db_info:
                         db_info[servername] = {
                             "databases": [],
                             "technology": database.technology
                         }
-                    
-                    db_info[servername]["databases"].append(database.database_name)                
+                    db_info[servername]["databases"].append(database.database_name)
                 return db_info
+
+    async def blacklist_token(self, jti: str, expires_at: datetime) -> None:
+        """
+        Registers a new blacklisted JTI token upon user logout.
+        """
+        async with self.get_app_db() as db:
+            async with db.begin():
+                blacklisted = BlacklistedToken(jti=jti, expires_at=expires_at)
+                db.add(blacklisted)
+
+    async def is_token_blacklisted(self, jti: str) -> bool:
+        """
+        Checks if a JTI token has been blacklisted.
+        """
+        async with self.get_app_db() as db:
+            result = await db.execute(
+                select(BlacklistedToken).where(BlacklistedToken.jti == jti)
+            )
+            blacklisted = result.scalars().first()
+            return blacklisted is not None
+
+    async def get_masking_rules(self, database_id: int) -> list[MaskingRule]:
+        """
+        Retrieves active masking rules for a specific database.
+        """
+        async with self.get_app_db() as db:
+            result = await db.execute(
+                select(MaskingRule).where(MaskingRule.database_id == database_id, MaskingRule.is_active == True)
+            )
+            return list(result.scalars().all())

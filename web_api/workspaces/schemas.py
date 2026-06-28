@@ -60,3 +60,8 @@ class WorkspaceUpdate(BaseModel):
     """
     query: str
     status: Optional[str] = None
+
+
+class WorkspaceExecutionRequest(BaseModel):
+    """Workspace execution request containing ad-hoc columns to mask"""
+    ad_hoc_mask_columns: Optional[List[str]] = None

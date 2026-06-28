@@ -30,3 +30,14 @@ htmlcov/
 # Database files / logs
 *.sqlite3
 *.log
+
+# Node dependencies
+node_modules/
+frontend/node_modules/
+
+# Python virtual environments
+.venv/
+
+# Database backup files
+*.bak
+

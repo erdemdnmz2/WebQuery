@@ -4,7 +4,7 @@ User workspace (saved query) management endpoints
 """
 from typing import Any
 from fastapi import APIRouter, Depends, status, HTTPException, Response, Request
-from .schemas import WorkspaceCreate, WorkspaceUpdate, WorkspaceList
+from .schemas import WorkspaceCreate, WorkspaceUpdate, WorkspaceList, WorkspaceExecutionRequest
 
 from dependencies import get_app_db, get_workspace_service, ensure_owner, get_db_provider
 from authentication.services import get_current_user
@@ -149,7 +149,7 @@ async def get_workspace_by_id(
 @router.post("/execute_workspace/{workspace_id}", response_model=query_models.SQLResponse)
 async def execute_workspace(
     workspace_id: int,
-    request: Request,
+    execution_request: WorkspaceExecutionRequest = None,
     current_user: User = Depends(get_current_user),
     workspace_service: WorkspaceService = Depends(get_workspace_service),
     app_db: AppDatabase = Depends(get_app_db),
@@ -167,7 +167,7 @@ async def execute_workspace(
     
     Args:
         workspace_id: ID of the workspace to execute.
-        request: The FastAPI request object.
+        execution_request: The workspace execution request payload.
         current_user: The authenticated user instance.
         workspace_service: The workspace service instance.
         app_db: The application database manager.
@@ -177,10 +177,12 @@ async def execute_workspace(
         dict[str, Any]: The query execution results or error details.
     """
     # Delegate execution to WorkspaceService which enforces approval rules (using centralized credentials)
+    ad_hoc = execution_request.ad_hoc_mask_columns if execution_request else None
     result: dict[str, Any] = await workspace_service.execute_workspace(
         workspace_id=workspace_id,
         current_user=current_user,
-        db_provider=db_provider
+        db_provider=db_provider,
+        ad_hoc_mask_columns=ad_hoc
     )
 
     if result.get("response_type") == "error":

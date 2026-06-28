@@ -44,7 +44,8 @@ async def execute_query(
         query=query_request.query,
         user=current_user,
         server_name=query_request.servername,
-        database_name=query_request.database_name
+        database_name=query_request.database_name,
+        ad_hoc_mask_columns=query_request.ad_hoc_mask_columns
     )
     return result
 
@@ -79,7 +80,8 @@ async def multiple_query(
             query=execution_info.query,
             user=current_user,
             server_name=execution_info.servername,
-            database_name=execution_info.database_name
+            database_name=execution_info.database_name,
+            ad_hoc_mask_columns=execution_info.ad_hoc_mask_columns
         )
         results.append(result)
     
@@ -103,3 +105,16 @@ async def get_database_information(
     """
     db_info: dict[str, Any] = db_provider.get_db_info_db()
     return {"db_info": db_info}
+
+@router.get("/masking_rules", response_model=List[str])
+async def get_masking_rules(
+    servername: str,
+    database_name: str,
+    current_user: User = Depends(get_current_user),
+    query_service: QueryService = Depends(get_query_service)
+) -> List[str]:
+    """
+    Returns the list of column names persistently masked by admin for the given server and database.
+    """
+    rules = await query_service.get_active_masking_rules(servername, database_name)
+    return rules

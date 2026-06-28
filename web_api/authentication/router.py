@@ -147,6 +147,7 @@ async def read_users_me(current_user: User = Depends(get_current_user)) -> schem
 @router.post("/logout")
 async def logout(
     response: Response,
+    request: Request,
     current_user: User = Depends(get_current_user),
     app_db: AppDatabase = Depends(get_app_db),
     db_provider: DatabaseProvider = Depends(get_db_provider)
@@ -157,6 +158,7 @@ async def logout(
     
     Args:
         response: The FastAPI response object.
+        request: The FastAPI request object.
         current_user: The authenticated user instance.
         app_db: The application database manager instance.
         db_provider: The database provider instance.
@@ -164,6 +166,23 @@ async def logout(
     Returns:
         dict[str, str]: A dictionary with success status.
     """
+    # Extract and blacklist the token if present
+    token = request.cookies.get("access_token")
+    if token:
+        try:
+            from jose import jwt
+            from authentication import config
+            from datetime import datetime, timezone
+            
+            payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                expires_at = datetime.fromtimestamp(exp, tz=timezone.utc)
+                await app_db.blacklist_token(jti=jti, expires_at=expires_at)
+        except Exception as e:
+            print(f"Error blacklisting token on logout: {e}")
+
     # Clear token from cookie
     response.delete_cookie(
         key="access_token",
