@@ -13,11 +13,14 @@ Designed with zero-trust B2B security principles, WebQuery eliminates the need t
 
 ## Architecture & Core Features
 
-### 1. Centralized Service Account Architecture (Zero-Trust Security)
-* **No User-Stored Credentials:** Individual database passwords are never requested, stored, or cached (removing any risk of credential leaks).
-* **Central Credentials:** Connections to target databases are established dynamically using highly restricted central service credentials (`CENTRAL_DB_USER` and `CENTRAL_DB_PASSWORD`) defined securely in the environment.
-* **Granular Audit Logging:** Although execution is centralized, every query is strictly audited. The platform logs the exact user, trace ID, timestamp, and machine name for every action in the `ActionLogging` table.
-* **Stateless JWT Authorization:** Session management is completely stateless. Authenticated requests use cryptographically signed JWT tokens stored in secure, HttpOnly cookies, completely eliminating the need for a Redis credential cache.
+### 1. Centralized Service Account & Role-Based Security (Zero-Trust)
+* **UUID-Based Abstraction:** Access to target databases uses unique UUID identifiers instead of exposing raw server or database names in the endpoints.
+* **Role-Based Access Control (RBAC):** Target database access permissions and roles (`READER`, `WRITER`, `ADMIN`) are strictly enforced via the `UserDatabaseAssociation` schema.
+* **No User-Stored Credentials:** Individual database passwords are never requested, stored, or cached, removing the risk of client-side credential leaks.
+* **Credential Encryption at Rest:** Database configuration passwords registered by administrators are dynamically encrypted at rest using AES-256 encryption and transparently decrypted via ORM hooks.
+* **Dynamic Data Masking:** Flexible masking rules automatically redact sensitive columns (e.g., email, salary, phone) for non-admin roles during execution.
+* **Granular Audit Logging:** Logs the exact user, trace ID, client IP, risk details, and execution outcomes in the `ActionLogging` table for audit compliance.
+* **Stateless JWT Authorization:** Session management uses cryptographically signed JWT tokens in secure, HttpOnly cookies, removing the need for server-side credential caching.
 
 ### 2. Intelligent Connection Pooling & Engine Cache
 * **Zero Idle Connections:** Connection engines to target databases are managed by an advanced `EngineCache`. It sets `pool_size=0` to release idle server-side connections immediately after query execution.
@@ -41,6 +44,11 @@ Before execution, every query is analyzed by a custom `QueryAnalyzer` utilizing 
 ### 5. Unified Error Translation (Exception Translation Pattern)
 * **Modular Domain Exceptions:** Low-level infrastructure, driver, or database errors (such as SQLAlchemy or network exceptions) are caught at the service boundary and translated into domain-specific exceptions (e.g., `WorkspaceNotFoundError`, `QueryExecutionError`, `UserAlreadyExistsError`).
 * **Global Handling:** A centralized exception handler intercepts all domain exceptions, logs their detailed tracebacks internally, and returns a clean, secure, and standardized JSON response containing `success: false`, the enterprise `error_code`, a safe client-facing `message`, and the associated `trace_id`.
+
+### 6. Centralized Dependency Injection Container (AppContext)
+* **Application Lifespan Scope:** Core stateless services (`QueryService`, `WorkspaceService`, `AdminService`, and `NotificationService`) are instantiated inside a unified `AppContext` container during application startup.
+* **Reduced Re-instantiation Overhead:** Re-creation of service classes on every HTTP request is eliminated, optimizing server performance and ensuring thread-safe, application-scoped instance reuse.
+* **Full Autocomplete & Type Safety:** Placing the structured `AppContext` on `app.state.context` provides full IDE autocomplete support and static analysis validation.
 
 ---
 
