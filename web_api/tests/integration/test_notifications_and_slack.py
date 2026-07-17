@@ -18,7 +18,7 @@ async def create_test_user_and_workspace(email: str, username: str) -> tuple[int
     Helper function to create a test user and a workspace with its query data in metadata DB.
     Uses a single transaction to prevent expired attributes lazy loading issues.
     """
-    app_db = app.state.app_db
+    app_db = app.state.context.app_db
     async with app_db.get_app_db() as db:
         # 1. Create and flush user to get ID
         user = User(username=username, email=email)
@@ -67,7 +67,7 @@ async def test_slack_interactive_approval_flow(async_client: AsyncClient):
     ws_id, q_uuid = await create_test_user_and_workspace("user_slack_appr@example.com", "slack_appr_user")
     
     # 2. Instantiate SlackListener with app_db
-    app_db = app.state.app_db
+    app_db = app.state.context.app_db
     listener = SlackListener(app_db=app_db)
     
     # 3. Construct mock body and respond callbacks
@@ -116,7 +116,7 @@ async def test_slack_interactive_rejection_flow(async_client: AsyncClient):
     ws_id, q_uuid = await create_test_user_and_workspace("user_slack_rej@example.com", "slack_rej_user")
     
     # 2. Instantiate SlackListener
-    app_db = app.state.app_db
+    app_db = app.state.context.app_db
     listener = SlackListener(app_db=app_db)
     
     # 3. Construct mock body and respond callbacks

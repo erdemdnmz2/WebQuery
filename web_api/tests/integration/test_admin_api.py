@@ -21,7 +21,7 @@ def mock_db_session():
     mock_session.execute.return_value = mock_result
     
     @asynccontextmanager
-    async def fake_get_session(user, servername, database_name):
+    async def fake_get_session(user, db_uuid):
         yield mock_session
         
     with patch("database_provider.DatabaseProvider.get_session", side_effect=fake_get_session):
@@ -39,14 +39,25 @@ async def create_user_and_login(async_client: AsyncClient, email: str, username:
     }
     await async_client.post("/api/register", json=register_data)
     
-    app_db = app.state.app_db
+    app_db = app.state.context.app_db
     user_id = 0
     if make_admin:
         async with app_db.get_app_db() as db:
             result = await db.execute(select(User).where(User.email == email))
             user = result.scalars().first()
-            user.is_admin = True
             user_id = user.id
+            
+            from app_database.models import UserDatabaseAssociation, Databases
+            db_res = await db.execute(select(Databases))
+            all_dbs = db_res.scalars().all()
+            for db_entry in all_dbs:
+                assoc = UserDatabaseAssociation(
+                    user_id=user.id,
+                    database_id=db_entry.id,
+                    role="ADMIN",
+                    is_admin=True
+                )
+                db.add(assoc)
             await db.commit()
             
     login_data = {
@@ -98,6 +109,17 @@ async def test_admin_database_registration(async_client: AsyncClient):
     """
     Tests registering databases by an admin, including duplicate checks.
     """
+    app_db = app.state.context.app_db
+    # Seed bootstrap database so the user can be an admin of at least one database
+    async with app_db.get_app_db() as db:
+        bootstrap_db = Databases(
+            servername="bootstrap-server",
+            database_name="bootstrap-db",
+            technology="sqlite"
+        )
+        db.add(bootstrap_db)
+        await db.commit()
+
     # 1. Login as admin
     await create_user_and_login(async_client, "admin1@example.com", "admin1", make_admin=True)
     
@@ -112,7 +134,7 @@ async def test_admin_database_registration(async_client: AsyncClient):
     assert "added successfully" in response.json()["message"]
     
     # Verify database entry in metadata DB
-    app_db = app.state.app_db
+    app_db = app.state.context.app_db
     async with app_db.get_app_db() as db:
         result = await db.execute(select(Databases).where(Databases.database_name == "orders_db"))
         db_entry = result.scalars().first()
@@ -138,17 +160,45 @@ async def test_admin_query_approval_workflow(async_client: AsyncClient, mock_db_
     regular_client = AsyncClient(transport=async_client._transport, base_url="http://test")
     await create_user_and_login(regular_client, "user_req@example.com", "user_req")
     
+    app_db = app.state.context.app_db
+    db_uuid = None
+    async with app_db.get_app_db() as db:
+        from app_database.models import Databases, User, UserDatabaseAssociation
+        from sqlalchemy.future import select
+        test_db = Databases(
+            servername="prod-server",
+            database_name="orders_db",
+            technology="mssql"
+        )
+        db.add(test_db)
+        await db.commit()
+        await db.refresh(test_db)
+        db_uuid = test_db.uuid
+        
+        user_res = await db.execute(select(User).where(User.email == "user_req@example.com"))
+        test_user = user_res.scalars().first()
+        assoc = UserDatabaseAssociation(
+            user_id=test_user.id,
+            database_id=test_db.id,
+            role="WRITER",
+            is_admin=False
+        )
+        db.add(assoc)
+        await db.commit()
+        
+    db_info = await app_db.get_db_info()
+    app.state.context.db_provider.set_db_info(db_info)
+    
     create_payload = {
         "name": "Audit Workspace",
         "query": "UPDATE items SET price = 10",
-        "servername": "prod-server",
-        "database_name": "orders_db"
+        "db_uuid": db_uuid
     }
     create_response = await regular_client.post("/api/workspaces", json=create_payload)
     workspace_id = create_response.json()["workspace_id"]
     
     # Simulate the query is flagged and waiting for approval in DB
-    app_db = app.state.app_db
+    app_db = app.state.context.app_db
     async with app_db.get_app_db() as db:
         ws = await db.get(Workspace, workspace_id)
         qdata = await db.get(QueryData, ws.query_id)
@@ -200,24 +250,55 @@ async def test_admin_query_approval_workflow(async_client: AsyncClient, mock_db_
 
 
 @pytest.mark.asyncio
-async def test_admin_query_rejection(async_client: AsyncClient):
+async def test_admin_query_rejection(async_client: AsyncClient, mock_db_session):
     """
     Tests query rejection flow by an admin.
     """
+    mock_session, mock_result = mock_db_session
+    
     # 1. Create user and workspace
     regular_client = AsyncClient(transport=async_client._transport, base_url="http://test")
     await create_user_and_login(regular_client, "user_rej@example.com", "user_rej")
+    
+    app_db = app.state.context.app_db
+    db_uuid = None
+    async with app_db.get_app_db() as db:
+        from app_database.models import Databases, User, UserDatabaseAssociation
+        from sqlalchemy.future import select
+        test_db = Databases(
+            servername="prod-server",
+            database_name="orders_db",
+            technology="mssql"
+        )
+        db.add(test_db)
+        await db.commit()
+        await db.refresh(test_db)
+        db_uuid = test_db.uuid
+        
+        user_res = await db.execute(select(User).where(User.email == "user_rej@example.com"))
+        test_user = user_res.scalars().first()
+        assoc = UserDatabaseAssociation(
+            user_id=test_user.id,
+            database_id=test_db.id,
+            role="WRITER",
+            is_admin=False
+        )
+        db.add(assoc)
+        await db.commit()
+        
+    db_info = await app_db.get_db_info()
+    app.state.context.db_provider.set_db_info(db_info)
+    
     create_payload = {
         "name": "Rejected Workspace",
         "query": "DROP TABLE critical_table",
-        "servername": "prod-server",
-        "database_name": "orders_db"
+        "db_uuid": db_uuid
     }
     create_response = await regular_client.post("/api/workspaces", json=create_payload)
     workspace_id = create_response.json()["workspace_id"]
     
     # Simulate query is waiting for approval
-    app_db = app.state.app_db
+    app_db = app.state.context.app_db
     async with app_db.get_app_db() as db:
         ws = await db.get(Workspace, workspace_id)
         qdata = await db.get(QueryData, ws.query_id)

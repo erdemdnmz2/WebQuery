@@ -1,14 +1,15 @@
 """
-Integration tests for the centralized Exception Handling and Trace ID tracking system.
+Centralized Exception Handling and Trace ID tracking integration tests.
 Verifies Trace ID headers, global exception routing, and error translation.
 """
 import pytest
 from httpx import AsyncClient
 from unittest.mock import MagicMock, AsyncMock, patch
 from contextlib import asynccontextmanager
+from sqlalchemy import select
 
 from app import app
-from app_database.models import Databases
+from app_database.models import Databases, User, UserDatabaseAssociation
 
 @pytest.fixture
 def mock_db_session():
@@ -20,7 +21,7 @@ def mock_db_session():
     mock_session.execute.return_value = mock_result
     
     @asynccontextmanager
-    async def fake_get_session(user, servername, database_name):
+    async def fake_get_session(user, db_uuid):
         yield mock_session
         
     with patch("database_provider.DatabaseProvider.get_session", side_effect=fake_get_session):
@@ -45,7 +46,9 @@ async def test_query_execution_error_translation(async_client: AsyncClient, mock
     mock_session, mock_result = mock_db_session
     
     # 1. Inject mock database
-    app_db = app.state.app_db
+    app_db = app.state.context.app_db
+    db_uuid = None
+    db_id = None
     async with app_db.get_app_db() as db:
         test_db = Databases(
             servername="trace-server",
@@ -54,10 +57,13 @@ async def test_query_execution_error_translation(async_client: AsyncClient, mock
         )
         db.add(test_db)
         await db.commit()
+        await db.refresh(test_db)
+        db_uuid = test_db.uuid
+        db_id = test_db.id
     
     # Reload db_info in provider
     db_info = await app_db.get_db_info()
-    app.state.db_provider.set_db_info(db_info)
+    app.state.context.db_provider.set_db_info(db_info)
     
     # 2. Register and login
     register_data = {
@@ -72,6 +78,19 @@ async def test_query_execution_error_translation(async_client: AsyncClient, mock
         "password": "StrongPassword123!"
     }
     await async_client.post("/api/login", json=login_data)
+
+    # Setup UserDatabaseAssociation
+    async with app_db.get_app_db() as db:
+        user_res = await db.execute(select(User).where(User.email == "trace@example.com"))
+        test_user = user_res.scalars().first()
+        assoc = UserDatabaseAssociation(
+            user_id=test_user.id,
+            database_id=db_id,
+            role="READER",
+            is_admin=False
+        )
+        db.add(assoc)
+        await db.commit()
     
     # 3. Configure mock session to raise a database execution exception (e.g. syntax error)
     mock_session.execute.side_effect = Exception("column 'non_existent' does not exist")
@@ -79,8 +98,7 @@ async def test_query_execution_error_translation(async_client: AsyncClient, mock
     # 4. Execute query
     query_payload = {
         "query": "SELECT non_existent FROM users",
-        "servername": "trace-server",
-        "database_name": "trace-db"
+        "db_uuid": db_uuid
     }
     response = await async_client.post("/api/execute_query", json=query_payload)
     

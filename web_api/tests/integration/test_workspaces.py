@@ -6,9 +6,10 @@ import pytest
 from httpx import AsyncClient
 from unittest.mock import MagicMock, AsyncMock, patch
 from contextlib import asynccontextmanager
+from sqlalchemy import select
 
 from app import app
-from app_database.models import Workspace, QueryData
+from app_database.models import Workspace, QueryData, Databases, User, UserDatabaseAssociation
 
 @pytest.fixture
 def mock_db_session():
@@ -20,7 +21,7 @@ def mock_db_session():
     mock_session.execute.return_value = mock_result
     
     @asynccontextmanager
-    async def fake_get_session(user, servername, database_name):
+    async def fake_get_session(user, db_uuid):
         yield mock_session
         
     with patch("database_provider.DatabaseProvider.get_session", side_effect=fake_get_session):
@@ -50,15 +51,46 @@ async def test_workspace_crud_operations(async_client: AsyncClient):
     """
     Tests creating, listing, updating, retrieving, and deleting workspaces.
     """
-    # 1. Register and login
+    # 1. Setup Database
+    app_db = app.state.context.app_db
+    db_uuid = None
+    db_id = None
+    async with app_db.get_app_db() as db:
+        test_db = Databases(
+            servername="localhost",
+            database_name="my_db",
+            technology="postgresql"
+        )
+        db.add(test_db)
+        await db.commit()
+        await db.refresh(test_db)
+        db_uuid = test_db.uuid
+        db_id = test_db.id
+
+    db_info = await app_db.get_db_info()
+    app.state.context.db_provider.set_db_info(db_info)
+
+    # 2. Register and login
     await create_user_and_login(async_client, "user1@example.com", "user1")
     
-    # 2. Create workspace
+    # Associate user
+    async with app_db.get_app_db() as db:
+        user_res = await db.execute(select(User).where(User.email == "user1@example.com"))
+        test_user = user_res.scalars().first()
+        assoc = UserDatabaseAssociation(
+            user_id=test_user.id,
+            database_id=db_id,
+            role="READER",
+            is_admin=False
+        )
+        db.add(assoc)
+        await db.commit()
+
+    # 3. Create workspace
     create_payload = {
         "name": "My Workspace",
         "query": "SELECT * FROM my_table",
-        "servername": "localhost",
-        "database_name": "my_db"
+        "db_uuid": db_uuid
     }
     create_response = await async_client.post("/api/workspaces", json=create_payload)
     assert create_response.status_code == 200, f"Failed to create workspace: {create_response.text}"
@@ -66,7 +98,7 @@ async def test_workspace_crud_operations(async_client: AsyncClient):
     assert create_data["success"] is True
     workspace_id = create_data["workspace_id"]
     
-    # 3. Get workspace details
+    # 4. Get workspace details
     detail_response = await async_client.get(f"/api/get_workspace_by_id/{workspace_id}")
     assert detail_response.status_code == 200
     detail_data = detail_response.json()
@@ -76,14 +108,14 @@ async def test_workspace_crud_operations(async_client: AsyncClient):
     assert detail_data["database_name"] == "my_db"
     assert detail_data["status"] == "saved_in_workspace"  # Newly created queries default to saved_in_workspace
     
-    # 4. List workspaces
+    # 5. List workspaces
     list_response = await async_client.get("/api/workspaces")
     assert list_response.status_code == 200
     list_data = list_response.json()
     assert len(list_data["workspaces"]) == 1
     assert list_data["workspaces"][0]["id"] == workspace_id
     
-    # 5. Update workspace query
+    # 6. Update workspace query
     update_payload = {
         "query": "SELECT count(*) FROM my_table",
         "status": "saved_in_workspace"
@@ -96,7 +128,7 @@ async def test_workspace_crud_operations(async_client: AsyncClient):
     detail_data_2 = detail_response_2.json()
     assert detail_data_2["query"] == "SELECT count(*) FROM my_table"
     
-    # 6. Delete workspace
+    # 7. Delete workspace
     delete_response = await async_client.delete(f"/api/workspaces/{workspace_id}")
     assert delete_response.status_code == 200
     
@@ -110,13 +142,45 @@ async def test_workspace_ownership_access_controls(async_client: AsyncClient):
     """
     Tests that a user cannot access, modify, or delete workspaces owned by another user.
     """
+    # Setup database
+    app_db = app.state.context.app_db
+    db_uuid = None
+    db_id = None
+    async with app_db.get_app_db() as db:
+        test_db = Databases(
+            servername="localhost",
+            database_name="db",
+            technology="postgresql"
+        )
+        db.add(test_db)
+        await db.commit()
+        await db.refresh(test_db)
+        db_uuid = test_db.uuid
+        db_id = test_db.id
+
+    db_info = await app_db.get_db_info()
+    app.state.context.db_provider.set_db_info(db_info)
+
     # 1. Login user1 and create a workspace
     await create_user_and_login(async_client, "owner@example.com", "owner")
+    
+    # Associate user
+    async with app_db.get_app_db() as db:
+        user_res = await db.execute(select(User).where(User.email == "owner@example.com"))
+        test_user = user_res.scalars().first()
+        assoc = UserDatabaseAssociation(
+            user_id=test_user.id,
+            database_id=db_id,
+            role="READER",
+            is_admin=False
+        )
+        db.add(assoc)
+        await db.commit()
+
     create_payload = {
         "name": "Owner Workspace",
         "query": "SELECT 1",
-        "servername": "localhost",
-        "database_name": "db"
+        "db_uuid": db_uuid
     }
     create_response = await async_client.post("/api/workspaces", json=create_payload)
     workspace_id = create_response.json()["workspace_id"]
@@ -152,13 +216,44 @@ async def test_workspace_execution_rules(async_client: AsyncClient, mock_db_sess
     """
     mock_session, mock_result = mock_db_session
     
+    app_db = app.state.context.app_db
+    db_uuid = None
+    db_id = None
+    async with app_db.get_app_db() as db:
+        test_db = Databases(
+            servername="localhost",
+            database_name="sales_db",
+            technology="postgresql"
+        )
+        db.add(test_db)
+        await db.commit()
+        await db.refresh(test_db)
+        db_uuid = test_db.uuid
+        db_id = test_db.id
+
+    db_info = await app_db.get_db_info()
+    app.state.context.db_provider.set_db_info(db_info)
+
     # 1. Login and create workspace
     await create_user_and_login(async_client, "exec@example.com", "exec_user")
+    
+    # Associate user
+    async with app_db.get_app_db() as db:
+        user_res = await db.execute(select(User).where(User.email == "exec@example.com"))
+        test_user = user_res.scalars().first()
+        assoc = UserDatabaseAssociation(
+            user_id=test_user.id,
+            database_id=db_id,
+            role="READER",
+            is_admin=False
+        )
+        db.add(assoc)
+        await db.commit()
+
     create_payload = {
         "name": "Execution Workspace",
         "query": "SELECT * FROM orders",
-        "servername": "localhost",
-        "database_name": "sales_db"
+        "db_uuid": db_uuid
     }
     create_response = await async_client.post("/api/workspaces", json=create_payload)
     workspace_id = create_response.json()["workspace_id"]
@@ -169,7 +264,6 @@ async def test_workspace_execution_rules(async_client: AsyncClient, mock_db_sess
     assert exec_response.json()["error_code"] == "QUERY_REJECTED_BY_ANALYZER"
     
     # 3. Manually approve workspace with show_results=True in metadata DB
-    app_db = app.state.app_db
     async with app_db.get_app_db() as db:
         ws = await db.get(Workspace, workspace_id)
         ws.show_results = True

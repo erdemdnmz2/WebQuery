@@ -29,6 +29,12 @@ async def async_client():
     
     app.state.db_provider = DatabaseProvider()
     await app.state.db_provider.start_cache_loop()
+
+    from dependencies import AppContext
+    app.state.context = AppContext(
+        app_db=app.state.app_db,
+        db_provider=app.state.db_provider
+    )
     
     # Disable rate limiter for testing to prevent 429 Too Many Requests
     if hasattr(app.state, "limiter"):
