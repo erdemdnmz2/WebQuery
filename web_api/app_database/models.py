@@ -2,6 +2,8 @@
 Application Database Models
 SQLAlchemy ORM models for the application database
 """
+from sqlalchemy import null
+from sqlalchemy import UniqueConstraint
 import base64
 import os
 import re
@@ -11,6 +13,8 @@ from sqlalchemy.dialects.mssql import DATETIME2, VARCHAR, NVARCHAR, UNIQUEIDENTI
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.types import TypeDecorator
 from cryptography.fernet import Fernet
+
+import uuid
 
 Base = declarative_base()
 
@@ -67,7 +71,6 @@ class User(Base):
     username = Column(String(50), unique=True, index=True)
     password = Column(String)
     email = Column(String(50), unique=True)
-    is_admin = Column(Boolean)
 
     def set_password(self, plain_password: str) -> None:
         """
@@ -164,6 +167,19 @@ class Databases(Base):
     technology = Column(String(100), nullable=False)
     db_username = Column(String(100), nullable=True)
     db_password = Column(EncryptedText, nullable=True)
+    uuid = Column(AppUUID, nullable=False, index=True, default=lambda: str(uuid.uuid4()))
+
+    __table_args__ = (
+        UniqueConstraint("servername", "database_name", name="uq_server_database"),
+    )
+
+class UserDatabaseAssociation(Base):
+    __tablename__ = "UserDatabaseAssociation"
+    user_id = Column(Integer, ForeignKey("Users.id"), primary_key=True, nullable=False)
+    database_id = Column(Integer, ForeignKey("Databases.id"), primary_key=True, nullable=False)
+    role = Column(String(50), nullable=False, default="READER") # "READER", "WRITER", "ADMIN"
+    is_admin = Column(Boolean, nullable=False, default=False)
+    
 
 class MaskingRule(Base):
     """

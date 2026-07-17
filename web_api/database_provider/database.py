@@ -24,54 +24,58 @@ class DatabaseProvider:
         """Initializes DatabaseProvider."""
         self.engine_cache: EngineCache = EngineCache()
         self.db_info: Dict[str, Dict[str, Any]] = {}
-        # Format: {servername: {"databases": [list], "technology": str}}
+        # Flat dictionary mapping db_uuid -> database details for O(1) lookup
+        self.db_by_uuid: Dict[str, Dict[str, Any]] = {}
 
     def set_db_info(self, info: Dict[str, Dict[str, Any]]) -> None:
         """
-        Sets database configuration information.
+        Sets database configuration information and builds UUID lookup dictionary.
         
         Args:
             info: Database configuration dictionary.
         """
+        print(f"[DEBUG set_db_info] Input info: {info}")
         self.db_info = info
+        self.db_by_uuid = {}
+        for servername, server_data in info.items():
+            tech = server_data.get("technology", "mssql")
+            for db_data in server_data.get("databases", []):
+                # db_data is {"name": "db_name", "uuid": "db_uuid"}
+                print(f"[DEBUG set_db_info] Processing db_data: {db_data}")
+                if isinstance(db_data, dict) and "uuid" in db_data:
+                    db_uuid = db_data["uuid"]
+                    self.db_by_uuid[db_uuid] = {
+                        "servername": servername,
+                        "database_name": db_data["name"],
+                        "technology": tech
+                    }
+        print(f"[DEBUG set_db_info] Built db_by_uuid: {self.db_by_uuid}")
     
     @asynccontextmanager
-    async def get_session(self, user: models.User, servername: str, database_name: str):
+    async def get_session(self, user: models.User, db_uuid: str):
         """
         Provides user-specific async database session using centralized credentials.
         
         Args:
             user: User model.
-            servername: Server instance name.
-            database_name: Target database name.
+            db_uuid: Database unique identifier.
             
         Yields:
             AsyncSession: SQLAlchemy async session.
         """
         
-        # Server validation
-        if servername not in self.db_info:
+        # Validation
+        if db_uuid not in self.db_by_uuid:
             raise ValueError(
-                f"Server '{servername}' not found in database configuration. "
-                f"Available servers: {list(self.db_info.keys())}. "
-                f"Please add it to the Databases table."
+                f"Database with UUID '{db_uuid}' not found in configuration."
             )
         
-        server_info = self.db_info[servername]
-        
-        # Database validation
-        available_databases = server_info.get("databases", [])
-        if database_name not in available_databases:
-            raise ValueError(
-                f"Database '{database_name}' not found for server '{servername}'. "
-                f"Available databases: {available_databases}. "
-                f"Please add it to the Databases table."
-            )
-        
-        # Get technology and driver
-        tech = server_info.get("technology", "mssql")
+        db_entry = self.db_by_uuid[db_uuid]
+        servername = db_entry["servername"]
+        database_name = db_entry["database_name"]
+        tech = db_entry["technology"]
         driver = get_driver_for_technology(tech)
-
+ 
         conn_str = create_connection_string(
             tech=tech,
             driver=driver,
@@ -81,7 +85,7 @@ class DatabaseProvider:
             password=CENTRAL_DB_PASSWORD,
         )
         
-        engine = await self.engine_cache.get_engine(conn_str, owner_id=user.id)
+        engine = await self.engine_cache.get_engine(conn_str, db_uuid=db_uuid)
 
         AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=engine)
         async with AsyncSessionLocal() as session:

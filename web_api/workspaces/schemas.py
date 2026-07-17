@@ -16,6 +16,7 @@ class WorkspaceInfo(BaseModel):
         query: Saved SQL query
         servername: Target SQL Server
         database_name: Target database
+        db_uuid: Target database unique identifier
         status: Query status (saved_in_workspace, waiting_for_approval, etc.)
     """
     id: int
@@ -24,6 +25,7 @@ class WorkspaceInfo(BaseModel):
     query: str
     servername: str
     database_name: str
+    db_uuid: str
     status: str
     show_results: Optional[bool] = None
     owner_id: int
@@ -37,14 +39,12 @@ class WorkspaceCreate(BaseModel):
         name: Workspace name
         description: Workspace description (optional)
         query: SQL query to save
-        servername: Target SQL Server
-        database_name: Target database
+        db_uuid: Target database unique identifier
     """
     name: str
     description: Optional[str] = None
     query: str
-    servername: str
-    database_name: str
+    db_uuid: str
 
 class WorkspaceList(BaseModel):
     """Workspace list response schema"""

@@ -8,8 +8,7 @@ from typing import List, Dict, Any, Optional
 
 class SQLQuery(BaseModel):
     """Single SQL query request"""
-    servername: str
-    database_name: str
+    db_uuid: str
     query: str
     ad_hoc_mask_columns: Optional[List[str]] = None
 
@@ -24,8 +23,7 @@ class SQLResponse(BaseModel):
 
 class ExecutionInfo(BaseModel):
     """Execution information for multiple queries"""
-    servername: str
-    database_name: str
+    db_uuid: str
     query: str
     ad_hoc_mask_columns: Optional[List[str]] = None
 

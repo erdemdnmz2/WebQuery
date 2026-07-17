@@ -12,7 +12,8 @@ from .schemas import (
     DatabaseListResponse,
     DatabaseResponseSchema,
     MaskingRuleSchema,
-    MaskingRulesSaveRequest
+    MaskingRulesSaveRequest,
+    UserAssociationRequest
 )
 from dependencies import get_admin_service, admin_required
 from .services import AdminService
@@ -28,7 +29,7 @@ async def get_queries_to_approve(
     """
     Returns the list of queries waiting for approval.
     """
-    workspaces = await service.get_workspaces_for_approval()
+    workspaces = await service.get_workspaces_for_approval(current_admin)
     return {"waiting_approvals": workspaces}
 
 @router.post("/approve_query/{workspace_id}")
@@ -42,7 +43,7 @@ async def approve_query(
     Approves and executes the query.
     """
     # call service approve (sets show_results and query status)
-    result = await service.approve(workspace_id, approval.show_results)
+    result = await service.approve(workspace_id, approval.show_results, current_admin)
 
     if result.get("success"):
         return result
@@ -61,7 +62,7 @@ async def reject_query(
     """
     Rejects the query.
     """
-    result = await service.reject_query_by_workspace_id(workspace_id)
+    result = await service.reject_query_by_workspace_id(workspace_id, current_admin)
     
     if result.get("success"):
         return Response(status_code=status.HTTP_200_OK)
@@ -101,7 +102,8 @@ async def add_database(
     result = await service.db_addition_service.add_database(
         servername=request.servername,
         database_name=request.database_name,
-        tech_name=request.tech_name
+        tech_name=request.tech_name,
+        admin_user=current_admin
     )
     
     if result.get("success"):
@@ -124,7 +126,7 @@ async def list_databases(
     """
     Lists all registered databases in the system.
     """
-    dbs = await service.list_databases()
+    dbs = await service.list_databases(current_admin)
     return {"databases": [
         DatabaseResponseSchema(
             id=db.id,
@@ -157,7 +159,7 @@ async def get_masking_rules(
     """
     Gets all masking rules for a database.
     """
-    rules = await service.get_all_masking_rules(database_id)
+    rules = await service.get_all_masking_rules(database_id, current_admin)
     return [
         MaskingRuleSchema(
             table_name=r.table_name,
@@ -178,7 +180,7 @@ async def save_masking_rules(
     """
     Saves/updates the masking rules for a database.
     """
-    success = await service.save_masking_rules(database_id, request.rules)
+    success = await service.save_masking_rules(database_id, request.rules, current_admin)
     if success:
         return {"success": True, "message": "Masking rules saved successfully"}
     else:
@@ -186,3 +188,27 @@ async def save_masking_rules(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to save masking rules"
         )
+
+@router.post("/associate_user")
+async def associate_user(
+    request: UserAssociationRequest,
+    current_admin: User = Depends(admin_required),
+    service: AdminService = Depends(get_admin_service)
+):
+    """
+    Associates a user with a database under a specific role (READER, WRITER, ADMIN).
+    """
+    result = await service.associate_user_to_database(
+        user_id=request.user_id,
+        database_id=request.database_id,
+        role=request.role,
+        admin_user=current_admin
+    )
+    if result.get("success"):
+        return {"success": True, "message": result.get("message")}
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error", "Failed to associate user")
+        )
+

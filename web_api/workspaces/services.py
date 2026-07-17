@@ -4,7 +4,7 @@ User workspace (saved query) management operations
 """
 from typing import Any, List, Dict
 import json
-from app_database.models import QueryData, Workspace, Databases
+from app_database.models import QueryData, Workspace, Databases, UserDatabaseAssociation
 from app_database.app_database import AppDatabase
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
@@ -56,10 +56,18 @@ class WorkspaceService:
             Dict: Result with workspace_id or error
         """
         try:
+            # Query the database to retrieve servername and database_name from UUID
+            db_res = await db.execute(
+                select(Databases).where(Databases.uuid == workspace_data.db_uuid)
+            )
+            db_entry = db_res.scalars().first()
+            if not db_entry:
+                raise BaseServiceException(f"Database with UUID '{workspace_data.db_uuid}' not found.")
+
             new_query_data = QueryData(
                     user_id=user_id,
-                    servername=workspace_data.servername,
-                    database_name=workspace_data.database_name,
+                    servername=db_entry.servername,
+                    database_name=db_entry.database_name,
                     query=workspace_data.query,
                     uuid=str(uuid.uuid4()),
                     status="saved_in_workspace"
@@ -79,6 +87,8 @@ class WorkspaceService:
             await db.commit()
             await db.refresh(workspace)
             return {"success": True, "workspace_id": workspace.id}
+        except BaseServiceException:
+            raise
         except Exception as e:
             await db.rollback()
             logger.error(f"Error creating workspace: {e}")
@@ -109,12 +119,16 @@ class WorkspaceService:
             select(QueryData).where(QueryData.id.in_(query_ids))
         )
         query_data_map = {qd.id: qd for qd in query_data_results.scalars().all()}
-
+        
+        # Load database mapping to resolve db_uuid
+        db_results = await db.execute(select(Databases))
+        db_map = {(d.servername, d.database_name): d.uuid for d in db_results.scalars().all()}
+ 
         workspace_list = []
         for ws in workspaces:
             query_data = query_data_map.get(ws.query_id)
             if query_data:
-                print(f"[DEBUG] Workspace {ws.id}: status={query_data.status}, show_results={getattr(ws, 'show_results', None)}")
+                db_uuid = db_map.get((query_data.servername, query_data.database_name), "")
                 workspace_list.append(WorkspaceInfo(
                     id=ws.id,
                     name=ws.name,
@@ -122,6 +136,7 @@ class WorkspaceService:
                     query=query_data.query,
                     servername=query_data.servername,
                     database_name=query_data.database_name,
+                    db_uuid=db_uuid,
                     status=query_data.status,
                     show_results=getattr(ws, 'show_results', None),
                     owner_id=ws.user_id,
@@ -226,6 +241,11 @@ class WorkspaceService:
         if not query_data:
             raise WorkspaceNotFoundError("Query data not found for this workspace")
             
+        db_res = await db.execute(
+            select(Databases.uuid).where(Databases.servername == query_data.servername, Databases.database_name == query_data.database_name)
+        )
+        db_uuid = db_res.scalars().first() or ""
+            
         return {
             "id": workspace.id,
             "name": workspace.name,
@@ -233,6 +253,7 @@ class WorkspaceService:
             "query": query_data.query,
             "servername": query_data.servername,
             "database_name": query_data.database_name,
+            "db_uuid": db_uuid,
             "status": query_data.status,
             "show_results": getattr(workspace, 'show_results', None),
             "owner_id": workspace.user_id,
@@ -253,7 +274,7 @@ class WorkspaceService:
         Returns:
             dict[str, Any]: A dictionary containing execution status and data or error details.
         """
-        # Load workspace and query
+        # Load workspace, query, database, and user database roles
         async with self.app_db.get_app_db() as db:
             workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
             workspace: Workspace | None = workspace_result.scalars().first()
@@ -267,26 +288,50 @@ class WorkspaceService:
             query_data: QueryData | None = query_result.scalars().first()
             if not query_data:
                 raise WorkspaceNotFoundError("Query data not found for this workspace")
-                
-            # enforce approval
-            if not workspace.show_results or query_data.status != "approved_with_results":
-                raise QueryAnalysisRejectedError("This workspace is not approved for execution")
+
+            db_result = await db.execute(
+                select(Databases).where(Databases.servername == query_data.servername, Databases.database_name == query_data.database_name)
+            )
+            db_entry = db_result.scalars().first()
+            if not db_entry:
+                raise BaseServiceException("Target database does not exist in registry.")
+            db_id = db_entry.id
+            db_uuid = db_entry.uuid
+
+            assoc_result = await db.execute(
+                select(UserDatabaseAssociation).where(
+                    UserDatabaseAssociation.user_id == current_user.id,
+                    UserDatabaseAssociation.database_id == db_id
+                )
+            )
+            assoc = assoc_result.scalars().first()
+            if not assoc:
+                raise BaseServiceException("You do not have permission to access this database.")
+            user_role = assoc.role
+
+            is_db_admin = "ADMIN" in [r.strip().upper() for r in user_role.split(",")]
+
+            # enforce approval only for non-admins
+            if not is_db_admin:
+                if not workspace.show_results or query_data.status != "approved_with_results":
+                    raise QueryAnalysisRejectedError("This workspace is not approved for execution")
 
         log_id: int | None = None
         try:
             logger.info(f"Executing approved workspace {workspace_id} on server '{query_data.servername}'")
             log_id = await self.app_db.create_log(user=current_user, query=query_data.query, machine_name=query_data.servername, approved_execution=True)
 
-            # Fetch persistent database masking rules & merge with user ad-hoc rules
-            db_id = None
             masking_cols = set()
-            async with self.app_db.get_app_db() as db_session:
-                db_result = await db_session.execute(
-                    select(Databases).where(Databases.servername == query_data.servername, Databases.database_name == query_data.database_name)
+            db_info_entry = db_provider.db_by_uuid.get(db_uuid, {})
+            technology = db_info_entry.get("technology", "mssql")
+            
+            # Role capability verification using SQLGlot AST analyzer
+            from query_execution.query_analyzer import QueryAnalyzer
+            analyzer = QueryAnalyzer()
+            if not analyzer.check_permissions_match_role(query_data.query, user_role, technology=technology):
+                raise QueryAnalysisRejectedError(
+                    f"Query blocked: Your role '{user_role}' is not authorized to execute this query."
                 )
-                db_entry = db_result.scalars().first()
-                if db_entry:
-                    db_id = db_entry.id
             
             if db_id:
                 rules = await self.app_db.get_masking_rules(db_id)
@@ -297,7 +342,7 @@ class WorkspaceService:
                 for col in ad_hoc_mask_columns:
                     masking_cols.add(col.lower())
 
-            async with db_provider.get_session(user=current_user, servername=query_data.servername, database_name=query_data.database_name) as session:
+            async with db_provider.get_session(user=current_user, db_uuid=db_uuid) as session:
                   sql_query = text(query_data.query)
                   result = await session.execute(sql_query)
                   
@@ -314,7 +359,7 @@ class WorkspaceService:
                           message = f"{row_count} rows returned"
                       
                       result_data = [dict(row._mapping) for row in rows]
-                      if not current_user.is_admin and masking_cols:
+                      if not is_db_admin and masking_cols:
                           result_data = mask_result_set(result_data, masking_cols)
                   else:
                       row_count = result.rowcount if result.rowcount is not None else 0

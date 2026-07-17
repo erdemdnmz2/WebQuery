@@ -1,21 +1,17 @@
 import hashlib
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSession, async_sessionmaker
 import asyncio
 from .config import TIME_INTERVAL_FOR_CACHE
-from pydantic import BaseModel, Field
 from datetime import datetime
+from dataclasses import dataclass, field
 
-from typing import Dict, Optional, Any
-
-class EngineCacheEntry(BaseModel):
+@dataclass
+class EngineCacheEntry:
     """Cached engine entry with metadata."""
-    engine: Any
-    last_accessed: datetime = Field(default_factory=datetime.now)
-    owner_id: Optional[int] = None
-    
-    class Config:
-        arbitrary_types_allowed = True  
+    engine: AsyncEngine
+    last_accessed: datetime = field(default_factory=datetime.now)
+    owner_id: Optional[str] = None
 
 class EngineCache:
     def __init__(self, max_engines = 100):
@@ -34,11 +30,8 @@ class EngineCache:
         self._running = False
 
     def _hash_key(self, url: str) -> str:
-        byte_data = url.encode("utf-8")
-
-        hash = hashlib.sha256(byte_data).hexdigest()[:16]
-
-        return hash
+        """Generates a unique hash key for a database URL to avoid storing plain passwords."""
+        return hashlib.sha256(url.encode('utf-8')).hexdigest()
 
     def _is_engine_active(self, engine: AsyncEngine) -> bool:
         """Checks if there are active transactions/connections on the engine."""
@@ -65,23 +58,23 @@ class EngineCache:
         await entry.engine.dispose()
         self._stats["engine_count"] -= 1
 
-    async def get_engine(self, url: str, owner_id: int = None) -> AsyncEngine:
-        hash_key = self._hash_key(url=url)
+    async def get_engine(self, url: str, db_uuid : str = None) -> AsyncEngine:
 
+        cache_key = db_uuid if db_uuid is not None else self._hash_key(url)
         async with self.lock:
             
-            if hash_key in self._cache:
-                self._cache[hash_key].last_accessed = datetime.now()
+            if cache_key in self._cache:
+                self._cache[cache_key].last_accessed = datetime.now()
                 self._stats["request_count"] += 1
-                return self._cache[hash_key].engine
+                return self._cache[cache_key].engine
             
             if self._stats["engine_count"] >= self._max_engines:
                 await self._evict_lru()
                         
             engine = create_async_engine(
                 url,
-                pool_size=5,
-                max_overflow=10,
+                pool_size=50,
+                max_overflow=100,
                 pool_timeout=30,
                 pool_recycle=1800,
                 pool_pre_ping=False
@@ -90,10 +83,10 @@ class EngineCache:
             entry = EngineCacheEntry(
                 engine=engine, 
                 last_accessed=datetime.now(),
-                owner_id=owner_id
+                owner_id=cache_key
             )
             
-            self._cache[hash_key] = entry
+            self._cache[cache_key] = entry
             self._stats["engine_count"] += 1
             self._stats["request_count"] += 1
             
@@ -155,15 +148,15 @@ class EngineCache:
                 self._stats["engine_count"] = 0
             print(f"[EngineCache] Stopped and cleared all engines.")
     
-    async def close_user_engines(self, user_id: int):
+    async def close_user_engines(self, db_uuid: str):
         """Belirli bir kullanıcı ID'sine ait motorları kapatır"""
-        if not user_id:
+        if not db_uuid:
             return
 
         keys_to_remove = []
         async with self.lock:
             for key, entry in self._cache.items():
-                if entry.owner_id == user_id:
+                if entry.owner_id == db_uuid:
                     if not self._is_engine_active(entry.engine):
                         keys_to_remove.append(key)
             
@@ -171,4 +164,4 @@ class EngineCache:
                 entry = self._cache.pop(key)
                 await entry.engine.dispose()
                 self._stats["engine_count"] -= 1
-                print(f"[EngineCache] Closed engine for user_id: {user_id}")
+                print(f"[EngineCache] Closed engine for db_uuid: {db_uuid}")

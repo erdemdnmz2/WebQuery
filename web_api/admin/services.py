@@ -5,7 +5,7 @@ Admin approval and management operations for risky queries
 from sqlalchemy import inspect, delete
 from sqlalchemy.sql import select, text
 from typing import Any
-from app_database.models import QueryData, Workspace, User, Databases, MaskingRule
+from app_database.models import QueryData, Workspace, User, Databases, MaskingRule, UserDatabaseAssociation
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
 from .schemas import AdminApprovals
@@ -16,6 +16,8 @@ from common.exceptions import BaseServiceException
 from workspaces.exceptions import WorkspaceNotFoundError
 from .exceptions import DatabaseAlreadyExistsError
 from common.security import generate_secure_credentials
+
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,7 @@ class AdminService(BaseAdminService):
         # Initialize sub-services
         self.approval_service = AdminApprovalService(app_db, db_provider)
         self.db_addition_service = AdminDBAdditionService(app_db, db_provider)
+        self.auth_service = AdminUserAuthService(app_db, db_provider)
         
         # Other services to be added in the future can go here
         # self.report_service = AdminReportService(app_db, db_provider)
@@ -50,25 +53,58 @@ class AdminService(BaseAdminService):
     # We define the methods used in the router as wrappers here
     # So we don't have to change the router code.
 
-    async def get_workspaces_for_approval(self):
-        return await self.approval_service.get_workspaces_for_approval()
+    async def get_workspaces_for_approval(self, admin_user: User):
+        return await self.approval_service.get_workspaces_for_approval(admin_user)
 
     async def execute_for_preview(self, workspace_id: int, admin_user: User):
         return await self.approval_service.execute_for_preview(workspace_id, admin_user)
 
-    async def reject_query_by_workspace_id(self, workspace_id: int):
-        return await self.approval_service.reject_query_by_workspace_id(workspace_id)
+    async def reject_query_by_workspace_id(self, workspace_id: int, admin_user: User):
+        return await self.approval_service.reject_query_by_workspace_id(workspace_id, admin_user)
             
-    async def approve(self, workspace_id: int, show_results: bool):
-        return await self.approval_service.approve(workspace_id, show_results)
+    async def approve(self, workspace_id: int, show_results: bool, admin_user: User):
+        return await self.approval_service.approve(workspace_id, show_results, admin_user)
+ 
+    async def associate_user_to_database(self, user_id: int, database_id: int, role: str, admin_user: User) -> dict[str, Any]:
+        return await self.auth_service.associate_user_to_database(user_id, database_id, role, admin_user)
 
-    async def list_databases(self) -> list[Databases]:
+    async def list_databases(self, admin_user: User) -> list[Databases]:
         async with self.app_db.get_app_db() as db:
-            result = await db.execute(select(Databases))
-            return list(result.scalars().all())
+            stmt = select(Databases).join(
+                UserDatabaseAssociation,
+                UserDatabaseAssociation.database_id == Databases.id
+            ).where(
+                UserDatabaseAssociation.user_id == admin_user.id
+            )
+            result = await db.execute(stmt)
+            all_dbs = result.scalars().all()
+            
+            filtered = []
+            for db_entry in all_dbs:
+                stmt_assoc = select(UserDatabaseAssociation).where(
+                    UserDatabaseAssociation.user_id == admin_user.id,
+                    UserDatabaseAssociation.database_id == db_entry.id
+                )
+                res_assoc = await db.execute(stmt_assoc)
+                assoc = res_assoc.scalars().first()
+                if assoc:
+                    roles = [r.strip().upper() for r in assoc.role.split(",")]
+                    if "ADMIN" in roles:
+                        filtered.append(db_entry)
+            return filtered
 
     async def discover_schema(self, database_id: int, admin_user: User) -> dict[str, list[str]]:
         async with self.app_db.get_app_db() as db:
+            assoc_res = await db.execute(
+                select(UserDatabaseAssociation).where(
+                    UserDatabaseAssociation.user_id == admin_user.id,
+                    UserDatabaseAssociation.database_id == database_id
+                )
+            )
+            assoc = assoc_res.scalars().first()
+            if not assoc or "ADMIN" not in [r.strip().upper() for r in assoc.role.split(",")]:
+                return {}
+
             db_entry = await db.get(Databases, database_id)
             if not db_entry:
                 return {}
@@ -79,7 +115,7 @@ class AdminService(BaseAdminService):
         self.db_provider.set_db_info(db_info)
         
         try:
-            async with self.db_provider.get_session(admin_user, servername, database_name) as session:
+            async with self.db_provider.get_session(admin_user, db_entry.uuid) as session:
                 def get_schema(connection):
                     inspector = inspect(connection)
                     schema = {}
@@ -119,16 +155,35 @@ class AdminService(BaseAdminService):
             logger.error(f"Failed to discover schema for database {database_id}: {e}")
             return {}
 
-    async def get_all_masking_rules(self, database_id: int) -> list[MaskingRule]:
+    async def get_all_masking_rules(self, database_id: int, admin_user: User) -> list[MaskingRule]:
         async with self.app_db.get_app_db() as db:
+            assoc_res = await db.execute(
+                select(UserDatabaseAssociation).where(
+                    UserDatabaseAssociation.user_id == admin_user.id,
+                    UserDatabaseAssociation.database_id == database_id
+                )
+            )
+            assoc = assoc_res.scalars().first()
+            if not assoc or "ADMIN" not in [r.strip().upper() for r in assoc.role.split(",")]:
+                raise BaseServiceException("You do not have admin permissions for this database.")
+
             result = await db.execute(
                 select(MaskingRule).where(MaskingRule.database_id == database_id)
             )
             return list(result.scalars().all())
 
-    async def save_masking_rules(self, database_id: int, rules_data: list) -> bool:
+    async def save_masking_rules(self, database_id: int, rules_data: list, admin_user: User) -> bool:
         async with self.app_db.get_app_db() as db:
             try:
+                assoc_res = await db.execute(
+                    select(UserDatabaseAssociation).where(
+                        UserDatabaseAssociation.user_id == admin_user.id,
+                        UserDatabaseAssociation.database_id == database_id
+                    )
+                )
+                assoc = assoc_res.scalars().first()
+                if not assoc or "ADMIN" not in [r.strip().upper() for r in assoc.role.split(",")]:
+                    raise BaseServiceException("You do not have admin permissions for this database.")
                 await db.execute(delete(MaskingRule).where(MaskingRule.database_id == database_id))
                 for rule in rules_data:
                     new_rule = MaskingRule(
@@ -151,18 +206,38 @@ class AdminApprovalService(BaseAdminService):
     Sub-service handling admin approval operations.
     """
 
-    async def get_workspaces_for_approval(self):
+    async def get_workspaces_for_approval(self, admin_user: User):
         """
-        Retrieves workspaces waiting for admin approval.
+        Retrieves workspaces waiting for admin approval for the databases the admin is associated with as ADMIN.
         """
         result_list = []
         try:
             async with self.app_db.get_app_db() as db:
-                results = await db.execute(select(QueryData).where(QueryData.status == "waiting_for_approval"))
+                # We need to query QueryData where status is waiting_for_approval,
+                # then filter to databases where this user is ADMIN
+                stmt = select(QueryData).where(QueryData.status == "waiting_for_approval")
+                results = await db.execute(stmt)
                 queries = results.scalars().all()
                 if queries:
                     for query in queries:
-                       
+                        # Check admin permissions on the query database
+                        db_res = await db.execute(
+                            select(Databases).where(Databases.servername == query.servername, Databases.database_name == query.database_name)
+                        )
+                        db_entry = db_res.scalars().first()
+                        if not db_entry:
+                            continue
+                            
+                        assoc_res = await db.execute(
+                            select(UserDatabaseAssociation).where(
+                                UserDatabaseAssociation.user_id == admin_user.id,
+                                UserDatabaseAssociation.database_id == db_entry.id
+                            )
+                        )
+                        assoc = assoc_res.scalars().first()
+                        if not assoc or "ADMIN" not in [r.strip().upper() for r in assoc.role.split(",")]:
+                            continue
+
                         workspace_result = await db.execute(
                             select(Workspace).where(Workspace.query_id == query.id)
                         )
@@ -214,6 +289,26 @@ class AdminApprovalService(BaseAdminService):
             query_text = query_data.query
             servername = query_data.servername
             database_name = query_data.database_name
+            
+            # Resolve db_uuid from Databases table
+            db_res = await db.execute(
+                select(Databases).where(Databases.servername == servername, Databases.database_name == database_name)
+            )
+            db_entry = db_res.scalars().first()
+            if not db_entry:
+                return {"success": False, "error": "Database not registered in Databases table"}
+            db_uuid = db_entry.uuid
+            
+            # Check admin permissions on the target database
+            assoc_res = await db.execute(
+                select(UserDatabaseAssociation).where(
+                    UserDatabaseAssociation.user_id == admin_user.id,
+                    UserDatabaseAssociation.database_id == db_entry.id
+                )
+            )
+            assoc = assoc_res.scalars().first()
+            if not assoc or "ADMIN" not in [r.strip().upper() for r in assoc.role.split(",")]:
+                return {"success": False, "error": "You do not have admin permissions for this database."}
         
         try:
             log_id = await self.app_db.create_log(
@@ -222,7 +317,7 @@ class AdminApprovalService(BaseAdminService):
                 machine_name=servername
             )
             
-            async with self.db_provider.get_session(user, servername, database_name) as session:
+            async with self.db_provider.get_session(user, db_uuid) as session:
                 sql_query = text(query_text)
                 result = await session.execute(sql_query)
                 
@@ -278,7 +373,7 @@ class AdminApprovalService(BaseAdminService):
                 "error": str(e)
             }
 
-    async def reject_query_by_workspace_id(self, workspace_id: int):
+    async def reject_query_by_workspace_id(self, workspace_id: int, admin_user: User):
         """
         Rejects the query.
         """
@@ -294,6 +389,23 @@ class AdminApprovalService(BaseAdminService):
                 if not query_data:
                     return {"success": False, "error": "Query data not found"}
                 
+                db_res = await db.execute(
+                    select(Databases).where(Databases.servername == query_data.servername, Databases.database_name == query_data.database_name)
+                )
+                db_entry = db_res.scalars().first()
+                if not db_entry:
+                    return {"success": False, "error": "Database not found in registry."}
+
+                assoc_res = await db.execute(
+                    select(UserDatabaseAssociation).where(
+                        UserDatabaseAssociation.user_id == admin_user.id,
+                        UserDatabaseAssociation.database_id == db_entry.id
+                    )
+                )
+                assoc = assoc_res.scalars().first()
+                if not assoc or "ADMIN" not in [r.strip().upper() for r in assoc.role.split(",")]:
+                    return {"success": False, "error": "You do not have admin permissions for this database."}
+                
                 query_data.status = "rejected"
                 workspace.description = "Rejected by admin"
                 
@@ -305,16 +417,9 @@ class AdminApprovalService(BaseAdminService):
                 print(f"Error rejecting query: {e}")
                 return {"success": False, "error": str(e)}
             
-    async def approve(self, workspace_id: int, show_results: bool) -> dict[str, Any]:
+    async def approve(self, workspace_id: int, show_results: bool, admin_user: User) -> dict[str, Any]:
         """
         Approves a query, enabling execution for the user.
-        
-        Args:
-            workspace_id: The ID of the workspace containing the query.
-            show_results: If True, the user can see execution results; otherwise, they cannot.
-            
-        Returns:
-            dict[str, any]: A dictionary indicating success and the new query status.
         """
         async with self.app_db.get_app_db() as db:
             try:
@@ -329,6 +434,23 @@ class AdminApprovalService(BaseAdminService):
                 query_data: QueryData | None = query_result.scalars().first()
                 if not query_data:
                     raise WorkspaceNotFoundError("Query data not found for this workspace")
+                
+                db_res = await db.execute(
+                    select(Databases).where(Databases.servername == query_data.servername, Databases.database_name == query_data.database_name)
+                )
+                db_entry = db_res.scalars().first()
+                if not db_entry:
+                    raise BaseServiceException("Database not found in registry.")
+
+                assoc_res = await db.execute(
+                    select(UserDatabaseAssociation).where(
+                        UserDatabaseAssociation.user_id == admin_user.id,
+                        UserDatabaseAssociation.database_id == db_entry.id
+                    )
+                )
+                assoc = assoc_res.scalars().first()
+                if not assoc or "ADMIN" not in [r.strip().upper() for r in assoc.role.split(",")]:
+                    raise BaseServiceException("You do not have admin permissions for this database.")
                 
                 # 3. Update status and description
                 new_status: str = ""
@@ -364,17 +486,9 @@ class AdminDBAdditionService(BaseAdminService):
     """
     Service for adding new databases to the platform configuration.
     """
-    async def add_database(self, servername: str, database_name: str, tech_name: str) -> dict[str, Any]:
+    async def add_database(self, servername: str, database_name: str, tech_name: str, admin_user: User) -> dict[str, Any]:
         """
         Adds a new database server and database configuration to the application databases.
-        
-        Args:
-            servername: The host/instance name of the SQL server.
-            database_name: The name of the database.
-            tech_name: The database technology/type (e.g., mssql, postgresql, mysql).
-            
-        Returns:
-            dict[str, any]: A dictionary containing execution status and a message or error.
         """
         async with self.app_db.get_app_db() as db:
             try:
@@ -388,25 +502,38 @@ class AdminDBAdditionService(BaseAdminService):
                     raise DatabaseAlreadyExistsError("Database already exists")
 
                 db_username, db_password = generate_secure_credentials()
+                db_uuid = str(uuid.uuid4())
 
                 database: Databases = Databases(
                     servername=servername, 
                     database_name=database_name, 
                     technology=tech_name,
                     db_username=db_username,
-                    db_password=db_password
+                    db_password=db_password,
+                    uuid=db_uuid
                 )
                 db.add(database)
+                await db.flush() # Flush to get database.id
+
+                # Automatically associate the adding admin user as ADMIN for this database
+                assoc = UserDatabaseAssociation(
+                    user_id=admin_user.id,
+                    database_id=database.id,
+                    role="ADMIN",
+                    is_admin=True
+                )
+                db.add(assoc)
                 await db.commit()
                 
                 # Refresh db_provider db_info dynamically
                 db_info = await self.app_db.get_db_info()
                 self.db_provider.set_db_info(db_info)
                 
-                logger.info(f"Database '{database_name}' on server '{servername}' successfully added by admin with generated credentials")
+                logger.info(f"Database '{database_name}' on server '{servername}' (UUID: {db_uuid}) successfully added by admin {admin_user.id} with generated credentials")
                 return {
                     "success": True, 
                     "message": "Database added successfully",
+                    "db_uuid": db_uuid,
                     "db_username": db_username,
                     "db_password": db_password
                 }
@@ -416,3 +543,68 @@ class AdminDBAdditionService(BaseAdminService):
                 await db.rollback()
                 logger.error(f"Error adding database: {e}")
                 raise BaseServiceException(f"Error adding database: {str(e)}", original_exception=e)
+
+
+class AdminUserAuthService(BaseAdminService):
+    """
+    Sub-service for admin to manage user database associations and roles.
+    """
+    async def associate_user_to_database(self, user_id: int, database_id: int, role: str, admin_user: User) -> dict[str, Any]:
+        role_upper = role.upper()
+        # Clean roles list, allow comma-separated combination of READER, WRITER, ADMIN
+        roles_list = [r.strip() for r in role_upper.split(",")]
+        for r in roles_list:
+            if r not in ["READER", "WRITER", "ADMIN"]:
+                raise BaseServiceException("Invalid role. Role must be READER, WRITER, or ADMIN.")
+            
+        async with self.app_db.get_app_db() as db:
+            # Check admin permission
+            assoc_res_admin = await db.execute(
+                select(UserDatabaseAssociation).where(
+                    UserDatabaseAssociation.user_id == admin_user.id,
+                    UserDatabaseAssociation.database_id == database_id
+                )
+            )
+            assoc_admin = assoc_res_admin.scalars().first()
+            if not assoc_admin or "ADMIN" not in [r.strip().upper() for r in assoc_admin.role.split(",")]:
+                raise BaseServiceException("You do not have admin permissions for this database.")
+
+            # Check user exists
+            user_res = await db.execute(select(User).where(User.id == user_id))
+            user = user_res.scalars().first()
+            if not user:
+                raise BaseServiceException("User not found.")
+                
+            # Check database exists
+            db_res = await db.execute(select(Databases).where(Databases.id == database_id))
+            db_entry = db_res.scalars().first()
+            if not db_entry:
+                raise BaseServiceException("Database not found.")
+                
+            # Check existing association
+            assoc_res = await db.execute(
+                select(UserDatabaseAssociation).where(
+                    UserDatabaseAssociation.user_id == user_id,
+                    UserDatabaseAssociation.database_id == database_id
+                )
+            )
+            assoc = assoc_res.scalars().first()
+            
+            is_admin_val = (role_upper == "ADMIN")
+            
+            if assoc:
+                assoc.role = role_upper
+                assoc.is_admin = is_admin_val
+            else:
+                assoc = UserDatabaseAssociation(
+                    user_id=user_id,
+                    database_id=database_id,
+                    role=role_upper,
+                    is_admin=is_admin_val
+                )
+                db.add(assoc)
+                
+            await db.commit()
+            
+        return {"success": True, "message": f"Successfully associated user {user_id} with database {database_id} as {role_upper}."}
+

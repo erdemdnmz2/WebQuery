@@ -19,7 +19,7 @@ from authentication.services import create_access_token, get_current_user
 from dependencies import get_app_db, get_db_provider
 from app_database.app_database import AppDatabase
 from database_provider import DatabaseProvider
-from app_database.models import User
+from app_database.models import User, UserDatabaseAssociation
 
 router = APIRouter(prefix="/api")
 
@@ -127,19 +127,34 @@ async def register(
 
 
 @router.get("/me", response_model=schemas.User)
-async def read_users_me(current_user: User = Depends(get_current_user)) -> schemas.User:
+async def read_users_me(
+    current_user: User = Depends(get_current_user),
+    app_db: AppDatabase = Depends(get_app_db)
+) -> schemas.User:
     """
     Returns current authenticated user information.
     
     Args:
         current_user: The authenticated user instance.
+        app_db: The app database manager.
         
     Returns:
         schemas.User: The user details schema.
     """
+    is_admin = False
+    async with app_db.get_app_db() as db:
+        stmt = select(UserDatabaseAssociation).where(UserDatabaseAssociation.user_id == current_user.id)
+        res = await db.execute(stmt)
+        assocs = res.scalars().all()
+        for assoc in assocs:
+            roles = [r.strip().upper() for r in assoc.role.split(",")]
+            if "ADMIN" in roles:
+                is_admin = True
+                break
+
     return schemas.User(
         username=current_user.username,
-        is_admin=current_user.is_admin if current_user.is_admin is not None else False
+        is_admin=is_admin
     )
 
 

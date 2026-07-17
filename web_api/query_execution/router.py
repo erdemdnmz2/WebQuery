@@ -11,9 +11,11 @@ from query_execution import config
 from query_execution import schemas as query_models
 from query_execution.services import QueryService
 from authentication.services import get_current_user
-from dependencies import get_db_provider, get_query_service
+from dependencies import get_db_provider, get_query_service, get_app_db
 from database_provider import DatabaseProvider
-from app_database.models import User
+from app_database.app_database import AppDatabase
+from app_database.models import User, UserDatabaseAssociation, Databases
+from sqlalchemy.future import select
 
 router = APIRouter(prefix="/api")
 
@@ -43,8 +45,7 @@ async def execute_query(
     result: dict[str, Any] = await query_service.execute_query(
         query=query_request.query,
         user=current_user,
-        server_name=query_request.servername,
-        database_name=query_request.database_name,
+        db_uuid=query_request.db_uuid,
         ad_hoc_mask_columns=query_request.ad_hoc_mask_columns
     )
     return result
@@ -79,8 +80,7 @@ async def multiple_query(
         result: dict[str, Any] = await query_service.execute_query(
             query=execution_info.query,
             user=current_user,
-            server_name=execution_info.servername,
-            database_name=execution_info.database_name,
+            db_uuid=execution_info.db_uuid,
             ad_hoc_mask_columns=execution_info.ad_hoc_mask_columns
         )
         results.append(result)
@@ -91,7 +91,8 @@ async def multiple_query(
 @router.get("/database_information", response_model=query_models.DatabaseInformationResponse)
 async def get_database_information(
     current_user: User = Depends(get_current_user),
-    db_provider: DatabaseProvider = Depends(get_db_provider)
+    db_provider: DatabaseProvider = Depends(get_db_provider),
+    app_db: AppDatabase = Depends(get_app_db)
 ) -> dict[str, Any]:
     """
     Returns the list of databases accessible to the user per server.
@@ -99,22 +100,51 @@ async def get_database_information(
     Args:
         current_user: The authenticated user instance.
         db_provider: The database provider instance.
+        app_db: The app database manager.
         
     Returns:
         dict[str, Any]: A mapping of servers to databases.
     """
-    db_info: dict[str, Any] = db_provider.get_db_info_db()
-    return {"db_info": db_info}
+    all_db_info: dict[str, Any] = db_provider.get_db_info_db()
+
+    # Retrieve only databases authorized for the user
+    async with app_db.get_app_db() as db:
+        assoc_res = await db.execute(
+            select(UserDatabaseAssociation.database_id).where(UserDatabaseAssociation.user_id == current_user.id)
+        )
+        allowed_db_ids = set(assoc_res.scalars().all())
+        
+        if not allowed_db_ids:
+            return {"db_info": {}}
+            
+        db_res = await db.execute(
+            select(Databases).where(Databases.id.in_(allowed_db_ids))
+        )
+        allowed_databases = db_res.scalars().all()
+        allowed_uuids = {d.uuid for d in allowed_databases}
+
+    filtered_info = {}
+    for server_name, server_data in all_db_info.items():
+        tech = server_data.get("technology", "mssql")
+        dbs = server_data.get("databases", [])
+        
+        filtered_dbs = [d for d in dbs if d.get("uuid") in allowed_uuids]
+        if filtered_dbs:
+            filtered_info[server_name] = {
+                "databases": filtered_dbs,
+                "technology": tech
+            }
+            
+    return {"db_info": filtered_info}
 
 @router.get("/masking_rules", response_model=List[str])
 async def get_masking_rules(
-    servername: str,
-    database_name: str,
+    db_uuid: str,
     current_user: User = Depends(get_current_user),
     query_service: QueryService = Depends(get_query_service)
 ) -> List[str]:
     """
-    Returns the list of column names persistently masked by admin for the given server and database.
+    Returns the list of column names persistently masked by admin for the given database UUID.
     """
-    rules = await query_service.get_active_masking_rules(servername, database_name)
+    rules = await query_service.get_active_masking_rules(db_uuid)
     return rules

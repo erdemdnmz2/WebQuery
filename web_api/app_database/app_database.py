@@ -237,7 +237,10 @@ class AppDatabase:
                             "databases": [],
                             "technology": database.technology
                         }
-                    db_info[servername]["databases"].append(database.database_name)
+                    db_info[servername]["databases"].append({
+                        "name": database.database_name,
+                        "uuid": database.uuid
+                    })
                 return db_info
 
     async def blacklist_token(self, jti: str, expires_at: datetime) -> None:

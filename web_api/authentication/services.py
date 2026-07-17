@@ -87,8 +87,8 @@ async def get_current_user(
     Raises:
         HTTPException: If token is invalid or user is not found.
     """
-    # Retrieve AppDatabase instance from request state to prevent circular imports
-    app_db: AppDatabase = request.app.state.app_db
+    # Retrieve AppDatabase instance from request state context to prevent circular imports
+    app_db: AppDatabase = request.app.state.context.app_db
 
     # Retrieve token solely from cookies
     token = request.cookies.get("access_token")

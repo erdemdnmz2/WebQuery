@@ -98,3 +98,9 @@ class DatabaseResponseSchema(BaseModel):
 
 class DatabaseListResponse(BaseModel):
     databases: List[DatabaseResponseSchema]
+
+
+class UserAssociationRequest(BaseModel):
+    user_id: int
+    database_id: int
+    role: str # "READER", "WRITER", "ADMIN"

@@ -127,3 +127,66 @@ class QueryAnalyzer:
                 return True
                 
         return False
+
+    def check_permissions_match_role(self, query: str, role: str, technology: str = "mssql") -> bool:
+        """
+        Validates if the operations in the SQL query match the user's roles (comma-separated):
+        - READER: Only SELECT (read) queries are allowed. DML/DDL are blocked.
+        - WRITER: SELECT, INSERT, UPDATE, DELETE are allowed. DDL are blocked.
+        - ADMIN: All queries (including DDL) are allowed.
+        
+        Returns:
+        
+            bool: True if query is permitted under at least one of the roles, False otherwise.
+        """
+        q = query.strip()
+        dialect_map = {
+            "mssql": "tsql",
+            "mysql": "mysql",
+            "postgresql": "postgres",
+            "postgres": "postgres"
+        }
+        dialect = dialect_map.get(technology.lower().strip(), "tsql")
+        try:
+            statements = sqlglot.parse(q, read=dialect)
+        except Exception:
+            return False
+
+        roles_list = [r.strip().upper() for r in role.split(",")]
+
+        for stmt in statements:
+            if not stmt:
+                continue
+
+            ddl_types = (exp.Drop, exp.Create, exp.AlterTable, exp.TruncateTable)
+            has_ddl = isinstance(stmt, ddl_types) or any(isinstance(node, ddl_types) for node in stmt.find_all(ddl_types))
+
+            dml_types = (exp.Insert, exp.Update, exp.Delete)
+            has_dml = isinstance(stmt, dml_types) or any(isinstance(node, dml_types) for node in stmt.find_all(dml_types))
+
+            # DDL statement requires ADMIN
+            if has_ddl:
+                if "ADMIN" not in roles_list:
+                    return False
+                continue
+
+            # DML statement requires WRITER or ADMIN
+            if has_dml:
+                if "WRITER" not in roles_list and "ADMIN" not in roles_list:
+                    return False
+                continue
+
+            # Read statement (SELECT) requires READER, WRITER, or ADMIN
+            allowed_roots = (exp.Select, exp.Union, exp.CTE, exp.Subquery)
+            is_read = isinstance(stmt, allowed_roots) or any(isinstance(node, exp.Select) for node in stmt.find_all(exp.Select))
+            if is_read:
+                if "READER" not in roles_list and "WRITER" not in roles_list and "ADMIN" not in roles_list:
+                    return False
+                continue
+
+            # For any other utility statement, require at least WRITER or ADMIN to be safe
+            if "WRITER" not in roles_list and "ADMIN" not in roles_list:
+                return False
+
+        return True
+
