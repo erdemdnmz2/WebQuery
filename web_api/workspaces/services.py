@@ -20,6 +20,7 @@ from common.exceptions import BaseServiceException
 from workspaces.exceptions import WorkspaceNotFoundError, WorkspaceAccessDeniedError
 from query_execution.exceptions import QueryAnalysisRejectedError, QueryExecutionError
 from common.security import mask_result_set
+from query_execution.query_analyzer import QueryAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ class WorkspaceService:
             app_db: AppDatabase instance
         """
         self.app_db = app_db
+        self.analyzer = QueryAnalyzer()
 
     async def create_workspace(self, db: AsyncSession, workspace_data: WorkspaceCreate, user_id: int):
         """
@@ -326,9 +328,7 @@ class WorkspaceService:
             technology = db_info_entry.get("technology", "mssql")
             
             # Role capability verification using SQLGlot AST analyzer
-            from query_execution.query_analyzer import QueryAnalyzer
-            analyzer = QueryAnalyzer()
-            if not analyzer.check_permissions_match_role(query_data.query, user_role, technology=technology):
+            if not self.analyzer.check_permissions_match_role(query_data.query, user_role, technology=technology):
                 raise QueryAnalysisRejectedError(
                     f"Query blocked: Your role '{user_role}' is not authorized to execute this query."
                 )
