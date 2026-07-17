@@ -132,9 +132,9 @@ const SqlEditor: React.FC = () => {
       const res = await authenticatedFetch('/api/execute_query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          query, 
-          servername: selectedServer, 
+        body: JSON.stringify({
+          query,
+          servername: selectedServer,
           database_name: selectedDatabase,
           ad_hoc_mask_columns: adHocMaskCols
         })
@@ -473,7 +473,7 @@ const SqlEditor: React.FC = () => {
           {/* User Ad-Hoc Masking Rules */}
           <div>
             <label className="block text-[10px] text-gray-500 font-black uppercase mb-2 tracking-wider">Geçici Maskeleme Kuralları (Ad-Hoc)</label>
-            
+
             {/* Input field to add custom columns */}
             <div className="flex gap-2 mb-3">
               <input
