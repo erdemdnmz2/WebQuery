@@ -83,6 +83,19 @@ async def lifespan(app: FastAPI):
         await app.state.app_db.app_engine.dispose()
         raise SystemExit(1)
 
+    # Initialize AppContext to hold singleton instances of all stateless services
+    try:
+        from dependencies import AppContext
+        app.state.context = AppContext(
+            app_db=app.state.app_db,
+            db_provider=app.state.db_provider
+        )
+        print("✓ AppContext initialized successfully")
+    except Exception as e:
+        print(f"\n❌ FATAL: AppContext initialization error: {e}")
+        await app.state.app_db.app_engine.dispose()
+        raise SystemExit(1)
+
     print("All services started successfully\n")
 
     try:

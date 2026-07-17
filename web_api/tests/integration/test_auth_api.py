@@ -202,7 +202,7 @@ async def test_logout_flow(async_client: AsyncClient):
     assert "access_token" in async_client.cookies
 
     # 2. Mock db_provider.close_user_engines
-    db_provider = app.state.db_provider
+    db_provider = app.state.context.db_provider
     with patch.object(db_provider, "close_user_engines", new_callable=AsyncMock) as mock_close:
         # 3. Perform logout
         response = await async_client.post("/api/logout")

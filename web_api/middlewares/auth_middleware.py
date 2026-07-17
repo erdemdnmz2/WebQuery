@@ -65,7 +65,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # Check JTI blacklist
             jti = payload.get("jti")
             if jti:
-                app_db = request.app.state.app_db
+                app_db = request.app.state.context.app_db
                 is_blacklisted = await app_db.is_token_blacklisted(jti)
                 if is_blacklisted:
                     raise HTTPException(status_code=401, detail="Token has been revoked")

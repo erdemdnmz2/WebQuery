@@ -20,7 +20,7 @@ def mock_db_session():
     mock_session.execute.return_value = mock_result
     
     @asynccontextmanager
-    async def fake_get_session(user, servername, database_name):
+    async def fake_get_session(user, db_uuid):
         yield mock_session
         
     with patch("database_provider.DatabaseProvider.get_session", side_effect=fake_get_session):
@@ -37,14 +37,25 @@ async def create_user_and_login(async_client: AsyncClient, email: str, username:
     }
     await async_client.post("/api/register", json=register_data)
     
-    app_db = app.state.app_db
+    app_db = app.state.context.app_db
     user_id = 0
     if make_admin:
         async with app_db.get_app_db() as db:
             result = await db.execute(select(User).where(User.email == email))
             user = result.scalars().first()
-            user.is_admin = True
             user_id = user.id
+            
+            from app_database.models import UserDatabaseAssociation, Databases
+            db_res = await db.execute(select(Databases))
+            all_dbs = db_res.scalars().all()
+            for db_entry in all_dbs:
+                assoc = UserDatabaseAssociation(
+                    user_id=user.id,
+                    database_id=db_entry.id,
+                    role="ADMIN",
+                    is_admin=True
+                )
+                db.add(assoc)
             await db.commit()
             
     login_data = {
@@ -87,7 +98,16 @@ async def test_encryption_at_rest(async_client: AsyncClient):
     Verifies that sensitive data (DB passwords and SQL queries) are encrypted at rest (AES-256)
     but transparently decrypted when retrieved via ORM.
     """
-    app_db = app.state.app_db
+    app_db = app.state.context.app_db
+    # Seed bootstrap database so the user can be an admin of at least one database
+    async with app_db.get_app_db() as db:
+        bootstrap_db = Databases(
+            servername="bootstrap-server",
+            database_name="bootstrap-db",
+            technology="sqlite"
+        )
+        db.add(bootstrap_db)
+        await db.commit()
     
     # 1. Add database as admin (which generates credentials and encrypts the password)
     admin_client = AsyncClient(transport=async_client._transport, base_url="http://test")
@@ -135,7 +155,9 @@ async def test_dynamic_data_masking(async_client: AsyncClient, mock_db_session):
         MagicMock(_mapping={"id": 1, "email": "john@example.com", "salary": 5000, "phone": "555-1234"})
     ]
     
-    app_db = app.state.app_db
+    app_db = app.state.context.app_db
+    db_uuid = None
+    new_db_id = None
     
     # 1. Register DB and setup persistent masking rules for "email" and "phone"
     async with app_db.get_app_db() as db:
@@ -153,6 +175,8 @@ async def test_dynamic_data_masking(async_client: AsyncClient, mock_db_session):
         db.add(new_db)
         await db.commit()
         await db.refresh(new_db)
+        db_uuid = new_db.uuid
+        new_db_id = new_db.id
         
         rule1 = MaskingRule(database_id=new_db.id, table_name="users", column_name="email", masking_type="default", is_active=True)
         rule2 = MaskingRule(database_id=new_db.id, table_name="users", column_name="phone", masking_type="default", is_active=True)
@@ -163,14 +187,31 @@ async def test_dynamic_data_masking(async_client: AsyncClient, mock_db_session):
     regular_client = AsyncClient(transport=async_client._transport, base_url="http://test")
     await create_user_and_login(regular_client, "mask_user@example.com", "mask_user")
     
+    # Create UserDatabaseAssociation
+    async with app_db.get_app_db() as db:
+        from app_database.models import User, UserDatabaseAssociation
+        user_res = await db.execute(select(User).where(User.email == "mask_user@example.com"))
+        test_user = user_res.scalars().first()
+        
+        assoc = UserDatabaseAssociation(
+            user_id=test_user.id,
+            database_id=new_db_id,
+            role="READER",
+            is_admin=False
+        )
+        db.add(assoc)
+        await db.commit()
+        
+    db_info = await app_db.get_db_info()
+    app.state.context.db_provider.set_db_info(db_info)
+    
     # Run query without ad-hoc masking
     exec_payload = {
         "query": "SELECT * FROM users",
-        "servername": "mask-server",
-        "database_name": "mask_db"
+        "db_uuid": db_uuid
     }
     resp = await regular_client.post("/api/execute_query", json=exec_payload)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, f"Query execution failed: {resp.text}"
     data = resp.json()["data"][0]
     
     # "email" and "phone" should be masked, "salary" should NOT be masked
@@ -181,8 +222,7 @@ async def test_dynamic_data_masking(async_client: AsyncClient, mock_db_session):
     # 3. Run query with ad-hoc masking for "salary"
     exec_payload_adhoc = {
         "query": "SELECT * FROM users",
-        "servername": "mask-server",
-        "database_name": "mask_db",
+        "db_uuid": db_uuid,
         "ad_hoc_mask_columns": ["salary"]
     }
     resp_adhoc = await regular_client.post("/api/execute_query", json=exec_payload_adhoc)

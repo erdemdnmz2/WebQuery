@@ -96,21 +96,21 @@ async def test_ttl_cleanup(mock_create_engine):
 
 @pytest.mark.asyncio
 async def test_close_user_engines(mock_create_engine):
-    """Test that close_user_engines clears engines for a specific user ID."""
+    """Test that close_user_engines clears engines for a specific database UUID."""
     cache = EngineCache(max_engines=5)
     
     url1 = "mssql+aioodbc://fake:fake@host/db1"
     url2 = "mssql+aioodbc://fake:fake@host/db2"
     
-    # User 1 has engine 1
-    engine1 = await cache.get_engine(url1, owner_id=1)
+    # Database 1 has engine 1 (UUID: "uuid1")
+    engine1 = await cache.get_engine(url1, db_uuid="uuid1")
     
-    # User 2 has engine 2
-    engine2 = await cache.get_engine(url2, owner_id=2)
+    # Database 2 has engine 2 (UUID: "uuid2")
+    engine2 = await cache.get_engine(url2, db_uuid="uuid2")
     
     assert cache._stats["engine_count"] == 2
     
-    await cache.close_user_engines(user_id=1)
+    await cache.close_user_engines(db_uuid="uuid1")
     
     # Engine 1 should be disposed, engine 2 should remain
     engine1.dispose.assert_awaited_once()
