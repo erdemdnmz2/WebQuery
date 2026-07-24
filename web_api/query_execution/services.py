@@ -15,7 +15,7 @@ import uuid
 from query_execution import config
 from database_provider import DatabaseProvider
 from app_database.app_database import AppDatabase
-from app_database.models import User, QueryData, Workspace, Databases, UserDatabaseAssociation
+from app_database.models import User, QueryData, Workspace, Databases, UserDatabaseAssociation, ApprovalStatus
 from common.security import mask_result_set
 
 from query_execution.query_analyzer import QueryAnalyzer
@@ -52,7 +52,14 @@ class QueryService:
         self.analyzer = QueryAnalyzer()
         self.notification_service = notification_service
 
-    async def execute_query(self, query: str, user: User, db_uuid: str, ad_hoc_mask_columns: List[str] = None) -> Dict[str, Any]:
+    async def execute_query(
+        self,
+        query: str,
+        user: User,
+        db_uuid: str,
+        ad_hoc_mask_columns: List[str] = None,
+        client_ip: str = None,
+    ) -> Dict[str, Any]:
         """
         Analyzes, logs, and executes the SQL query against the target database.
         If the query is identified as risky, it is routed for admin approval.
@@ -62,11 +69,13 @@ class QueryService:
             user: The authenticated user executing the query.
             db_uuid: The target database unique identifier.
             ad_hoc_mask_columns: Temporary columns to mask for this transaction (optional).
+            client_ip: Originating client IP address for audit logging (optional).
             
         Returns:
             Dict[str, Any]: The execution results, rows, or error details.
         """
         log_id: int | None = None
+        query_uuid: str = str(uuid.uuid4())
         try:
             if db_uuid not in self.database_provider.db_by_uuid:
                 raise BaseServiceException(f"Database with UUID '{db_uuid}' not found.")
@@ -76,9 +85,8 @@ class QueryService:
             technology = db_entry["technology"]
 
             logger.info(f"Initiating query execution on server '{server_name}', database '{database_name}'")
-            log_id = await self.app_db.create_log(user=user, query=query, machine_name=server_name)
-            
-            # Fetch database entry id and verify role authorization
+
+            # Resolve database_id for audit logging
             db_id = None
             masking_cols = set()
             user_role = "READER"  # Default fallback role
@@ -120,14 +128,31 @@ class QueryService:
 
             is_db_admin = "ADMIN" in [r.strip().upper() for r in user_role.split(",")]
             query_analysis: Dict[str, Any] = self.analyzer.analyze(query, technology=technology)
-            
+            risk_level: str | None = query_analysis.get("risk_type")
+
+            # Create the initial audit log now that we have all context
+            log_id = await self.app_db.create_log(
+                user=user,
+                query=query,
+                machine_name=server_name,
+                approval_status=ApprovalStatus.AUTO_APPROVED,
+                database_id=db_id,
+                trace_id=query_uuid,
+                client_ip=client_ip,
+                risk_level=risk_level,
+            )
+
             if not query_analysis["return"] and not is_db_admin:
                 error_msg: str = f"Query rejected: {query_analysis['risk_type']}"
                 await self.app_db.update_log(log_id=log_id, successfull=False, error=error_msg)
+                # Mark the log as pending admin approval
+                await self.app_db.update_approval_status(
+                    trace_id=query_uuid,
+                    approval_status=ApprovalStatus.PENDING,
+                )
                 
                 try:
                     async with self.app_db.get_app_db() as db_session:
-                        query_uuid: str = str(uuid.uuid4())
                         query_data: QueryData = QueryData(
                             user_id=user.id,
                             servername=server_name,

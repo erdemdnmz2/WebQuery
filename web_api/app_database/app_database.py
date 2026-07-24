@@ -9,9 +9,9 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 from sqlalchemy.sql import select
 
-from .models import User, ActionLogging, LoginLogging, Base, Databases, BlacklistedToken, MaskingRule
+from .models import User, ActionLogging, LoginLogging, Base, Databases, BlacklistedToken, MaskingRule, ApprovalStatus
 from .schemas import UserCreate
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 
 class AppDatabase:
@@ -88,50 +88,76 @@ class AppDatabase:
             "message": "Registration successful! Redirecting to login page..."
         }
 
-    async def create_log(self, user: User, query: str, machine_name: str, approved_execution: bool = False):
+    async def create_log(
+        self,
+        user: User,
+        query: str,
+        machine_name: str,
+        approval_status: ApprovalStatus = ApprovalStatus.AUTO_APPROVED,
+        database_id: Optional[int] = None,
+        trace_id: Optional[str] = None,
+        client_ip: Optional[str] = None,
+        risk_level: Optional[str] = None,
+        approved_execution: bool = False,
+    ) -> int:
         """
-        Creates query execution log (initial record)
-        
+        Creates query execution log (initial record).
+
         Args:
-            user: User executing the query
-            query: Executed SQL query
-            machine_name: SQL Server instance name
-        
+            user: User executing the query.
+            query: Executed SQL query.
+            machine_name: SQL Server instance name.
+            approval_status: Initial approval state (default: auto_approved).
+            database_id: Target database FK for join queries.
+            trace_id: UUID linking this log to QueryData for Slack approval lookup.
+            client_ip: Originating client IP address.
+            risk_level: Risk type string from QueryAnalyzer.
+            approved_execution: Legacy boolean flag (kept for backward compatibility).
+
         Returns:
-            ActionLogging: Created log record
-        
-        Note:
-            Log is created initially, result is updated with update_log
+            int: ID of the created log record.
         """
         async with self.get_app_db() as db:
             async with db.begin():
                 created_log = ActionLogging(
-                    user_id = user.id,
-                    username = user.username,
-                    query_date = datetime.now(),
-                    query = query,
-                    machine_name = machine_name,
-                    approved_execution = approved_execution
+                    user_id=user.id,
+                    username=user.username,
+                    query_date=datetime.now(),
+                    query=query,
+                    machine_name=machine_name,
+                    approved_execution=approved_execution,
+                    approval_status=approval_status,
+                    database_id=database_id,
+                    trace_id=trace_id,
+                    client_ip=client_ip,
+                    risk_level=risk_level,
                 )
                 db.add(created_log)
                 await db.flush()
                 log_id = created_log.id
             return log_id
     
-    async def update_log(self, log_id, successfull: bool, error: str = None, row_count: int = None, applied_masking_rules: str = None):
+    async def update_log(
+        self,
+        log_id: int,
+        successfull: bool,
+        error: str = None,
+        row_count: int = None,
+        applied_masking_rules: str = None,
+    ):
         """
-        Updates query execution log (result record)
-        
+        Updates query execution log (result record).
+
         Args:
-            log_id: Log ID to update
+            log_id: Log ID to update.
             successfull: Is query successful?
-            error: Error message (if failed)
-            row_count: Returned row count (if successful)
-            applied_masking_rules: JSON string of applied masking rules (optional)
-        
+            error: Error message (if failed).
+            row_count: Returned row count (if successful).
+            applied_masking_rules: JSON string of applied masking rules (optional).
+
         Note:
-            - If failed: ErrorMessage and isSuccessfull are updated
-            - If successful: ExecutionDurationMS, isSuccessfull and row_count are updated
+            - If failed: ErrorMessage and isSuccessfull are updated.
+            - If successful: ExecutionDurationMS, isSuccessfull and row_count are updated.
         """
         async with self.get_app_db() as db:
             async with db.begin():
@@ -149,6 +175,42 @@ class AppDatabase:
                         log.row_count = row_count
                         if applied_masking_rules:
                             log.applied_masking_rules = applied_masking_rules
+
+    async def update_approval_status(
+        self,
+        trace_id: str,
+        approval_status: ApprovalStatus,
+        approved_by: Optional[str] = None,
+        approved_by_slack_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Updates approval status on the ActionLogging record matched by trace_id.
+        Called by SlackListener after admin approves or rejects a query.
+
+        Args:
+            trace_id: UUID linking ActionLogging to QueryData (set at log creation).
+            approval_status: New approval status (APPROVED or REJECTED).
+            approved_by: WebQuery username or Slack email fallback.
+            approved_by_slack_id: Immutable Slack user ID.
+
+        Returns:
+            bool: True if record was found and updated, False otherwise.
+        """
+        async with self.get_app_db() as db:
+            async with db.begin():
+                result = await db.execute(
+                    select(ActionLogging).where(ActionLogging.trace_id == trace_id)
+                )
+                log = result.scalars().first()
+                if not log:
+                    return False
+
+                log.approval_status = approval_status
+                log.approved_execution = (approval_status == ApprovalStatus.APPROVED)
+                log.approved_by = approved_by
+                log.approved_by_slack_id = approved_by_slack_id
+                log.approved_at = datetime.now()
+                return True
 
     async def create_login_log(self, user_id: int, client_ip):
         """

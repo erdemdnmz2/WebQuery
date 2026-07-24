@@ -8,7 +8,8 @@ import base64
 import os
 import re
 import bcrypt
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Text
+import enum
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Text, Enum as SAEnum
 from sqlalchemy.dialects.mssql import DATETIME2, VARCHAR, NVARCHAR, UNIQUEIDENTIFIER, TEXT as MSSQL_TEXT
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.types import TypeDecorator
@@ -17,6 +18,16 @@ from cryptography.fernet import Fernet
 import uuid
 
 Base = declarative_base()
+
+
+class ApprovalStatus(str, enum.Enum):
+    """
+    Approval status for query execution log entries.
+    """
+    AUTO_APPROVED = "auto_approved"  # Low risk, passed automatically
+    PENDING       = "pending"        # Waiting for admin approval
+    APPROVED      = "approved"       # Approved by admin
+    REJECTED      = "rejected"       # Rejected by admin
 
 # Define cross-db compatible types
 AppDateTime = DateTime().with_variant(DATETIME2(precision=7), "mssql")
@@ -107,6 +118,8 @@ class ActionLogging(Base):
     Query execution log model.
     """
     __tablename__ = 'ActionLogging'
+
+    # --- Core fields ---
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey(User.id), index=True, nullable=False)
     username = Column(String(50), index=True, nullable=False)
@@ -117,8 +130,27 @@ class ActionLogging(Base):
     row_count = Column(Integer, nullable=True)
     isSuccessfull = Column(Boolean, nullable=True)
     ErrorMessage = Column(AppText, nullable=True)
-    approved_execution = Column(Boolean, nullable=True, default=False)
     applied_masking_rules = Column(AppText, nullable=True)
+
+    # --- Risk analysis ---
+    risk_level = Column(String(50), nullable=True)
+
+    # --- Approval ---
+    approved_execution = Column(Boolean, nullable=True, default=False)  # kept for backward compatibility
+    approval_status = Column(
+        SAEnum(ApprovalStatus, name="approvalstatus"),
+        nullable=False,
+        default=ApprovalStatus.AUTO_APPROVED,
+        index=True
+    )
+    approved_by = Column(String(100), nullable=True)          # WebQuery username or Slack email fallback
+    approved_by_slack_id = Column(String(20), nullable=True)  # Immutable Slack user ID
+    approved_at = Column(AppDateTime, nullable=True)
+
+    # --- Context ---
+    database_id = Column(Integer, ForeignKey("Databases.id"), nullable=True, index=True)
+    trace_id = Column(String(36), nullable=True, index=True)  # UUID matching QueryData.uuid
+    client_ip = Column(String(45), nullable=True)             # IPv6-safe length
 
 class LoginLogging(Base):
     """
@@ -160,6 +192,11 @@ class Workspace(Base):
     query_data = relationship("QueryData")
 
 class Databases(Base):
+    """
+    Registered target databases model.
+    Stores connection details (server, database name, technology, credentials)
+    for each database that users can query through WebQuery.
+    """
     __tablename__ = "Databases"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     servername = Column(String(100), nullable=False)
@@ -174,6 +211,11 @@ class Databases(Base):
     )
 
 class UserDatabaseAssociation(Base):
+    """
+    User-to-database access association model.
+    Defines which users can access which databases and with what role
+    (READER, WRITER, or ADMIN).
+    """
     __tablename__ = "UserDatabaseAssociation"
     user_id = Column(Integer, ForeignKey("Users.id"), primary_key=True, nullable=False)
     database_id = Column(Integer, ForeignKey("Databases.id"), primary_key=True, nullable=False)

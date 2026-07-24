@@ -42,18 +42,21 @@ async def execute_query(
     Returns:
         dict[str, Any]: The query execution results or error response.
     """
+    client_ip: str | None = request.client.host if request.client else None
     result: dict[str, Any] = await query_service.execute_query(
         query=query_request.query,
         user=current_user,
         db_uuid=query_request.db_uuid,
-        ad_hoc_mask_columns=query_request.ad_hoc_mask_columns
+        ad_hoc_mask_columns=query_request.ad_hoc_mask_columns,
+        client_ip=client_ip,
     )
     return result
 
 
 @router.post("/multiple_query", response_model=query_models.MultipleQueryResponse)
 async def multiple_query(
-    request: query_models.MultipleQueryRequest,
+    request: Request,
+    query_request: query_models.MultipleQueryRequest,
     current_user: User = Depends(get_current_user),
     query_service: QueryService = Depends(get_query_service)
 ) -> query_models.MultipleQueryResponse:
@@ -68,20 +71,22 @@ async def multiple_query(
     Returns:
         query_models.MultipleQueryResponse: The list of results for each executed query.
     """
-    if len(request.execution_info) > config.MULTIPLE_QUERY_COUNT:
+    if len(query_request.execution_info) > config.MULTIPLE_QUERY_COUNT:
         raise HTTPException(
             status_code=400,
             detail=f"Too many queries. Maximum: {config.MULTIPLE_QUERY_COUNT}"
         )
     
+    client_ip: str | None = request.client.host if request.client else None
     results: List[dict[str, Any]] = []
     
-    for execution_info in request.execution_info:
+    for execution_info in query_request.execution_info:
         result: dict[str, Any] = await query_service.execute_query(
             query=execution_info.query,
             user=current_user,
             db_uuid=execution_info.db_uuid,
-            ad_hoc_mask_columns=execution_info.ad_hoc_mask_columns
+            ad_hoc_mask_columns=execution_info.ad_hoc_mask_columns,
+            client_ip=client_ip,
         )
         results.append(result)
     
