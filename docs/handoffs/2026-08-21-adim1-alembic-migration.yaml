@@ -1,0 +1,71 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "claude-code"
+  to: "user / next-session-agent"
+  created_at: "2026-08-21T15:10:00+03:00"
+  task: "webquery_implementasyon_sirasi.md — Blok 0, Adım 1 (`4.1` Alembic'e geçin)"
+
+  scope:
+    completed:
+      - "ADR-0001 yazıldı (Proposed): şema yönetimi create_all() yerine Alembic migration'larına taşınıyor"
+      - "web_api/alembic.ini + migrations/env.py + script.py.mako kuruldu; env.py, app_database.config.DATABASE_URL'i import edip async sürücüyü (aioodbc/asyncpg/aiomysql/aiosqlite) senkron karşılığına çeviriyor"
+      - "Baseline migration (5d2a9a282ea1_baseline_mevcut_sema.py) geçici sqlite üzerinde autogenerate ile üretildi; EncryptedText gibi app-seviyesi tip referansları sa.Text()'e çevrildi"
+      - "Baseline doğrulandı: boş DB'ye upgrade head ile 9 tablo da doğru oluştu; üzerine tekrar autogenerate çalıştırıldığında fark üretmedi (Base.metadata ile birebir eşleşiyor)"
+      - "app.py lifespan'dan create_tables() çağrısı kaldırıldı (AppDatabase.create_tables() metodu testler için korundu)"
+      - "create_db.py sadeleştirildi: yalnızca DB/login bootstrap kaldı, tablo oluşturma kısmı silindi"
+      - "entrypoint.sh: create_db.py sonrası, uygulama başlamadan önce `alembic upgrade head` eklendi"
+      - "requirements.txt: alembic==1.17.0 ve psycopg2-binary==2.9.9 (Alembic'in senkron Postgres sürücüsü) eklendi"
+    excluded:
+      - "Adım 2 (`4.2` CI kurulumu) — henüz başlanmadı"
+      - "Gerçek production veritabanında `alembic stamp head` — bu sandbox'tan DB erişimi yok, operatör tarafından deploy öncesi elle yapılmalı"
+      - "Test teardown'ında EngineCache arka plan temizlik döngüsünün iptal edilmemesi (pytest process'in CPU harcamadan asılı kalması) — gözlemlendi, bu adımın kapsamı dışında, ayrı bugfix konusu"
+      - "test_notifications_and_slack.py içindeki 2 önceden var olan başarısızlık (gerçek slack.com bağlantısı gerektiriyor, SSL/ağ) — bu değişiklikle ilgisiz, düzeltilmedi"
+
+  changed_files:
+    created:
+      - docs/adr/ADR-0001-schema-migrations-alembic.md
+      - web_api/alembic.ini
+      - web_api/migrations/env.py
+      - web_api/migrations/script.py.mako
+      - web_api/migrations/versions/5d2a9a282ea1_baseline_mevcut_sema.py
+    modified:
+      - web_api/app.py
+      - web_api/create_db.py
+      - web_api/entrypoint.sh
+      - web_api/requirements.txt
+    deleted: []
+
+  decisions:
+    - decision: "Şema yönetimi create_all() yerine Alembic migration'ları ile yapılacak"
+      rationale: "create_all() var olan tablolara kolon eklemiyor; sıradaki bloklar (audit log, kullanıcı kolonları, kimlik bilgisi modeli) bu olmadan production'da sessizce çalışmaz"
+      recorded_in: "docs/adr/ADR-0001-schema-migrations-alembic.md"
+    - decision: "Baseline migration'daki EncryptedText/AppText gibi app-seviyesi tipler düz sa.Text()'e çevrildi, import edilmedi"
+      rationale: "Migration dosyaları app model sınıflarına bağımlı olmamalı (Alembic best practice); şifreleme DB şemasının değil uygulama katmanının sorumluluğu"
+      recorded_in: "web_api/migrations/versions/5d2a9a282ea1_baseline_mevcut_sema.py (satır içi yorum)"
+    - decision: "create_db.py'den tablo oluşturma kaldırıldı, sadece DB/login bootstrap kaldı"
+      rationale: "Şema sorumluluğu tek mekanizmada (Alembic) toplanmalı; iki ayrı yol aynı işi yaparsa hangisinin kaynak doğrusu olduğu belirsizleşir"
+      recorded_in: "web_api/create_db.py"
+
+  validation:
+    commands_run:
+      - command: "cd web_api && APP_DATABASE_URL=sqlite+aiosqlite:///<temp>.db alembic upgrade head"
+        result: passed
+        evidence: "9 model tablosu + alembic_version tablosu oluştu (BlacklistedTokens, Databases, Users, ActionLogging, LoginLogging, MaskingRules, QueryData, UserDatabaseAssociation, Workspaces)"
+      - command: "cd web_api && alembic revision --autogenerate -m 'no-op check' (upgrade edilmiş temp sqlite'a karşı)"
+        result: passed
+        evidence: "upgrade()/downgrade() boş üretildi — baseline, Base.metadata ile tam eşleşiyor; doğrulama sonrası dosya silindi"
+      - command: "source .venv/bin/activate && cd web_api && python -m pytest -q"
+        result: passed
+        evidence: "38 passed, 2 failed. Başarısız olan 2 test (tests/integration/test_notifications_and_slack.py) gerçek slack.com bağlantısı gerektiriyor (SSLCertVerificationError) — bu sandbox'ın ağ kısıtı, Alembic değişikliğiyle ilgisi yok"
+
+  open_questions:
+    - id: "OQ-2026-002"
+      status: "Deferred"
+      question: "Hedef DB sorgu bağlantısında yalnızca CENTRAL_DB_USER mı, yoksa veritabanı-başına db_username/db_password mi kullanılacak? Blok 4 / Adım 16 (`3.1`) öncesi cevaplanmalı."
+
+  known_risks:
+    - "Baseline migration gerçek production şemasına karşı değil, modellerden türetilen boş bir sqlite'a karşı üretildi (sandbox'tan DB erişimi yok). Deploy öncesi operatör, mevcut prod şemasıyla farkı kontrol edip `alembic stamp head` çalıştırmalı."
+    - "Rolling deploy sırasında birden fazla instance'ın aynı anda `alembic upgrade head` çalıştırması hâlâ mümkün; Alembic'in kendi version-table kilidi dışında ek bir deploy-seviyeli kilitleme eklenmedi (ADR-0001, Accepted Risks)."
+    - "Test teardown'ında EngineCache'in arka plan temizlik döngüsü iptal edilmiyor gibi görünüyor — pytest process'i tamamlandıktan sonra CPU harcamadan asılı kaldı. Ayrı bir bugfix konusu."
+
+  next_step: "Adım 2 (`4.2` — CI kurulumu) ile devam et; paralel olarak operatör gerçek ortamda `alembic stamp head` çalıştırmalı."
