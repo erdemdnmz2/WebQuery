@@ -5,6 +5,17 @@ import os
 # Mock APP_DATABASE_URL before any app modules are imported
 os.environ["APP_DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
 
+# slack_integration/config.py reads these at import time with no default;
+# `from app import app` below pulls that module in transitively. Without a
+# value here, SlackListener() raises BoltError("... token ... required")
+# in any environment that doesn't happen to have real Slack credentials in
+# its .env (e.g. CI). Tests that exercise Slack behavior mock the actual
+# network calls (see test_notifications_and_slack.py) — these are just
+# enough to let SlackListener/AsyncApp construct.
+os.environ.setdefault("SLACK_BOT_TOKEN", "xoxb-test-token")
+os.environ.setdefault("SLACK_APP_TOKEN", "xapp-test-token")
+os.environ.setdefault("SLACK_ADMIN_CHANNEL", "C_TEST_CHANNEL")
+
 # Add the web_api directory to sys.path so we can import the app
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
