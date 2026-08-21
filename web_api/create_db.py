@@ -1,6 +1,8 @@
-from sqlalchemy import create_engine, text, make_url
+
+from sqlalchemy import create_engine, make_url, text
+
 from app_database.config import DATABASE_URL
-import os
+
 
 def create_database_and_user_if_not_exists():
     """

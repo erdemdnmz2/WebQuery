@@ -1,7 +1,9 @@
-from notification.config import message_format, approval_message_format, SLACK_URL
-from slack_integration.schemas import create_approval_message
+from typing import Any
+
 import httpx
-from typing import List, Dict, Any, Optional
+
+from notification.config import SLACK_URL, approval_message_format, message_format
+from slack_integration.schemas import create_approval_message
 
 
 class NotificationService:
@@ -31,7 +33,7 @@ class NotificationService:
 
         return await self._send_message_to_slack(blocks=blocks)
 
-    async def _send_message_to_slack(self, text: str = None, blocks: List[Dict[str, Any]] = None) -> bool:
+    async def _send_message_to_slack(self, text: str = None, blocks: list[dict[str, Any]] = None) -> bool:
         """
         Send a message to Slack using httpx.AsyncClient.
         Returns True on success, False on failure.

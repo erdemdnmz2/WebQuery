@@ -3,7 +3,7 @@ Database Provider Configuration
 List of accessible SQL Server instances and connection string templates.
 """
 import os
-from typing import List
+
 from dotenv import load_dotenv
 
 # Load .env file
@@ -11,7 +11,7 @@ load_dotenv()
 
 # Retrieve comma-separated server list from environment, otherwise use default
 _server_list = os.getenv("SQL_SERVER_NAMES", "localhost")
-SERVER_NAMES: List[str] = [s.strip() for s in _server_list.split(",") if s.strip()]
+SERVER_NAMES: list[str] = [s.strip() for s in _server_list.split(",") if s.strip()]
 
 # SQL Server authentication credentials
 DB_USER = os.getenv("DB_USER", "sa")

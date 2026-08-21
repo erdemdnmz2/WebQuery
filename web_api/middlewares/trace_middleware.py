@@ -2,12 +2,13 @@
 Trace Middleware Module
 Generates a unique Trace ID for every request, logs request metrics, and exposes the ID in response headers.
 """
+import logging
 import time
 import uuid
-import logging
+
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
-from fastapi import Request
 
 from common.logging_config import trace_id_var
 

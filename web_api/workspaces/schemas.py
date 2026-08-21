@@ -2,8 +2,9 @@
 Workspace Schemas
 Pydantic models for workspace endpoints
 """
+
 from pydantic import BaseModel
-from typing import Optional, List
+
 
 class WorkspaceInfo(BaseModel):
     """
@@ -21,15 +22,15 @@ class WorkspaceInfo(BaseModel):
     """
     id: int
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     query: str
     servername: str
     database_name: str
     db_uuid: str
     status: str
-    show_results: Optional[bool] = None
+    show_results: bool | None = None
     owner_id: int
-    is_owner: Optional[bool] = None
+    is_owner: bool | None = None
 
 class WorkspaceCreate(BaseModel):
     """
@@ -42,13 +43,13 @@ class WorkspaceCreate(BaseModel):
         db_uuid: Target database unique identifier
     """
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     query: str
     db_uuid: str
 
 class WorkspaceList(BaseModel):
     """Workspace list response schema"""
-    workspaces: List[WorkspaceInfo]
+    workspaces: list[WorkspaceInfo]
 
 class WorkspaceUpdate(BaseModel):
     """
@@ -59,9 +60,9 @@ class WorkspaceUpdate(BaseModel):
         status: Status to update (optional)
     """
     query: str
-    status: Optional[str] = None
+    status: str | None = None
 
 
 class WorkspaceExecutionRequest(BaseModel):
     """Workspace execution request containing ad-hoc columns to mask"""
-    ad_hoc_mask_columns: Optional[List[str]] = None
+    ad_hoc_mask_columns: list[str] | None = None

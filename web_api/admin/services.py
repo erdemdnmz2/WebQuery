@@ -2,22 +2,30 @@
 Admin Service Layer
 Admin approval and management operations for risky queries
 """
-from sqlalchemy import inspect, delete
-from sqlalchemy.sql import select, text
-from typing import Any
-from app_database.models import QueryData, Workspace, User, Databases, MaskingRule, UserDatabaseAssociation
-from app_database.app_database import AppDatabase
-from database_provider import DatabaseProvider
-from .schemas import AdminApprovals
-from query_execution import config
-
 import logging
-from common.exceptions import BaseServiceException
-from workspaces.exceptions import WorkspaceNotFoundError
-from .exceptions import DatabaseAlreadyExistsError
-from common.security import generate_secure_credentials
-
 import uuid
+from typing import Any
+
+from sqlalchemy import delete, inspect
+from sqlalchemy.sql import select, text
+
+from app_database.app_database import AppDatabase
+from app_database.models import (
+    Databases,
+    MaskingRule,
+    QueryData,
+    User,
+    UserDatabaseAssociation,
+    Workspace,
+)
+from common.exceptions import BaseServiceException
+from common.security import generate_secure_credentials
+from database_provider import DatabaseProvider
+from query_execution import config
+from workspaces.exceptions import WorkspaceNotFoundError
+
+from .exceptions import DatabaseAlreadyExistsError
+from .schemas import AdminApprovals
 
 logger = logging.getLogger(__name__)
 
@@ -261,7 +269,7 @@ class AdminApprovalService(BaseAdminService):
                             result_list.append(data)
             return result_list
         except  Exception as e:
-            print(f"Error: {str(e)}")
+            print(f"Error: {e!s}")
             return []
         
     async def execute_for_preview(self, workspace_id: int, admin_user: User):
@@ -480,7 +488,7 @@ class AdminApprovalService(BaseAdminService):
             except Exception as e:
                 await db.rollback()
                 logger.error(f"Approval failed for workspace {workspace_id}: {e}")
-                raise BaseServiceException(f"Approval failed: {str(e)}", original_exception=e)
+                raise BaseServiceException(f"Approval failed: {e!s}", original_exception=e)
 
 class AdminDBAdditionService(BaseAdminService):
     """
@@ -542,7 +550,7 @@ class AdminDBAdditionService(BaseAdminService):
             except Exception as e:
                 await db.rollback()
                 logger.error(f"Error adding database: {e}")
-                raise BaseServiceException(f"Error adding database: {str(e)}", original_exception=e)
+                raise BaseServiceException(f"Error adding database: {e!s}", original_exception=e)
 
 
 class AdminUserAuthService(BaseAdminService):

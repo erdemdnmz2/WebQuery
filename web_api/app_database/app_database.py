@@ -2,16 +2,25 @@
 Application Database Manager
 Application database operations (user, log, workspace CRUD)
 """
-from .config import DATABASE_URL
-
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from datetime import datetime
 from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.sql import select
 
-from .models import User, ActionLogging, LoginLogging, Base, Databases, BlacklistedToken, MaskingRule, ApprovalStatus
+from .config import DATABASE_URL
+from .models import (
+    ActionLogging,
+    ApprovalStatus,
+    Base,
+    BlacklistedToken,
+    Databases,
+    LoginLogging,
+    MaskingRule,
+    User,
+)
 from .schemas import UserCreate
-from typing import Dict, Any, Optional
 
 
 class AppDatabase:
@@ -94,10 +103,10 @@ class AppDatabase:
         query: str,
         machine_name: str,
         approval_status: ApprovalStatus = ApprovalStatus.AUTO_APPROVED,
-        database_id: Optional[int] = None,
-        trace_id: Optional[str] = None,
-        client_ip: Optional[str] = None,
-        risk_level: Optional[str] = None,
+        database_id: int | None = None,
+        trace_id: str | None = None,
+        client_ip: str | None = None,
+        risk_level: str | None = None,
         approved_execution: bool = False,
     ) -> int:
         """
@@ -180,8 +189,8 @@ class AppDatabase:
         self,
         trace_id: str,
         approval_status: ApprovalStatus,
-        approved_by: Optional[str] = None,
-        approved_by_slack_id: Optional[str] = None,
+        approved_by: str | None = None,
+        approved_by_slack_id: str | None = None,
     ) -> bool:
         """
         Updates approval status on the ActionLogging record matched by trace_id.
@@ -196,21 +205,20 @@ class AppDatabase:
         Returns:
             bool: True if record was found and updated, False otherwise.
         """
-        async with self.get_app_db() as db:
-            async with db.begin():
-                result = await db.execute(
-                    select(ActionLogging).where(ActionLogging.trace_id == trace_id)
-                )
-                log = result.scalars().first()
-                if not log:
-                    return False
+        async with self.get_app_db() as db, db.begin():
+            result = await db.execute(
+                select(ActionLogging).where(ActionLogging.trace_id == trace_id)
+            )
+            log = result.scalars().first()
+            if not log:
+                return False
 
-                log.approval_status = approval_status
-                log.approved_execution = (approval_status == ApprovalStatus.APPROVED)
-                log.approved_by = approved_by
-                log.approved_by_slack_id = approved_by_slack_id
-                log.approved_at = datetime.now()
-                return True
+            log.approval_status = approval_status
+            log.approved_execution = (approval_status == ApprovalStatus.APPROVED)
+            log.approved_by = approved_by
+            log.approved_by_slack_id = approved_by_slack_id
+            log.approved_at = datetime.now()
+            return True
 
     async def create_login_log(self, user_id: int, client_ip):
         """
@@ -223,14 +231,13 @@ class AppDatabase:
         Note:
             logout_date is initially NULL, updated with update_login_log on logout
         """
-        async with self.get_app_db() as db:
-            async with db.begin():
-                created_log = LoginLogging(
-                    user_id = user_id,
-                    login_date = datetime.now(),
-                    client_ip = client_ip
-                )
-                db.add(created_log)
+        async with self.get_app_db() as db, db.begin():
+            created_log = LoginLogging(
+                user_id = user_id,
+                login_date = datetime.now(),
+                client_ip = client_ip
+            )
+            db.add(created_log)
 
     async def update_login_log(self, user_id: int):
         """
@@ -244,22 +251,21 @@ class AppDatabase:
             - Updates logout_date and login_duration_ms
             - Prints warning if active record is not found
         """
-        async with self.get_app_db() as db:
-            async with db.begin():
-                result = await db.execute(
-                    select(LoginLogging)
-                    .where(LoginLogging.user_id == user_id)
-                    .where(LoginLogging.logout_date.is_(None))
-                )
-                log = result.scalars().first()
-                if log:
-                    log.logout_date = datetime.now()
-                    duration = datetime.now() - log.login_date
-                    log.login_duration_ms = int(duration.total_seconds() * 1000)
-                else:
-                    print(f"Active login record NOT found for user {user_id}")
+        async with self.get_app_db() as db, db.begin():
+            result = await db.execute(
+                select(LoginLogging)
+                .where(LoginLogging.user_id == user_id)
+                .where(LoginLogging.logout_date.is_(None))
+            )
+            log = result.scalars().first()
+            if log:
+                log.logout_date = datetime.now()
+                duration = datetime.now() - log.login_date
+                log.login_duration_ms = int(duration.total_seconds() * 1000)
+            else:
+                print(f"Active login record NOT found for user {user_id}")
         
-    async def get_db_info(self) -> Dict[str, Dict[str, Any]]:
+    async def get_db_info(self) -> dict[str, dict[str, Any]]:
         """
         Returns database information per server.
         Includes database list and technology information for each server.
@@ -284,35 +290,33 @@ class AppDatabase:
                 }
             }
         """
-        async with self.get_app_db() as db:
-            async with db.begin():
-                result = await db.execute(
-                    select(Databases)
-                )
-                databases = result.scalars().all()
-                db_info : Dict[str, Dict[str, Any]] = {}
-                
-                for database in databases:
-                    servername = database.servername
-                    if servername not in db_info:
-                        db_info[servername] = {
-                            "databases": [],
-                            "technology": database.technology
-                        }
-                    db_info[servername]["databases"].append({
-                        "name": database.database_name,
-                        "uuid": database.uuid
-                    })
-                return db_info
+        async with self.get_app_db() as db, db.begin():
+            result = await db.execute(
+                select(Databases)
+            )
+            databases = result.scalars().all()
+            db_info : dict[str, dict[str, Any]] = {}
+            
+            for database in databases:
+                servername = database.servername
+                if servername not in db_info:
+                    db_info[servername] = {
+                        "databases": [],
+                        "technology": database.technology
+                    }
+                db_info[servername]["databases"].append({
+                    "name": database.database_name,
+                    "uuid": database.uuid
+                })
+            return db_info
 
     async def blacklist_token(self, jti: str, expires_at: datetime) -> None:
         """
         Registers a new blacklisted JTI token upon user logout.
         """
-        async with self.get_app_db() as db:
-            async with db.begin():
-                blacklisted = BlacklistedToken(jti=jti, expires_at=expires_at)
-                db.add(blacklisted)
+        async with self.get_app_db() as db, db.begin():
+            blacklisted = BlacklistedToken(jti=jti, expires_at=expires_at)
+            db.add(blacklisted)
 
     async def is_token_blacklisted(self, jti: str) -> bool:
         """

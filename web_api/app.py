@@ -2,36 +2,39 @@
 WebQuery API - New Modular Architecture
 Clean dependency injection with AppDatabase and DatabaseProvider
 """
-import os
-from dotenv import load_dotenv
 import asyncio
+import os
+
+from dotenv import load_dotenv
 
 # Load .env file (you can use .env.production for production)
 env_file = os.getenv("ENV_FILE", ".env")
 load_dotenv(env_file)
 
 from common.logging_config import setup_logging
+
 setup_logging()
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from common.exceptions import BaseServiceException
-from middlewares.trace_middleware import TraceMiddleware
 import logging
 from contextlib import asynccontextmanager
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.middleware import SlowAPIMiddleware
-from slowapi.errors import RateLimitExceeded
-from common.limiter import limiter
+
 import uvicorn
-from starlette.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
+from starlette.middleware.cors import CORSMiddleware
 
 from app_database import AppDatabase
+from common.exceptions import BaseServiceException
+from common.limiter import limiter
 from database_provider import DatabaseProvider
 from middlewares import AuthMiddleware
-
+from middlewares.trace_middleware import TraceMiddleware
 from slack_integration import SlackListener
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -53,10 +56,10 @@ async def lifespan(app: FastAPI):
         # calling create_all() concurrently on startup raced on schema
         # changes and couldn't add columns to existing tables.
     except Exception as e:
-        print(f"\n❌ FATAL: AppDatabase connection error!")
+        print("\n❌ FATAL: AppDatabase connection error!")
         print(f"   Error: {type(e).__name__}: {e}")
-        print(f"   Please check the APP_DATABASE_URL environment variable")
-        print(f"   Application cannot start!\n")
+        print("   Please check the APP_DATABASE_URL environment variable")
+        print("   Application cannot start!\n")
         await app.state.app_db.app_engine.dispose() if hasattr(app.state, 'app_db') else None
         raise SystemExit(1)
     
@@ -78,10 +81,10 @@ async def lifespan(app: FastAPI):
         await app.state.db_provider.start_cache_loop()
         print("✓ DatabaseProvider ready, db_info loaded, and cache loop started")
     except Exception as e:
-        print(f"\n❌ FATAL: DatabaseProvider initialization error!")
+        print("\n❌ FATAL: DatabaseProvider initialization error!")
         print(f"   Error: {type(e).__name__}: {e}")
-        print(f"   Please check the SQL_SERVER_NAMES environment variable and SQL Server connections")
-        print(f"   Application cannot start!\n")
+        print("   Please check the SQL_SERVER_NAMES environment variable and SQL Server connections")
+        print("   Application cannot start!\n")
         # Cleanup
         await app.state.app_db.app_engine.dispose()
         raise SystemExit(1)
@@ -169,15 +172,19 @@ async def service_exception_handler(request: Request, exc: BaseServiceException)
     )
 
 from authentication.router import router as auth_router
+
 app.include_router(auth_router, tags=["Authentication"])
 
 from query_execution.router import router as query_router
+
 app.include_router(query_router, tags=["Query Execution"])
 
 from admin.router import router as admin_router
+
 app.include_router(admin_router, tags=["Admin"])
 
 from workspaces.router import router as workspace_router
+
 app.include_router(workspace_router, tags=["Workspace"])
 
 # from static_files.router import router as static_router

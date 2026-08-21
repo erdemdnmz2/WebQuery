@@ -4,7 +4,8 @@ Contains helpers for dynamic data masking and secure credential generation.
 """
 import secrets
 import string
-from typing import List, Dict, Any, Set
+from typing import Any
+
 
 def generate_secure_credentials() -> tuple[str, str]:
     """
@@ -23,7 +24,7 @@ def generate_secure_credentials() -> tuple[str, str]:
     
     return username, password
 
-def mask_result_set(data: List[Dict[str, Any]], mask_columns: Set[str]) -> List[Dict[str, Any]]:
+def mask_result_set(data: list[dict[str, Any]], mask_columns: set[str]) -> list[dict[str, Any]]:
     """
     Masks sensitive columns in query results for non-admin users.
     

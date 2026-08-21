@@ -1,10 +1,13 @@
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from httpx import AsyncClient
-from app import app
-from app_database.models import Databases, User, UserDatabaseAssociation
 from sqlalchemy import select
-from unittest.mock import MagicMock, AsyncMock, patch
-from contextlib import asynccontextmanager
+
+from app import app
+from app_database.models import Databases, User
+
 
 @pytest.fixture
 def mock_db_session_auth():

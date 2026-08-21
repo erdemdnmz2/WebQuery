@@ -2,25 +2,31 @@
 Workspace Service Layer
 User workspace (saved query) management operations
 """
-from typing import Any, List, Dict
 import json
-from app_database.models import QueryData, Workspace, Databases, UserDatabaseAssociation
-from app_database.app_database import AppDatabase
-from sqlalchemy.ext.asyncio import AsyncSession
-import uuid
-from .schemas import WorkspaceInfo, WorkspaceCreate
-from sqlalchemy.sql import select
-from sqlalchemy.sql import text
-from query_execution import config as query_config
-from database_provider import DatabaseProvider
-from app_database.models import User
-
 import logging
+import uuid
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import select, text
+
+from app_database.app_database import AppDatabase
+from app_database.models import (
+    Databases,
+    QueryData,
+    User,
+    UserDatabaseAssociation,
+    Workspace,
+)
 from common.exceptions import BaseServiceException
-from workspaces.exceptions import WorkspaceNotFoundError, WorkspaceAccessDeniedError
-from query_execution.exceptions import QueryAnalysisRejectedError, QueryExecutionError
 from common.security import mask_result_set
+from database_provider import DatabaseProvider
+from query_execution import config as query_config
+from query_execution.exceptions import QueryAnalysisRejectedError, QueryExecutionError
 from query_execution.query_analyzer import QueryAnalyzer
+from workspaces.exceptions import WorkspaceAccessDeniedError, WorkspaceNotFoundError
+
+from .schemas import WorkspaceCreate, WorkspaceInfo
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +100,7 @@ class WorkspaceService:
         except Exception as e:
             await db.rollback()
             logger.error(f"Error creating workspace: {e}")
-            raise BaseServiceException(f"Error creating workspace: {str(e)}", original_exception=e)
+            raise BaseServiceException(f"Error creating workspace: {e!s}", original_exception=e)
         
     async def get_workspace_by_id(self, db: AsyncSession, user_id: int):
         """
@@ -180,7 +186,7 @@ class WorkspaceService:
         except Exception as e:
             await db.rollback()
             logger.error(f"Error deleting workspace: {e}")
-            raise BaseServiceException(f"Error deleting workspace: {str(e)}", original_exception=e)
+            raise BaseServiceException(f"Error deleting workspace: {e!s}", original_exception=e)
     
     async def update_workspace(self, db: AsyncSession, workspace_id: int, query: str = None, status: str = None):
         """
@@ -217,7 +223,7 @@ class WorkspaceService:
         except Exception as e:
             await db.rollback()
             logger.error(f"Error updating workspace: {e}")
-            raise BaseServiceException(f"Error updating workspace: {str(e)}", original_exception=e)
+            raise BaseServiceException(f"Error updating workspace: {e!s}", original_exception=e)
     
     async def get_workspace_detail_by_id(self, db: AsyncSession, workspace_id: int, user_id: int):
         """

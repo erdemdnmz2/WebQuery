@@ -1,7 +1,9 @@
-import pytest
-from httpx import AsyncClient, ASGITransport
-import sys
 import os
+import sys
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
 # Mock APP_DATABASE_URL before any app modules are imported
 os.environ["APP_DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
 
@@ -25,8 +27,10 @@ from app import app
 pytestmark = pytest.mark.asyncio
 
 import pytest_asyncio
+
 from app_database import AppDatabase
 from database_provider import DatabaseProvider
+
 
 @pytest_asyncio.fixture
 async def async_client():

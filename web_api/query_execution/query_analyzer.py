@@ -2,9 +2,11 @@
 Query Analyzer
 SQL query security and performance analysis via AST parsing
 """
+from enum import Enum
+
 import sqlglot
 from sqlglot import exp
-from enum import Enum
+
 
 class RiskLevel(Enum):
     """Query risk levels"""

@@ -2,8 +2,8 @@
 Authentication Schemas
 Pydantic models for authentication endpoints
 """
+
 from pydantic import BaseModel, EmailStr
-from typing import Optional
 
 
 class UserLogin(BaseModel):

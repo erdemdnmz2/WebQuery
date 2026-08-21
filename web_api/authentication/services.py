@@ -2,24 +2,20 @@
 Authentication Service Layer
 JWT token generation, verification, and user authorization operations.
 """
-import base64
-import os
-import re
-import bcrypt
 import uuid
-from datetime import datetime, timedelta, UTC
-from typing import Optional
+from datetime import UTC, datetime, timedelta
+
+from fastapi import HTTPException, Request, status
 from jose import JWTError, jwt
-from fastapi import HTTPException, status, Request
 from sqlalchemy.future import select
 
-from authentication import config
-from app_database.models import User
-from authentication.schemas import TokenData
 from app_database.app_database import AppDatabase
+from app_database.models import User
+from authentication import config
+from authentication.schemas import TokenData
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     """
     Generates a new JWT access token.
     
@@ -38,7 +34,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
-def verify_token(token: str) -> Optional[dict]:
+def verify_token(token: str) -> dict | None:
     """
     Validates a JWT token.
     
@@ -55,7 +51,7 @@ def verify_token(token: str) -> Optional[dict]:
         return None
 
 
-def get_user_id_from_payload(payload: dict) -> Optional[str]:
+def get_user_id_from_payload(payload: dict) -> str | None:
     """
     Extracts the user_id (sub) from the token payload.
     
@@ -110,7 +106,7 @@ async def get_current_user(
             raise credentials_exception
         token_data = TokenData(sub=user_id)
     except JWTError as e:
-        print(f"JWT Error: {str(e)}")
+        print(f"JWT Error: {e!s}")
         raise credentials_exception
         
     # Check if token is blacklisted

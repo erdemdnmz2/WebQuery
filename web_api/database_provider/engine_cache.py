@@ -1,21 +1,26 @@
-import hashlib
-from typing import Dict, Optional, Any
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSession, async_sessionmaker
 import asyncio
-from .config import TIME_INTERVAL_FOR_CACHE
-from datetime import datetime
+import hashlib
 from dataclasses import dataclass, field
+from datetime import datetime
+
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    create_async_engine,
+)
+
+from .config import TIME_INTERVAL_FOR_CACHE
+
 
 @dataclass
 class EngineCacheEntry:
     """Cached engine entry with metadata."""
     engine: AsyncEngine
     last_accessed: datetime = field(default_factory=datetime.now)
-    owner_id: Optional[str] = None
+    owner_id: str | None = None
 
 class EngineCache:
     def __init__(self, max_engines = 100):
-        self._cache : Dict[str, EngineCacheEntry] = {}
+        self._cache : dict[str, EngineCacheEntry] = {}
         self._max_engines = max_engines
         self.lock = asyncio.Lock()
         self._stats = {
@@ -92,7 +97,7 @@ class EngineCache:
             
             return engine
         
-    def get_cache_stats(self) -> Dict:
+    def get_cache_stats(self) -> dict:
         return self._stats
     
     async def start_loop(self):
@@ -146,7 +151,7 @@ class EngineCache:
                     await entry.engine.dispose()
                 self._cache.clear()
                 self._stats["engine_count"] = 0
-            print(f"[EngineCache] Stopped and cleared all engines.")
+            print("[EngineCache] Stopped and cleared all engines.")
     
     async def close_user_engines(self, db_uuid: str):
         """Belirli bir kullanıcı ID'sine ait motorları kapatır"""

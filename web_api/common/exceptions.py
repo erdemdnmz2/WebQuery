@@ -2,7 +2,7 @@
 Common Exceptions Module
 Contains the base service exception class for modular exception translation.
 """
-from typing import Optional
+
 
 class BaseServiceException(Exception):
     """
@@ -17,7 +17,7 @@ class BaseServiceException(Exception):
     status_code: int = 500
     code: str = "INTERNAL_SERVER_ERROR"
 
-    def __init__(self, message: str, original_exception: Optional[Exception] = None) -> None:
+    def __init__(self, message: str, original_exception: Exception | None = None) -> None:
         self.message: str = message
-        self.original_exception: Optional[Exception] = original_exception
+        self.original_exception: Exception | None = original_exception
         super().__init__(self.message)

@@ -10,6 +10,7 @@ Environment Variables:
     APP_DATABASE_URL: Full connection string (optional override)
 """
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv(".env.production")

@@ -2,15 +2,17 @@
 Authentication Middleware
 Her HTTP request için JWT token doğrulama ve session kontrolü yapar
 """
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.middleware.base import RequestResponseEndpoint
-from starlette.responses import Response as StarletteResponse
-from starlette.responses import RedirectResponse
-from fastapi import Request
 import os
-from authentication.services import verify_token, get_user_id_from_payload
+
+from fastapi import Request
 from fastapi.exceptions import HTTPException
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import RedirectResponse
+from starlette.responses import Response as StarletteResponse
+
+from authentication.services import get_user_id_from_payload, verify_token
 from common.logging_config import user_id_var
+
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """

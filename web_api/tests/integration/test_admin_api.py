@@ -2,14 +2,16 @@
 Integration tests for admin router and service layer.
 Verifies Role-Based Access Control (RBAC), database registration, and query approval workflows.
 """
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from httpx import AsyncClient
-from unittest.mock import MagicMock, AsyncMock, patch
-from contextlib import asynccontextmanager
 from sqlalchemy.future import select
 
 from app import app
-from app_database.models import User, Workspace, QueryData, Databases
+from app_database.models import Databases, QueryData, User, Workspace
+
 
 @pytest.fixture
 def mock_db_session():
@@ -47,7 +49,7 @@ async def create_user_and_login(async_client: AsyncClient, email: str, username:
             user = result.scalars().first()
             user_id = user.id
             
-            from app_database.models import UserDatabaseAssociation, Databases
+            from app_database.models import Databases, UserDatabaseAssociation
             db_res = await db.execute(select(Databases))
             all_dbs = db_res.scalars().all()
             for db_entry in all_dbs:
@@ -163,8 +165,9 @@ async def test_admin_query_approval_workflow(async_client: AsyncClient, mock_db_
     app_db = app.state.context.app_db
     db_uuid = None
     async with app_db.get_app_db() as db:
-        from app_database.models import Databases, User, UserDatabaseAssociation
         from sqlalchemy.future import select
+
+        from app_database.models import Databases, User, UserDatabaseAssociation
         test_db = Databases(
             servername="prod-server",
             database_name="orders_db",
@@ -263,8 +266,9 @@ async def test_admin_query_rejection(async_client: AsyncClient, mock_db_session)
     app_db = app.state.context.app_db
     db_uuid = None
     async with app_db.get_app_db() as db:
-        from app_database.models import Databases, User, UserDatabaseAssociation
         from sqlalchemy.future import select
+
+        from app_database.models import Databases, User, UserDatabaseAssociation
         test_db = Databases(
             servername="prod-server",
             database_name="orders_db",

@@ -2,14 +2,16 @@
 Centralized Exception Handling and Trace ID tracking integration tests.
 Verifies Trace ID headers, global exception routing, and error translation.
 """
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from httpx import AsyncClient
-from unittest.mock import MagicMock, AsyncMock, patch
-from contextlib import asynccontextmanager
 from sqlalchemy import select
 
 from app import app
 from app_database.models import Databases, User, UserDatabaseAssociation
+
 
 @pytest.fixture
 def mock_db_session():

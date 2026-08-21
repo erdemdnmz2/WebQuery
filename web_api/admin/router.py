@@ -2,22 +2,24 @@
 Admin Router
 Admin query approval/rejection endpoints
 """
-from fastapi import APIRouter, Depends, status, HTTPException, Response
-from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+
+from app_database.models import User
+from dependencies import admin_required, get_admin_service
+
 from .schemas import (
-    AdminApprovalsList, 
-    AdminPreviewResponse, 
-    ApprovalRequest, 
+    AdminApprovalsList,
+    AdminPreviewResponse,
+    ApprovalRequest,
     DatabaseAddRequest,
     DatabaseListResponse,
     DatabaseResponseSchema,
     MaskingRuleSchema,
     MaskingRulesSaveRequest,
-    UserAssociationRequest
+    UserAssociationRequest,
 )
-from dependencies import get_admin_service, admin_required
 from .services import AdminService
-from app_database.models import User
 
 router = APIRouter(prefix="/api/admin")
 
@@ -150,7 +152,7 @@ async def discover_schema(
     schema = await service.discover_schema(database_id, current_admin)
     return schema
 
-@router.get("/databases/{database_id}/masking_rules", response_model=List[MaskingRuleSchema])
+@router.get("/databases/{database_id}/masking_rules", response_model=list[MaskingRuleSchema])
 async def get_masking_rules(
     database_id: int,
     current_admin: User = Depends(admin_required),

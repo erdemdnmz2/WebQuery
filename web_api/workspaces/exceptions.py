@@ -4,6 +4,7 @@ Custom exceptions for the workspaces service layer.
 """
 from common.exceptions import BaseServiceException
 
+
 class WorkspaceNotFoundError(BaseServiceException):
     """Raised when a requested workspace is not found."""
     status_code = 404

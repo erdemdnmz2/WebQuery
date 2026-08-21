@@ -2,40 +2,41 @@
 Query Execution Schemas
 Pydantic models for query execution endpoints
 """
+from typing import Any
+
 from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
 
 
 class SQLQuery(BaseModel):
     """Single SQL query request"""
     db_uuid: str
     query: str
-    ad_hoc_mask_columns: Optional[List[str]] = None
+    ad_hoc_mask_columns: list[str] | None = None
 
 
 class SQLResponse(BaseModel):
     """SQL query response"""
     response_type: str  # "data" or "error"
-    data: List[Dict[str, Any]]
-    message: Optional[str] = None
-    error: Optional[str] = None
+    data: list[dict[str, Any]]
+    message: str | None = None
+    error: str | None = None
 
 
 class ExecutionInfo(BaseModel):
     """Execution information for multiple queries"""
     db_uuid: str
     query: str
-    ad_hoc_mask_columns: Optional[List[str]] = None
+    ad_hoc_mask_columns: list[str] | None = None
 
 
 class MultipleQueryRequest(BaseModel):
     """Multiple query execution request"""
-    execution_info: List[ExecutionInfo]
+    execution_info: list[ExecutionInfo]
 
 
 class MultipleQueryResponse(BaseModel):
     """Multiple query execution response"""
-    results: List[SQLResponse]
+    results: list[SQLResponse]
 
 
 class DatabaseInformationResponse(BaseModel):
@@ -50,4 +51,4 @@ class DatabaseInformationResponse(BaseModel):
             }
         }
     """
-    db_info: Dict[str, Dict[str, Any]]
+    db_info: dict[str, dict[str, Any]]

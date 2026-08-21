@@ -2,16 +2,18 @@
 Integration tests for Slack Interactive listener and Notification services.
 Mocks out-of-band network calls and verifies database state transitions.
 """
-import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import httpx
-from unittest.mock import MagicMock, AsyncMock, patch
-from sqlalchemy.future import select
+import pytest
 from httpx import AsyncClient
+from sqlalchemy.future import select
 
 from app import app
-from app_database.models import User, Workspace, QueryData
-from slack_integration.listener import SlackListener
+from app_database.models import QueryData, User, Workspace
 from notification.services import NotificationService
+from slack_integration.listener import SlackListener
+
 
 def _fake_users_info_response(email: str) -> dict:
     """

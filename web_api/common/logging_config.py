@@ -4,7 +4,6 @@ Configures structured logging with dynamic Trace ID and User ID tracking using c
 """
 import logging
 from contextvars import ContextVar
-from typing import Any
 
 # Context variables to hold Request Trace ID and User ID throughout the request lifecycle
 trace_id_var: ContextVar[str] = ContextVar("trace_id", default="-")

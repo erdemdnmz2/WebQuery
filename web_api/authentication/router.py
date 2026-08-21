@@ -3,23 +3,22 @@ Authentication Router Module
 FastAPI router for user login, registration, logout, and self-information.
 Strictly typed and documented.
 """
-from fastapi import APIRouter, HTTPException, Response, Request, Depends
 import os
-from typing import Any
 from datetime import datetime, timezone
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from jose import jwt
 from sqlalchemy.future import select
-from common.limiter import limiter
 
-from authentication.exceptions import UserAlreadyExistsError
-
-from authentication import config
-from authentication import schemas
-from authentication.services import create_access_token, get_current_user
-from dependencies import get_app_db, get_db_provider
 from app_database.app_database import AppDatabase
-from database_provider import DatabaseProvider
 from app_database.models import User, UserDatabaseAssociation
+from authentication import config, schemas
+from authentication.exceptions import UserAlreadyExistsError
+from authentication.services import create_access_token, get_current_user
+from common.limiter import limiter
+from database_provider import DatabaseProvider
+from dependencies import get_app_db, get_db_provider
 
 router = APIRouter(prefix="/api")
 
@@ -118,7 +117,7 @@ async def register(
             await db.refresh(new_user)
         except Exception as e:
             await db.rollback()
-            raise HTTPException(status_code=500, detail=f"Database error during registration: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Database error during registration: {e!s}")
         
         return {
             "success": True,

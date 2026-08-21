@@ -2,20 +2,18 @@
 Common Dependency Injection Functions
 All routers use these functions to retrieve service instances from app.state.
 """
-from fastapi import Request
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 
-from app_database.app_database import AppDatabase
-from database_provider import DatabaseProvider
-from authentication.services import get_current_user
-from app_database.models import Workspace, User, UserDatabaseAssociation
-from workspaces.exceptions import WorkspaceNotFoundError, WorkspaceAccessDeniedError
-
-from query_execution.services import QueryService
-from workspaces.services import WorkspaceService
 from admin.services import AdminService
+from app_database.app_database import AppDatabase
+from app_database.models import User, UserDatabaseAssociation, Workspace
+from authentication.services import get_current_user
+from database_provider import DatabaseProvider
 from notification import NotificationService
+from query_execution.services import QueryService
+from workspaces.exceptions import WorkspaceAccessDeniedError, WorkspaceNotFoundError
+from workspaces.services import WorkspaceService
 
 
 class AppContext:

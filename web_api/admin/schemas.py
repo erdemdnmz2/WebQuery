@@ -2,9 +2,10 @@
 Admin Schemas
 Pydantic models for admin approval endpoints
 """
+from typing import Any
+
 from pydantic import BaseModel
-from typing import Optional, List
-from typing import Dict, Any
+
 
 class AdminApprovals(BaseModel):
     """
@@ -26,12 +27,12 @@ class AdminApprovals(BaseModel):
     query: str
     database: str
     status: str
-    risk_type: Optional[str] = None
-    servername: Optional[str] = None
+    risk_type: str | None = None
+    servername: str | None = None
 
 class AdminApprovalsList(BaseModel):
     """Admin approval list response schema"""
-    waiting_approvals: List[AdminApprovals]
+    waiting_approvals: list[AdminApprovals]
 
 
 class AdminPreviewResponse(BaseModel):
@@ -47,11 +48,11 @@ class AdminPreviewResponse(BaseModel):
         error: Error message (if any)
     """
     response_type: str  # "data" or "error"
-    data: List[Dict[str, Any]]
-    columns: Optional[List[str]] = None
-    row_count: Optional[int] = None
-    message: Optional[str] = None
-    error: Optional[str] = None
+    data: list[dict[str, Any]]
+    columns: list[str] | None = None
+    row_count: int | None = None
+    message: str | None = None
+    error: str | None = None
 
 
 class ApprovalRequest(BaseModel):
@@ -85,7 +86,7 @@ class MaskingRuleSchema(BaseModel):
 
 
 class MaskingRulesSaveRequest(BaseModel):
-    rules: List[MaskingRuleSchema]
+    rules: list[MaskingRuleSchema]
 
 
 class DatabaseResponseSchema(BaseModel):
@@ -93,11 +94,11 @@ class DatabaseResponseSchema(BaseModel):
     servername: str
     database_name: str
     technology: str
-    db_username: Optional[str] = None
+    db_username: str | None = None
 
 
 class DatabaseListResponse(BaseModel):
-    databases: List[DatabaseResponseSchema]
+    databases: list[DatabaseResponseSchema]
 
 
 class UserAssociationRequest(BaseModel):

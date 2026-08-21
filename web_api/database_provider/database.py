@@ -3,17 +3,21 @@ Database Provider Module
 Manages database engines caching and session provisioning using centralized credentials.
 All functions and classes are strictly typed.
 """
-from sqlalchemy.ext.asyncio import async_sessionmaker
-from typing import Dict, Any
-import app_database.models as models
-from database_provider.config import (
-    create_connection_string, 
-    get_driver_for_technology,
-    CENTRAL_DB_USER,
-    CENTRAL_DB_PASSWORD
-)
 from contextlib import asynccontextmanager
+from typing import Any
+
+from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from app_database import models
+from database_provider.config import (
+    CENTRAL_DB_PASSWORD,
+    CENTRAL_DB_USER,
+    create_connection_string,
+    get_driver_for_technology,
+)
+
 from .engine_cache import EngineCache
+
 
 class DatabaseProvider:
     """
@@ -23,11 +27,11 @@ class DatabaseProvider:
     def __init__(self):
         """Initializes DatabaseProvider."""
         self.engine_cache: EngineCache = EngineCache()
-        self.db_info: Dict[str, Dict[str, Any]] = {}
+        self.db_info: dict[str, dict[str, Any]] = {}
         # Flat dictionary mapping db_uuid -> database details for O(1) lookup
-        self.db_by_uuid: Dict[str, Dict[str, Any]] = {}
+        self.db_by_uuid: dict[str, dict[str, Any]] = {}
 
-    def set_db_info(self, info: Dict[str, Dict[str, Any]]) -> None:
+    def set_db_info(self, info: dict[str, dict[str, Any]]) -> None:
         """
         Sets database configuration information and builds UUID lookup dictionary.
         
@@ -118,7 +122,7 @@ class DatabaseProvider:
         """
         await self.engine_cache.close_user_engines(user_id) 
     
-    def get_db_info_db(self) -> Dict[str, Dict[str, Any]]:
+    def get_db_info_db(self) -> dict[str, dict[str, Any]]:
         """
         Returns database configuration information for all servers.
         

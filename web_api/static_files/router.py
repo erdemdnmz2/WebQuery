@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
-from app_database.models import User, UserDatabaseAssociation
-from app_database.app_database import AppDatabase
-from dependencies import get_app_db
 from sqlalchemy import select
+
+from app_database.app_database import AppDatabase
+from app_database.models import User, UserDatabaseAssociation
+from dependencies import get_app_db
 
 router = APIRouter()
 
@@ -28,6 +29,7 @@ def register_page():
     return FileResponse("templates/register.html")
 
 from authentication.services import get_current_user
+
 
 @router.get("/admin", response_class=FileResponse)
 async def admin(

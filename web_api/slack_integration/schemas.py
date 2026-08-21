@@ -1,6 +1,7 @@
-from typing import List, Dict, Any
+from typing import Any
 
-def create_approval_message(request_id: str, username: str, machine_name: str, database: str, query: str, risk_score: str) -> List[Dict[str, Any]]:
+
+def create_approval_message(request_id: str, username: str, machine_name: str, database: str, query: str, risk_score: str) -> list[dict[str, Any]]:
     """
     Slack için butonlu onay mesajı bloklarını oluşturur.
     request_id (UUID) butonların 'value' kısmına gizlenir.

@@ -2,20 +2,29 @@
 Application Database Models
 SQLAlchemy ORM models for the application database
 """
-from sqlalchemy import null
-from sqlalchemy import UniqueConstraint
 import base64
+import enum
 import os
 import re
-import bcrypt
-import enum
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Text, Enum as SAEnum
-from sqlalchemy.dialects.mssql import DATETIME2, VARCHAR, NVARCHAR, UNIQUEIDENTIFIER, TEXT as MSSQL_TEXT
-from sqlalchemy.orm import relationship, declarative_base
-from sqlalchemy.types import TypeDecorator
-from cryptography.fernet import Fernet
-
 import uuid
+
+import bcrypt
+from cryptography.fernet import Fernet
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.dialects.mssql import DATETIME2, NVARCHAR, UNIQUEIDENTIFIER, VARCHAR
+from sqlalchemy.dialects.mssql import TEXT as MSSQL_TEXT
+from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.types import TypeDecorator
 
 Base = declarative_base()
 

@@ -3,19 +3,20 @@ Query Execution Router Module
 FastAPI router for single and multiple SQL query execution.
 All routes are strictly typed and documented.
 """
-from fastapi import APIRouter, Depends, HTTPException, Request
-from typing import List, Any
-from common.limiter import limiter
+from typing import Any
 
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.future import select
+
+from app_database.app_database import AppDatabase
+from app_database.models import Databases, User, UserDatabaseAssociation
+from authentication.services import get_current_user
+from common.limiter import limiter
+from database_provider import DatabaseProvider
+from dependencies import get_app_db, get_db_provider, get_query_service
 from query_execution import config
 from query_execution import schemas as query_models
 from query_execution.services import QueryService
-from authentication.services import get_current_user
-from dependencies import get_db_provider, get_query_service, get_app_db
-from database_provider import DatabaseProvider
-from app_database.app_database import AppDatabase
-from app_database.models import User, UserDatabaseAssociation, Databases
-from sqlalchemy.future import select
 
 router = APIRouter(prefix="/api")
 
@@ -78,7 +79,7 @@ async def multiple_query(
         )
     
     client_ip: str | None = request.client.host if request.client else None
-    results: List[dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
     
     for execution_info in query_request.execution_info:
         result: dict[str, Any] = await query_service.execute_query(
@@ -142,12 +143,12 @@ async def get_database_information(
             
     return {"db_info": filtered_info}
 
-@router.get("/masking_rules", response_model=List[str])
+@router.get("/masking_rules", response_model=list[str])
 async def get_masking_rules(
     db_uuid: str,
     current_user: User = Depends(get_current_user),
     query_service: QueryService = Depends(get_query_service)
-) -> List[str]:
+) -> list[str]:
     """
     Returns the list of column names persistently masked by admin for the given database UUID.
     """

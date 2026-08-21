@@ -13,9 +13,8 @@ import os
 import sys
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 # Make `app_database` (and any other web_api package) importable regardless
 # of the working directory Alembic was invoked from.

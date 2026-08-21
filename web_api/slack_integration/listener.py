@@ -4,16 +4,16 @@ Handles interactive button actions from Slack (approve/reject).
 On approval or rejection, resolves the WebQuery user via Slack email lookup
 and updates the ActionLogging audit record accordingly.
 """
-from datetime import datetime
-
-from slack_bolt.async_app import AsyncApp
-from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
-from slack_integration.config import SLACK_APP_TOKEN, SLACK_BOT_TOKEN
-from app_database.app_database import AppDatabase
-from app_database.models import QueryData, Workspace, User, ApprovalStatus
-from sqlalchemy import select
 
 import logging
+
+from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
+from slack_bolt.async_app import AsyncApp
+from sqlalchemy import select
+
+from app_database.app_database import AppDatabase
+from app_database.models import ApprovalStatus, QueryData, User, Workspace
+from slack_integration.config import SLACK_APP_TOKEN, SLACK_BOT_TOKEN
 
 logger = logging.getLogger(__name__)
 

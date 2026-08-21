@@ -1,14 +1,18 @@
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from httpx import AsyncClient
-from unittest.mock import MagicMock, AsyncMock, patch
-from contextlib import asynccontextmanager
+from sqlalchemy import delete, text
 from sqlalchemy.future import select
-from sqlalchemy import text, delete
-from datetime import datetime
 
 from app import app
-from app_database.models import User, Workspace, QueryData, Databases, MaskingRule, BlacklistedToken
-from common.security import generate_secure_credentials, mask_result_set
+from app_database.models import (
+    Databases,
+    MaskingRule,
+    User,
+)
+
 
 @pytest.fixture
 def mock_db_session():
@@ -45,7 +49,7 @@ async def create_user_and_login(async_client: AsyncClient, email: str, username:
             user = result.scalars().first()
             user_id = user.id
             
-            from app_database.models import UserDatabaseAssociation, Databases
+            from app_database.models import Databases, UserDatabaseAssociation
             db_res = await db.execute(select(Databases))
             all_dbs = db_res.scalars().all()
             for db_entry in all_dbs:

@@ -3,27 +3,31 @@ Query Execution Service Module
 Contains the core QueryService responsible for analyzing, executing, and logging SQL queries.
 Strictly typed and documented.
 """
-from sqlalchemy.sql import text
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from datetime import datetime, timezone
-from typing import Dict, Any, List
 import json
-
-import uuid
-
-from query_execution import config
-from database_provider import DatabaseProvider
-from app_database.app_database import AppDatabase
-from app_database.models import User, QueryData, Workspace, Databases, UserDatabaseAssociation, ApprovalStatus
-from common.security import mask_result_set
-
-from query_execution.query_analyzer import QueryAnalyzer
-from notification import NotificationService
-
 import logging
+import uuid
+from datetime import datetime, timezone
+from typing import Any
+
+from sqlalchemy.future import select
+from sqlalchemy.sql import text
+
+from app_database.app_database import AppDatabase
+from app_database.models import (
+    ApprovalStatus,
+    Databases,
+    QueryData,
+    User,
+    UserDatabaseAssociation,
+    Workspace,
+)
 from common.exceptions import BaseServiceException
-from query_execution.exceptions import QueryExecutionError, QueryAnalysisRejectedError
+from common.security import mask_result_set
+from database_provider import DatabaseProvider
+from notification import NotificationService
+from query_execution import config
+from query_execution.exceptions import QueryAnalysisRejectedError, QueryExecutionError
+from query_execution.query_analyzer import QueryAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -57,9 +61,9 @@ class QueryService:
         query: str,
         user: User,
         db_uuid: str,
-        ad_hoc_mask_columns: List[str] = None,
+        ad_hoc_mask_columns: list[str] = None,
         client_ip: str = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Analyzes, logs, and executes the SQL query against the target database.
         If the query is identified as risky, it is routed for admin approval.
@@ -127,7 +131,7 @@ class QueryService:
                     masking_cols.add(col.lower())
 
             is_db_admin = "ADMIN" in [r.strip().upper() for r in user_role.split(",")]
-            query_analysis: Dict[str, Any] = self.analyzer.analyze(query, technology=technology)
+            query_analysis: dict[str, Any] = self.analyzer.analyze(query, technology=technology)
             risk_level: str | None = query_analysis.get("risk_type")
 
             # Create the initial audit log now that we have all context
@@ -213,7 +217,7 @@ class QueryService:
                 
                 row_count: int = 0
                 message: str = ""
-                result_data: Dict[str, Any] = {}
+                result_data: dict[str, Any] = {}
                 
                 if result.returns_rows:
                     rows = result.fetchmany(size=config.MAX_ROW_COUNT_LIMIT)

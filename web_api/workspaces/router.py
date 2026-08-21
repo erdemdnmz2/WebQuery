@@ -3,18 +3,28 @@ Workspace Router
 User workspace (saved query) management endpoints
 """
 from typing import Any
-from fastapi import APIRouter, Depends, status, HTTPException, Response, Request
-from .schemas import WorkspaceCreate, WorkspaceUpdate, WorkspaceList, WorkspaceExecutionRequest
 
-from dependencies import get_app_db, get_workspace_service, ensure_owner, get_db_provider
-from authentication.services import get_current_user
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from app_database.models import User, Workspace
 from app_database import AppDatabase
-
-from .services import WorkspaceService
-from query_execution import schemas as query_models
+from app_database.models import User, Workspace
+from authentication.services import get_current_user
 from database_provider import DatabaseProvider
+from dependencies import (
+    ensure_owner,
+    get_app_db,
+    get_db_provider,
+    get_workspace_service,
+)
+from query_execution import schemas as query_models
+
+from .schemas import (
+    WorkspaceCreate,
+    WorkspaceExecutionRequest,
+    WorkspaceList,
+    WorkspaceUpdate,
+)
+from .services import WorkspaceService
 
 router = APIRouter(prefix="/api")
 
