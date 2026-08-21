@@ -41,5 +41,13 @@ async def async_client():
         app.state.limiter.enabled = False
     
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
+    finally:
+        # Without this, the EngineCache background cleanup loop
+        # (asyncio.create_task in engine_cache.py) outlives the test and
+        # keeps the interpreter alive — pytest hangs after printing its
+        # final summary instead of exiting.
+        await app.state.db_provider.close_engines()
+        await app.state.app_db.app_engine.dispose()

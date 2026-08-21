@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # Defense-in-depth: a background asyncio task (EngineCache cleanup
+    # loop) used to outlive test teardown and hang `pytest` after it had
+    # already printed its results (reproduced locally 3x, fixed in
+    # tests/conftest.py). Kept as a guard against a similar leak recurring
+    # silently. See ADR-0002.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11" # matches web_api/Dockerfile
+          cache: pip
+          cache-dependency-path: web_api/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r web_api/requirements.txt
+          pip install pytest-cov ruff
+
+      - name: Lint (informational — not yet a merge gate, see ADR-0001 follow-up)
+        working-directory: web_api
+        continue-on-error: true
+        run: ruff check .
+
+      - name: Tests
+        working-directory: web_api
+        env:
+          # CI-only values, unrelated to any real deployment secret.
+          SECRET_KEY: ci-test-key-for-github-actions-only-not-production
+          QUERY_ENCRYPTION_KEY: ${{ secrets.CI_FERNET_KEY }}
+          APP_DATABASE_URL: sqlite+aiosqlite:///./test.db
+          CENTRAL_DB_USER: ci_user
+          CENTRAL_DB_PASSWORD: ci_pass
+        run: pytest -v --cov=. --cov-report=term-missing
+
+      - name: Secret leak scan
+        run: |
+          # Test fixtures use dummy credentials on purpose; only production
+          # code paths are scanned.
+          ! grep -rn --include='*.py' --exclude-dir=tests \
+              -E "(password|secret|api_key)\s*=\s*['\"][^'\"]{8,}" web_api/ \
+            || (echo "Hardcoded secret-looking value found in source" && exit 1)
