@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect as sa_inspect
 
 revision: str = "8c7b2d1f4a10"
 down_revision: str | None = "5d2a9a282ea1"
@@ -15,6 +16,12 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # A legacy-schema bootstrap may have created all current model tables via
+    # Base.metadata.create_all() before Alembic was introduced. In that case
+    # UserSessions already exists and this revision must not recreate it.
+    if "UserSessions" in sa_inspect(op.get_bind()).get_table_names():
+        return
+
     op.create_table(
         "UserSessions",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
