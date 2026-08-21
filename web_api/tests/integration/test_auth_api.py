@@ -220,3 +220,34 @@ async def test_logout_flow(async_client: AsyncClient):
         mock_close.assert_called_once()
         called_user_id = mock_close.call_args[0][0]
         assert isinstance(called_user_id, int)
+
+
+@pytest.mark.asyncio
+async def test_refresh_rotates_tokens_and_logout_revokes_session(async_client: AsyncClient):
+    register_data = {
+        "username": "refresh_user",
+        "email": "refresh@example.com",
+        "password": "StrongPassword123!",
+    }
+    await async_client.post("/api/register", json=register_data)
+    login = await async_client.post(
+        "/api/login",
+        json={"email": register_data["email"], "password": register_data["password"]},
+    )
+    assert login.status_code == 200
+    assert "refresh_token" in async_client.cookies
+    old_refresh = async_client.cookies["refresh_token"]
+
+    refreshed = await async_client.post("/api/refresh")
+    assert refreshed.status_code == 200
+    assert "refresh_token" in async_client.cookies
+    assert async_client.cookies["refresh_token"] != old_refresh
+
+    with patch.object(
+        app.state.context.db_provider, "close_user_engines", new_callable=AsyncMock
+    ):
+        logout = await async_client.post("/api/logout")
+    assert logout.status_code == 200
+
+    protected = await async_client.get("/api/me")
+    assert protected.status_code == 401

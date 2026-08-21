@@ -11,6 +11,7 @@ from starlette.responses import RedirectResponse
 from starlette.responses import Response as StarletteResponse
 
 from authentication.services import get_user_id_from_payload, verify_token
+from authentication.sessions import session_alive
 from common.logging_config import user_id_var
 
 
@@ -41,6 +42,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/register", 
             "/api/login", 
             "/api/register",
+            "/api/refresh",
             "/health"
         ]
         
@@ -71,6 +73,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 is_blacklisted = await app_db.is_token_blacklisted(jti)
                 if is_blacklisted:
                     raise HTTPException(status_code=401, detail="Token has been revoked")
+            session_id = payload.get("sid")
+            if session_id is not None:
+                app_db = request.app.state.context.app_db
+                if not await session_alive(app_db, int(session_id), int(user_id)):
+                    raise HTTPException(status_code=401, detail="Session has been revoked")
         except Exception as e:
             print(f"Auth verification failed: {e}")
             if request.url.path.startswith("/api/"):

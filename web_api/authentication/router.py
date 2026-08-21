@@ -15,7 +15,8 @@ from app_database.app_database import AppDatabase
 from app_database.models import User, UserDatabaseAssociation
 from authentication import config, schemas
 from authentication.exceptions import UserAlreadyExistsError
-from authentication.services import create_access_token, get_current_user
+from authentication.services import get_current_user
+from authentication import sessions
 from common.limiter import limiter
 from database_provider import DatabaseProvider
 from dependencies import get_app_db, get_db_provider
@@ -55,9 +56,11 @@ async def login(
         
         user_id: int = int(authenticated_user.id)
         
-        # Create JWT token
-        user_to_login: dict[str, str] = {"sub": str(user_id)}
-        token: str = create_access_token(user_to_login)
+        client_ip: str = request.client.host if request.client else "unknown"
+        session_id, refresh_token = await sessions.create_session(
+            app_db, user_id, client_ip, request.headers.get("user-agent")
+        )
+        token = sessions.mint_access(user_id, session_id)
         
         response.set_cookie(
             key="access_token",
@@ -65,13 +68,57 @@ async def login(
             secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
             samesite="strict",
             httponly=True,
-            max_age=config.COOKIE_TOKEN_EXPIRE_MINUTES
+            max_age=config.COOKIE_TOKEN_EXPIRE_MINUTES * 60,
+            path="/",
         )
-        
-        client_ip: str = request.client.host if request.client else "unknown"
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
+            samesite="strict",
+            httponly=True,
+            max_age=sessions.REFRESH_TTL_HOURS * 3600,
+            path="/api",
+        )
         await app_db.create_login_log(user_id=user_id, client_ip=client_ip)
         
         return {"access_token": token}
+
+
+@router.post("/refresh")
+async def refresh_session(
+    request: Request,
+    response: Response,
+    app_db: AppDatabase = Depends(get_app_db),
+) -> dict[str, bool]:
+    token = request.cookies.get("refresh_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Refresh token yok")
+
+    rotated = await sessions.rotate_refresh(app_db, token)
+    if rotated is None:
+        raise HTTPException(status_code=401, detail="Oturum süresi doldu")
+    if rotated.get("reuse"):
+        raise HTTPException(status_code=401, detail="Güvenlik nedeniyle oturum sonlandırıldı. Tekrar giriş yapın.")
+
+    async with app_db.get_app_db() as db:
+        user = await db.get(User, rotated["user_id"])
+    if user is None or not getattr(user, "is_active", True):
+        await sessions.revoke_session(app_db, rotated["session_id"], "hesap devre dışı")
+        raise HTTPException(status_code=401, detail="Hesabınız devre dışı bırakılmış")
+
+    access = sessions.mint_access(rotated["user_id"], rotated["session_id"])
+    response.set_cookie(
+        key="access_token", value=access, httponly=True, samesite="strict",
+        secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
+        max_age=sessions.ACCESS_TTL_MINUTES * 60, path="/",
+    )
+    response.set_cookie(
+        key="refresh_token", value=rotated["refresh_token"], httponly=True,
+        samesite="strict", secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
+        max_age=sessions.REFRESH_TTL_HOURS * 3600, path="/api",
+    )
+    return {"ok": True}
 
 
 @router.post("/register")
@@ -189,6 +236,8 @@ async def logout(
             if jti and exp:
                 expires_at = datetime.fromtimestamp(exp, tz=timezone.utc)
                 await app_db.blacklist_token(jti=jti, expires_at=expires_at)
+            if payload.get("sid"):
+                await sessions.revoke_session(app_db, int(payload["sid"]), "logout")
         except Exception as e:
             print(f"Error blacklisting token on logout: {e}")
 
@@ -198,6 +247,13 @@ async def logout(
         secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
         samesite="strict",
         httponly=True
+    )
+    response.delete_cookie(
+        key="refresh_token",
+        secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
+        samesite="strict",
+        httponly=True,
+        path="/api",
     )
     
     await app_db.update_login_log(user_id=current_user.id)

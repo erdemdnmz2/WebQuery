@@ -13,6 +13,7 @@ from app_database.app_database import AppDatabase
 from app_database.models import User
 from authentication import config
 from authentication.schemas import TokenData
+from authentication.sessions import session_alive
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
@@ -113,6 +114,14 @@ async def get_current_user(
     if jti:
         is_blacklisted = await app_db.is_token_blacklisted(jti)
         if is_blacklisted:
+            raise credentials_exception
+
+    session_id = payload.get("sid")
+    if session_id is not None:
+        try:
+            if not await session_alive(app_db, int(session_id), int(user_id)):
+                raise credentials_exception
+        except (TypeError, ValueError):
             raise credentials_exception
     
     # Retrieve user from AppDatabase

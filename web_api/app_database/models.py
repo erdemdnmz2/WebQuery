@@ -252,3 +252,20 @@ class BlacklistedToken(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     jti = Column(String(100), unique=True, index=True, nullable=False)
     expires_at = Column(AppDateTime, nullable=False)
+
+
+class UserSession(Base):
+    """Server-side session state for refresh-token rotation and revocation."""
+    __tablename__ = "UserSessions"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("Users.id"), nullable=False, index=True)
+    refresh_hash = Column(String(64), nullable=False, unique=True, index=True)
+    prev_refresh_hash = Column(String(64), nullable=True, index=True)
+    last_refresh_at = Column(AppDateTime, nullable=True)
+    created_at = Column(AppDateTime, nullable=False)
+    expires_at = Column(AppDateTime, nullable=False, index=True)
+    revoked_at = Column(AppDateTime, nullable=True, index=True)
+    revoked_reason = Column(String(200), nullable=True)
+    client_ip = Column(String(45), nullable=True)
+    user_agent = Column(String(300), nullable=True)
