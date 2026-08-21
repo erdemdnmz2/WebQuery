@@ -47,8 +47,11 @@ async def lifespan(app: FastAPI):
         async with app.state.app_db.app_engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
         print("✓ AppDatabase connection successful")
-        await app.state.app_db.create_tables()
-        print("✓ Tables created/checked")
+        # Schema is managed by Alembic (`alembic upgrade head`, run in
+        # entrypoint.sh before this process starts) — see
+        # docs/adr/ADR-0001-schema-migrations-alembic.md. Two instances
+        # calling create_all() concurrently on startup raced on schema
+        # changes and couldn't add columns to existing tables.
     except Exception as e:
         print(f"\n❌ FATAL: AppDatabase connection error!")
         print(f"   Error: {type(e).__name__}: {e}")

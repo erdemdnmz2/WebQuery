@@ -1,8 +1,5 @@
-import asyncio
-from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import create_engine, text, make_url
 from app_database.config import DATABASE_URL
-from app_database.models import Base
 import os
 
 def create_database_and_user_if_not_exists():
@@ -73,18 +70,8 @@ def create_database_and_user_if_not_exists():
         print(f"Warning: Could not check/create database or user: {e}")
         print("Proceeding to table creation (this might fail if user/db doesn't exist)...")
 
-async def init_models():
-    # First ensure the database and user exist
-    create_database_and_user_if_not_exists()
-
-    print("Creating database tables...")
-    engine = create_async_engine(DATABASE_URL, echo=True)
-    
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    
-    await engine.dispose()
-    print("Database tables created successfully.")
-
 if __name__ == "__main__":
-    asyncio.run(init_models())
+    # Only the database/login bootstrap runs here. Table schema is managed
+    # by Alembic (`alembic upgrade head`, run next in entrypoint.sh) — see
+    # docs/adr/ADR-0001-schema-migrations-alembic.md.
+    create_database_and_user_if_not_exists()

@@ -21,5 +21,11 @@ if [ $count -eq $max_retries ]; then
     exit 1
 fi
 
+# Apply schema migrations (see docs/adr/ADR-0001-schema-migrations-alembic.md).
+# create_db.py above only ensures the database/login exist; it no longer
+# creates tables.
+echo "Applying migrations..."
+alembic upgrade head
+
 # Start the application
 exec "$@"
