@@ -71,10 +71,10 @@ sorusuna cevap verecek bir trend (azalan/artan hata sayısı) sağlar.
 - `ruff` çıktısı her CI çalışmasında görünür durumda; 383 sayısının zamanla
   azalıp azalmadığı izlenebilir.
 - CI'nin `QUERY_ENCRYPTION_KEY` env değişkeni, `CI_FERNET_KEY` tanımlıysa onu
-  kullanır; tanımlı değilse yalnızca ephemeral CI verisi için sabit bir test
-  anahtarına düşer. Bu anahtar production sırrı değildir. Adım 3 (`0.1`
-  config guard) ile production ortamında gerçek anahtar zorunlu kılınmadan
-  önce `CI_FERNET_KEY` secret'ının tanımlanması gerekir.
+  kullanır; tanımlı değilse yalnızca ephemeral CI verisi için geçerli bir test
+  Fernet anahtarına düşer. Bu anahtar production sırrı değildir. Adım 3
+  (`0.1` config guard) sonrasında da CI kendi geçerli test anahtarıyla
+  çalışabilir; production ortamı yine kendi gerçek anahtarını sağlamak zorundadır.
 
 ## Accepted Risks
 

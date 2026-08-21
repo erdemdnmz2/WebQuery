@@ -52,14 +52,17 @@ handoff:
   validation:
     commands_run:
       - command: "cd web_api && pytest -q tests/unit/test_config_guard.py tests/unit/test_baseline_migration.py"
-        result: "not-run"
-        evidence: "Çalışma ortamında `pytest` komutu bulunamadı."
+        result: "passed"
+        evidence: "Proje `.venv` ortamında 10 passed, 1 warning."
       - command: "/Users/alierdemdonmez/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m pytest -q tests/unit/test_config_guard.py tests/unit/test_baseline_migration.py"
         result: "not-run"
         evidence: "Bündled Python ortamında `pytest` modülü kurulu değil."
       - command: "cd web_api && python3 -m compileall -q common app_database authentication app.py tests/unit/test_config_guard.py"
         result: "passed"
         evidence: "Python kaynakları ve yeni test dosyası derleme kontrolünden geçti."
+      - command: "cd web_api && ../.venv/bin/python -m pytest -q"
+        result: "passed"
+        evidence: "Tam backend test süiti: 56 passed, 1 warning in 55.38s."
       - command: "cd web_api && python3 doğrudan config guard kontrolü"
         result: "passed"
         evidence: "Geçerli config kabul edildi; kısa SECRET_KEY reddedildi; eksik QUERY_ENCRYPTION_KEY fallback üretmeden RuntimeError verdi."
@@ -73,8 +76,6 @@ handoff:
       question: "Hedef DB sorgu bağlantısında yalnızca CENTRAL_DB_USER/CENTRAL_DB_PASSWORD mı, yoksa veritabanı başına db_username/db_password mı kullanılacak?"
 
   known_risks:
-    - "Pytest bu çalışma ortamında çalıştırılamadı; CI veya bağımlılıkları kurulmuş bir backend ortamında yeni testler çalıştırılmalı."
-    - "Uygulamanın tam lifespan doğrulaması yerel ortamda `aiohttp` eksikliği nedeniyle çalıştırılamadı; CI requirements.txt içindeki bağımlılıkları kurmalıdır."
     - "Production deploy'larında artık SECRET_KEY ve QUERY_ENCRYPTION_KEY zorunlu; deploy secret'ları doldurulmadan servis başlamaz."
 
-  next_step: "Bağımlılıkları kurulmuş `web_api` ortamında `pytest -q` çalıştır ve ardından CI run'ında Adım 3 testlerinin yeşil olduğunu doğrula."
+  next_step: "Değişiklikleri push et ve GitHub Actions CI run'ında aynı `pytest -v --cov=. --cov-report=term-missing` adımının yeşil olduğunu doğrula."
