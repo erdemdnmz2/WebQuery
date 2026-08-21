@@ -203,7 +203,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "app:app",
         host=os.getenv("HOST", "0.0.0.0"),
-        port=int(os.getenv("PORT", 8080)),
-        workers=int(os.getenv("WORKERS", 1)),
+        port=int(os.getenv("PORT", "8080")),
+        workers=int(os.getenv("WORKERS", "1")),
         reload=os.getenv("DEBUG", "True").lower() == "true"
     )

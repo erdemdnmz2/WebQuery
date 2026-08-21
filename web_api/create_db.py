@@ -17,8 +17,7 @@ def create_database_and_user_if_not_exists():
         target_db = url.database
         target_user = url.username
         target_password = url.password
-        host = url.host
-        
+
         # We need to connect as 'sa' to create DBs and Users.
         # We assume the password provided in env is the SA password 
         # (since docker-compose sets MSSQL_SA_PASSWORD=${DB_PASSWORD})

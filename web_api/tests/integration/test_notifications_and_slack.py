@@ -103,7 +103,7 @@ async def test_slack_interactive_approval_flow(async_client: AsyncClient):
     """
     # 1. Setup test workspace and query data, plus the WebQuery user the
     # mocked Slack account resolves to.
-    ws_id, q_uuid = await create_test_user_and_workspace("user_slack_appr@example.com", "slack_appr_user")
+    _ws_id, q_uuid = await create_test_user_and_workspace("user_slack_appr@example.com", "slack_appr_user")
     await create_admin_user("admin@example.com", "admin")
 
     # 2. Instantiate SlackListener with app_db
@@ -158,7 +158,7 @@ async def test_slack_interactive_rejection_flow(async_client: AsyncClient):
     """
     # 1. Setup test workspace and query data, plus the WebQuery user the
     # mocked Slack account resolves to.
-    ws_id, q_uuid = await create_test_user_and_workspace("user_slack_rej@example.com", "slack_rej_user")
+    _ws_id, q_uuid = await create_test_user_and_workspace("user_slack_rej@example.com", "slack_rej_user")
     await create_admin_user("admin@example.com", "admin")
 
     # 2. Instantiate SlackListener

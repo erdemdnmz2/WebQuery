@@ -51,7 +51,7 @@ class TraceMiddleware(BaseHTTPMiddleware):
                 f"Error: {type(e).__name__} - Duration: {process_time:.2f}ms",
                 exc_info=e
             )
-            raise e
+            raise
         finally:
             # 6. Reset contextvars to prevent memory leaks or context contamination
             trace_id_var.reset(trace_token)

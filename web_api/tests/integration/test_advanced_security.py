@@ -151,7 +151,7 @@ async def test_dynamic_data_masking(async_client: AsyncClient, mock_db_session):
     - Users can specify additional ad-hoc masking columns.
     - Admin users bypass masking rules.
     """
-    mock_session, mock_result = mock_db_session
+    _mock_session, mock_result = mock_db_session
     
     # Setup mock data for query execution
     mock_result.returns_rows = True

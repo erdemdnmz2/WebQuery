@@ -27,7 +27,7 @@ async def test_admin_user_association_and_visibility(async_client: AsyncClient, 
     """
     Tests database visibility and query execution before and after admin associates user to database.
     """
-    mock_session, mock_result = mock_db_session_auth
+    _mock_session, mock_result = mock_db_session_auth
     mock_result.returns_rows = True
     mock_row = MagicMock()
     mock_row._mapping = {"id": 1}

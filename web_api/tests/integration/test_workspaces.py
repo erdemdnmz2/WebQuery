@@ -222,7 +222,7 @@ async def test_workspace_execution_rules(async_client: AsyncClient, mock_db_sess
     Tests query execution workflows on a workspace.
     A workspace query must be approved and show_results must be True to execute.
     """
-    mock_session, mock_result = mock_db_session
+    _mock_session, mock_result = mock_db_session
     
     app_db = app.state.context.app_db
     db_uuid = None

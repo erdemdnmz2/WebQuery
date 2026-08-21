@@ -63,7 +63,7 @@ class EngineCache:
         await entry.engine.dispose()
         self._stats["engine_count"] -= 1
 
-    async def get_engine(self, url: str, db_uuid : str = None) -> AsyncEngine:
+    async def get_engine(self, url: str, db_uuid: str | None = None) -> AsyncEngine:
 
         cache_key = db_uuid if db_uuid is not None else self._hash_key(url)
         async with self.lock:
@@ -161,9 +161,8 @@ class EngineCache:
         keys_to_remove = []
         async with self.lock:
             for key, entry in self._cache.items():
-                if entry.owner_id == db_uuid:
-                    if not self._is_engine_active(entry.engine):
-                        keys_to_remove.append(key)
+                if entry.owner_id == db_uuid and not self._is_engine_active(entry.engine):
+                    keys_to_remove.append(key)
             
             for key in keys_to_remove:
                 entry = self._cache.pop(key)

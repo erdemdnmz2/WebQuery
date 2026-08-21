@@ -116,9 +116,7 @@ class AdminService(BaseAdminService):
             db_entry = await db.get(Databases, database_id)
             if not db_entry:
                 return {}
-            servername = db_entry.servername
-            database_name = db_entry.database_name
-            
+
         db_info = await self.app_db.get_db_info()
         self.db_provider.set_db_info(db_info)
         

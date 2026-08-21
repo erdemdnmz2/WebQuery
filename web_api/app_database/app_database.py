@@ -150,9 +150,9 @@ class AppDatabase:
         self,
         log_id: int,
         successfull: bool,
-        error: str = None,
-        row_count: int = None,
-        applied_masking_rules: str = None,
+        error: str | None = None,
+        row_count: int | None = None,
+        applied_masking_rules: str | None = None,
     ):
         """
         Updates query execution log (result record).
@@ -168,22 +168,21 @@ class AppDatabase:
             - If failed: ErrorMessage and isSuccessfull are updated.
             - If successful: ExecutionDurationMS, isSuccessfull and row_count are updated.
         """
-        async with self.get_app_db() as db:
-            async with db.begin():
-                result = await db.execute(select(ActionLogging).where(ActionLogging.id == log_id))
-                log = result.scalars().first()
+        async with self.get_app_db() as db, db.begin():
+            result = await db.execute(select(ActionLogging).where(ActionLogging.id == log_id))
+            log = result.scalars().first()
 
-                if log:
-                    if not successfull:
-                        log.ErrorMessage = error
-                        log.isSuccessfull = False
-                    else:
-                        duration = datetime.now() - log.query_date
-                        log.ExecutionDurationMS = int(duration.total_seconds() * 1000)
-                        log.isSuccessfull = True
-                        log.row_count = row_count
-                        if applied_masking_rules:
-                            log.applied_masking_rules = applied_masking_rules
+            if log:
+                if not successfull:
+                    log.ErrorMessage = error
+                    log.isSuccessfull = False
+                else:
+                    duration = datetime.now() - log.query_date
+                    log.ExecutionDurationMS = int(duration.total_seconds() * 1000)
+                    log.isSuccessfull = True
+                    log.row_count = row_count
+                    if applied_masking_rules:
+                        log.applied_masking_rules = applied_masking_rules
 
     async def update_approval_status(
         self,

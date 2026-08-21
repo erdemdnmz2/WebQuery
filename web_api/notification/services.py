@@ -33,7 +33,7 @@ class NotificationService:
 
         return await self._send_message_to_slack(blocks=blocks)
 
-    async def _send_message_to_slack(self, text: str = None, blocks: list[dict[str, Any]] = None) -> bool:
+    async def _send_message_to_slack(self, text: str | None = None, blocks: list[dict[str, Any]] | None = None) -> bool:
         """
         Send a message to Slack using httpx.AsyncClient.
         Returns True on success, False on failure.

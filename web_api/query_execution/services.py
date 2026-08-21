@@ -61,8 +61,8 @@ class QueryService:
         query: str,
         user: User,
         db_uuid: str,
-        ad_hoc_mask_columns: list[str] = None,
-        client_ip: str = None,
+        ad_hoc_mask_columns: list[str] | None = None,
+        client_ip: str | None = None,
     ) -> dict[str, Any]:
         """
         Analyzes, logs, and executes the SQL query against the target database.

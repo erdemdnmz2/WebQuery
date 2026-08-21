@@ -45,7 +45,7 @@ async def test_query_execution_error_translation(async_client: AsyncClient, mock
     Test that database execution exceptions are wrapped into QueryExecutionError,
     caught by the global handler, and returned as a clean 400 Bad Request.
     """
-    mock_session, mock_result = mock_db_session
+    mock_session, _mock_result = mock_db_session
     
     # 1. Inject mock database
     app_db = app.state.context.app_db

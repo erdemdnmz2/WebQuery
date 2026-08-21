@@ -35,7 +35,7 @@ async def test_select_query_execution(async_client: AsyncClient, mock_db_session
     """
     Test that a SELECT query returns data successfully for a user with READER role.
     """
-    mock_session, mock_result = mock_db_session
+    _mock_session, mock_result = mock_db_session
     
     # 1. Setup mock database in metadata DB
     app_db = app.state.context.app_db
@@ -109,7 +109,7 @@ async def test_dml_query_execution(async_client: AsyncClient, mock_db_session):
     """
     Test that a DML query executes successfully for a user with WRITER role.
     """
-    mock_session, mock_result = mock_db_session
+    _mock_session, mock_result = mock_db_session
     
     app_db = app.state.context.app_db
     db_uuid = None
@@ -179,7 +179,7 @@ async def test_reader_blocked_from_dml(async_client: AsyncClient, mock_db_sessio
     """
     Test that a READER user is blocked from executing DML queries.
     """
-    mock_session, mock_result = mock_db_session
+    _mock_session, _mock_result = mock_db_session
     
     app_db = app.state.context.app_db
     db_uuid = None
@@ -241,7 +241,7 @@ async def test_writer_blocked_from_ddl(async_client: AsyncClient, mock_db_sessio
     """
     Test that a WRITER user is blocked from executing DDL queries.
     """
-    mock_session, mock_result = mock_db_session
+    _mock_session, _mock_result = mock_db_session
     
     app_db = app.state.context.app_db
     db_uuid = None
@@ -305,7 +305,7 @@ async def test_multi_role_query_execution(async_client: AsyncClient, mock_db_ses
     Test that a user with multiple comma-separated roles ("READER,WRITER")
     can execute SELECT and DML queries but is blocked from DDL queries.
     """
-    mock_session, mock_result = mock_db_session
+    _mock_session, mock_result = mock_db_session
 
     app_db = app.state.context.app_db
     db_uuid = None

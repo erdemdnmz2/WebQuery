@@ -188,7 +188,7 @@ class WorkspaceService:
             logger.error(f"Error deleting workspace: {e}")
             raise BaseServiceException(f"Error deleting workspace: {e!s}", original_exception=e)
     
-    async def update_workspace(self, db: AsyncSession, workspace_id: int, query: str = None, status: str = None):
+    async def update_workspace(self, db: AsyncSession, workspace_id: int, query: str | None = None, status: str | None = None):
         """
         Updates workspace query or status.
         
@@ -268,7 +268,7 @@ class WorkspaceService:
             "is_owner": True
         }
 
-    async def execute_workspace(self, workspace_id: int, current_user: User, db_provider: DatabaseProvider, ad_hoc_mask_columns: list[str] = None) -> dict[str, Any]:
+    async def execute_workspace(self, workspace_id: int, current_user: User, db_provider: DatabaseProvider, ad_hoc_mask_columns: list[str] | None = None) -> dict[str, Any]:
         """
         Executes a stored workspace query after enforcing approval rules.
         Uses centralized service account credentials, requiring no user password caching.
@@ -320,9 +320,8 @@ class WorkspaceService:
             is_db_admin = "ADMIN" in [r.strip().upper() for r in user_role.split(",")]
 
             # enforce approval only for non-admins
-            if not is_db_admin:
-                if not workspace.show_results or query_data.status != "approved_with_results":
-                    raise QueryAnalysisRejectedError("This workspace is not approved for execution")
+            if not is_db_admin and (not workspace.show_results or query_data.status != "approved_with_results"):
+                raise QueryAnalysisRejectedError("This workspace is not approved for execution")
 
         log_id: int | None = None
         try:

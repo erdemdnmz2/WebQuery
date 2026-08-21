@@ -156,7 +156,7 @@ async def test_admin_query_approval_workflow(async_client: AsyncClient, mock_db_
     """
     Tests query approval and rejection flows, ensuring execution permissions update correctly.
     """
-    mock_session, mock_result = mock_db_session
+    _mock_session, mock_result = mock_db_session
     
     # 1. Register a regular user and create a workspace
     regular_client = AsyncClient(transport=async_client._transport, base_url="http://test")
@@ -257,7 +257,7 @@ async def test_admin_query_rejection(async_client: AsyncClient, mock_db_session)
     """
     Tests query rejection flow by an admin.
     """
-    mock_session, mock_result = mock_db_session
+    _mock_session, _mock_result = mock_db_session
     
     # 1. Create user and workspace
     regular_client = AsyncClient(transport=async_client._transport, base_url="http://test")
