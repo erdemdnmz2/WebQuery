@@ -21,6 +21,7 @@ from app_database.models import (
     UserDatabaseAssociation,
     Workspace,
 )
+from common.errors import redact_passwords, scrub
 from common.exceptions import BaseServiceException
 from common.security import mask_result_set
 from database_provider import DatabaseProvider
@@ -264,14 +265,19 @@ class QueryService:
             raise
         except Exception as e:
             error_msg: str = str(e)
-            logger.error(f"Query execution failed: {error_msg}")
+            safe_log_error = redact_passwords(error_msg)
+            logger.error(
+                "Query execution failed [%s]: %s",
+                type(e).__name__,
+                safe_log_error,
+            )
             if log_id:
                 await self.app_db.update_log(
                     log_id=log_id,
                     successfull=False,
-                    error=error_msg
+                    error=safe_log_error
                 )
-            raise QueryExecutionError(error_msg, original_exception=e)
+            raise QueryExecutionError(scrub(error_msg), original_exception=e)
 
     async def get_active_masking_rules(self, db_uuid: str) -> list[str]:
         """
@@ -287,4 +293,3 @@ class QueryService:
             
             rules = await self.app_db.get_masking_rules(db_entry.id)
             return [r.column_name.lower() for r in rules]
- 

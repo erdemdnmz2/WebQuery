@@ -29,6 +29,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app_database import AppDatabase
 from common.config_guard import verify_startup_config
+from common.errors import redact_passwords
 from common.exceptions import BaseServiceException
 from common.limiter import limiter
 from database_provider import DatabaseProvider
@@ -155,8 +156,8 @@ async def service_exception_handler(request: Request, exc: BaseServiceException)
     if exc.original_exception:
         logger.error(
             f"Service Exception [{exc.code}] on {request.url.path}: {exc.message} - "
-            f"Underlying Error: {type(exc.original_exception).__name__}: {exc.original_exception}",
-            exc_info=exc.original_exception
+            f"Underlying Error: {type(exc.original_exception).__name__}: "
+            f"{redact_passwords(str(exc.original_exception))}"
         )
     else:
         logger.warning(f"Service Exception [{exc.code}] on {request.url.path}: {exc.message}")

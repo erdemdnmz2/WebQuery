@@ -18,6 +18,7 @@ from app_database.models import (
     UserDatabaseAssociation,
     Workspace,
 )
+from common.errors import redact_passwords, scrub
 from common.exceptions import BaseServiceException
 from common.security import mask_result_set
 from database_provider import DatabaseProvider
@@ -380,6 +381,17 @@ class WorkspaceService:
         except BaseServiceException:
             raise
         except Exception as e:
+            error_msg = str(e)
+            safe_log_error = redact_passwords(error_msg)
+            logger.error(
+                "Workspace query execution failed [workspace_id=%s]: %s",
+                workspace_id,
+                safe_log_error,
+            )
             if log_id:
-                await self.app_db.update_log(log_id=log_id, successfull=False, error=str(e))
-            raise QueryExecutionError(str(e), original_exception=e)
+                await self.app_db.update_log(
+                    log_id=log_id,
+                    successfull=False,
+                    error=safe_log_error,
+                )
+            raise QueryExecutionError(scrub(error_msg), original_exception=e)
