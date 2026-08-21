@@ -2,7 +2,6 @@
 Application Database Models
 SQLAlchemy ORM models for the application database
 """
-import base64
 import enum
 import os
 import re
@@ -59,8 +58,9 @@ class EncryptedText(TypeDecorator):
         if cls._fernet is None:
             key = os.getenv("QUERY_ENCRYPTION_KEY")
             if not key:
-                # Generate a consistent fallback key for testing/development
-                key = base64.urlsafe_b64encode(b"thirty-two-bytes-consistent-key!")
+                raise RuntimeError(
+                    "QUERY_ENCRYPTION_KEY tanımlı değil. Şifreleme yapılamaz."
+                )
             cls._fernet = Fernet(key)
         return cls._fernet
 

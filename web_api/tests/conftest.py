@@ -6,6 +6,13 @@ from httpx import ASGITransport, AsyncClient
 
 # Mock APP_DATABASE_URL before any app modules are imported
 os.environ["APP_DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
+os.environ.setdefault("SECRET_KEY", "test-only-secret-key-with-at-least-32-chars")
+os.environ.setdefault(
+    "QUERY_ENCRYPTION_KEY",
+    "CS8EY9zwmjvdAelb-8wdVdyyVDP-y7rkXeZ-ATMRZk4=",
+)
+os.environ.setdefault("CENTRAL_DB_USER", "test-central-user")
+os.environ.setdefault("CENTRAL_DB_PASSWORD", "test-central-password")
 
 # slack_integration/config.py reads these at import time with no default;
 # `from app import app` below pulls that module in transitively. Without a

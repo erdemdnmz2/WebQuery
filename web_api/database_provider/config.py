@@ -13,13 +13,15 @@ load_dotenv()
 _server_list = os.getenv("SQL_SERVER_NAMES", "localhost")
 SERVER_NAMES: list[str] = [s.strip() for s in _server_list.split(",") if s.strip()]
 
-# SQL Server authentication credentials
-DB_USER = os.getenv("DB_USER", "sa")
+# SQL Server authentication credentials.
+# There is intentionally no privileged default: a missing value must remain
+# visible to startup validation instead of silently becoming "sa".
+DB_USER = os.getenv("DB_USER", "")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
 # Central service account credentials for executing queries on target databases
-CENTRAL_DB_USER: str = os.getenv("CENTRAL_DB_USER", DB_USER)
-CENTRAL_DB_PASSWORD: str = os.getenv("CENTRAL_DB_PASSWORD", DB_PASSWORD)
+CENTRAL_DB_USER: str = os.getenv("CENTRAL_DB_USER") or DB_USER
+CENTRAL_DB_PASSWORD: str = os.getenv("CENTRAL_DB_PASSWORD") or DB_PASSWORD
 
 # Engine Cache Cleanup Interval (seconds)
 # Default: 1800 seconds (30 minutes)

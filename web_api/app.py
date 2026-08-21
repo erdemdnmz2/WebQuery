@@ -28,6 +28,7 @@ from sqlalchemy import text
 from starlette.middleware.cors import CORSMiddleware
 
 from app_database import AppDatabase
+from common.config_guard import verify_startup_config
 from common.exceptions import BaseServiceException
 from common.limiter import limiter
 from database_provider import DatabaseProvider
@@ -42,6 +43,7 @@ async def lifespan(app: FastAPI):
     Manages application startup and shutdown lifecycle.
     """
     # Startup
+    verify_startup_config()
     print("🚀 Application starting...")
     
     try:

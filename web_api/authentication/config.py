@@ -8,7 +8,10 @@ from dotenv import load_dotenv
 # Load .env file
 load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here-change-in-production")
+# Startup config validation is responsible for rejecting missing/unsafe values.
+# Keeping this as None until startup allows the guard to produce the actionable
+# error instead of failing during module import with an opaque KeyError.
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", str(60 * 24)))
 COOKIE_TOKEN_EXPIRE_MINUTES = int(os.getenv("COOKIE_TOKEN_EXPIRE_MINUTES", str(60 * 60 * 24)))
