@@ -27,12 +27,49 @@ CENTRAL_DB_PASSWORD: str = os.getenv("CENTRAL_DB_PASSWORD") or DB_PASSWORD
 # Default: 1800 seconds (30 minutes)
 TIME_INTERVAL_FOR_CACHE = int(os.getenv("ENGINE_CACHE_TTL_SECONDS", "1800"))
 
+# Maximum execution time for a target database query, in seconds.
+# This is distinct from connection and connection-pool acquisition timeouts.
+QUERY_TIMEOUT_SECONDS = int(os.getenv("QUERY_TIMEOUT_SECONDS", "300"))
+
 # Technology to Driver mapping
 TECHNOLOGY_DRIVER_MAP = {
     "mssql": "aioodbc",
     "mysql": "aiomysql",
     "postgresql": "asyncpg",
     "postgres": "asyncpg",  
+}
+
+
+def get_connect_args(tech: str, timeout_seconds: int) -> dict:
+    """Return driver-specific timeout arguments for a target database."""
+    tech = tech.lower().strip()
+
+    if tech == "mssql":
+        # aioodbc/pyodbc applies this as the statement execution timeout.
+        return {"timeout": timeout_seconds}
+
+    if tech in ("postgresql", "postgres"):
+        timeout_ms = timeout_seconds * 1000
+        return {
+            "command_timeout": timeout_seconds,
+            "server_settings": {
+                "statement_timeout": str(timeout_ms),
+                "idle_in_transaction_session_timeout": str(
+                    (timeout_seconds + 30) * 1000
+                ),
+            },
+        }
+
+    if tech == "mysql":
+        # max_execution_time is applied after connection creation below.
+        return {"connect_timeout": 15}
+
+    return {}
+
+
+# MySQL's query execution limit is a session setting rather than a connect arg.
+SESSION_INIT_SQL = {
+    "mysql": "SET SESSION max_execution_time = {ms}",
 }
 
 def get_driver_for_technology(technology: str) -> str:

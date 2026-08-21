@@ -43,6 +43,19 @@ async def test_engine_reusability(mock_create_engine):
     assert cache._stats["engine_count"] == 1
     assert cache._stats["request_count"] == 2
 
+
+@pytest.mark.asyncio
+async def test_engine_forwards_connect_args(mock_create_engine):
+    cache = EngineCache(max_engines=5)
+    connect_args = {"timeout": 120}
+
+    await cache.get_engine(
+        "mssql+aioodbc://fake:fake@host/db",
+        connect_args=connect_args,
+    )
+
+    assert mock_create_engine.call_args.kwargs["connect_args"] == connect_args
+
 @pytest.mark.asyncio
 async def test_lru_eviction(mock_create_engine):
     """Test that LRU evicts the oldest inactive engine when max_engines is reached."""

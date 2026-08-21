@@ -6,13 +6,17 @@ All functions and classes are strictly typed.
 from contextlib import asynccontextmanager
 from typing import Any
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app_database import models
 from database_provider.config import (
     CENTRAL_DB_PASSWORD,
     CENTRAL_DB_USER,
+    QUERY_TIMEOUT_SECONDS,
+    SESSION_INIT_SQL,
     create_connection_string,
+    get_connect_args,
     get_driver_for_technology,
 )
 
@@ -89,11 +93,20 @@ class DatabaseProvider:
             password=CENTRAL_DB_PASSWORD,
         )
         
-        engine = await self.engine_cache.get_engine(conn_str, db_uuid=db_uuid)
+        engine = await self.engine_cache.get_engine(
+            conn_str,
+            db_uuid=db_uuid,
+            connect_args=get_connect_args(tech, QUERY_TIMEOUT_SECONDS),
+        )
 
         AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=engine)
         async with AsyncSessionLocal() as session:
             try:
+                init_sql = SESSION_INIT_SQL.get(tech.lower().strip())
+                if init_sql:
+                    await session.execute(
+                        text(init_sql.format(ms=QUERY_TIMEOUT_SECONDS * 1000))
+                    )
                 yield session
             finally:
                 await session.close()

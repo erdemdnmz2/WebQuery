@@ -63,7 +63,12 @@ class EngineCache:
         await entry.engine.dispose()
         self._stats["engine_count"] -= 1
 
-    async def get_engine(self, url: str, db_uuid: str | None = None) -> AsyncEngine:
+    async def get_engine(
+        self,
+        url: str,
+        db_uuid: str | None = None,
+        connect_args: dict | None = None,
+    ) -> AsyncEngine:
 
         cache_key = db_uuid if db_uuid is not None else self._hash_key(url)
         async with self.lock:
@@ -82,7 +87,8 @@ class EngineCache:
                 max_overflow=100,
                 pool_timeout=30,
                 pool_recycle=1800,
-                pool_pre_ping=False
+                pool_pre_ping=False,
+                connect_args=connect_args or {},
             )
 
             entry = EngineCacheEntry(
