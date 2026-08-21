@@ -70,11 +70,11 @@ sorusuna cevap verecek bir trend (azalan/artan hata sayısı) sağlar.
   temizliği" işi olarak).
 - `ruff` çıktısı her CI çalışmasında görünür durumda; 383 sayısının zamanla
   azalıp azalmadığı izlenebilir.
-- CI'nin `QUERY_ENCRYPTION_KEY` env değişkeni bir GitHub Actions secret'ı
-  (`CI_FERNET_KEY`) bekliyor. Bu secret repo'da **henüz tanımlı değil** ve
-  bu ADR onu oluşturamaz (bu ortamdan GitHub secret yönetimine erişim yok) —
-  operatör tarafından elle eklenmelidir. Adım 3 (`0.1` config guard)
-  öncesinde eklenmesi gerekir; o adım bu değeri zorunlu kılacak.
+- CI'nin `QUERY_ENCRYPTION_KEY` env değişkeni, `CI_FERNET_KEY` tanımlıysa onu
+  kullanır; tanımlı değilse yalnızca ephemeral CI verisi için sabit bir test
+  anahtarına düşer. Bu anahtar production sırrı değildir. Adım 3 (`0.1`
+  config guard) ile production ortamında gerçek anahtar zorunlu kılınmadan
+  önce `CI_FERNET_KEY` secret'ının tanımlanması gerekir.
 
 ## Accepted Risks
 

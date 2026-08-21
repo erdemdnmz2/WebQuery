@@ -37,7 +37,9 @@ jobs:
         env:
           # CI-only values, unrelated to any real deployment secret.
           SECRET_KEY: ci-test-key-for-github-actions-only-not-production
-          QUERY_ENCRYPTION_KEY: ${{ secrets.CI_FERNET_KEY }}
+          # Ephemeral CI data only; production must provide its own secret.
+          # CI_FERNET_KEY may override this value when configured in GitHub.
+          QUERY_ENCRYPTION_KEY: ${{ secrets.CI_FERNET_KEY || 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }}
           APP_DATABASE_URL: sqlite+aiosqlite:///./test.db
           CENTRAL_DB_USER: ci_user
           CENTRAL_DB_PASSWORD: ci_pass
