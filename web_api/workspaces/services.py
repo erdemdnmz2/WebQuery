@@ -20,6 +20,7 @@ from app_database.models import (
 )
 from common.errors import redact_passwords, scrub
 from common.exceptions import BaseServiceException
+from common.roles import is_admin
 from common.security import mask_result_set
 from database_provider import DatabaseProvider
 from query_execution import config as query_config
@@ -318,7 +319,7 @@ class WorkspaceService:
                 raise BaseServiceException("You do not have permission to access this database.")
             user_role = assoc.role
 
-            is_db_admin = "ADMIN" in [r.strip().upper() for r in user_role.split(",")]
+            is_db_admin = is_admin(user_role)
 
             # enforce approval only for non-admins
             if not is_db_admin and (not workspace.show_results or query_data.status != "approved_with_results"):

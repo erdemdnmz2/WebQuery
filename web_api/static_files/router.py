@@ -4,6 +4,7 @@ from sqlalchemy import select
 
 from app_database.app_database import AppDatabase
 from app_database.models import User, UserDatabaseAssociation
+from common.roles import any_admin
 from dependencies import get_app_db
 
 router = APIRouter()
@@ -40,12 +41,7 @@ async def admin(
         stmt = select(UserDatabaseAssociation).where(UserDatabaseAssociation.user_id == current_user.id)
         res = await db.execute(stmt)
         assocs = res.scalars().all()
-        is_admin = False
-        for assoc in assocs:
-            roles = [r.strip().upper() for r in assoc.role.split(",")]
-            if "ADMIN" in roles:
-                is_admin = True
-                break
+        is_admin = any_admin(assocs)
                 
     if not is_admin:
         raise HTTPException(

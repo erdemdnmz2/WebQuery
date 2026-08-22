@@ -23,6 +23,7 @@ from app_database.models import (
 )
 from common.errors import redact_passwords, scrub
 from common.exceptions import BaseServiceException
+from common.roles import is_admin
 from common.security import mask_result_set
 from database_provider import DatabaseProvider
 from notification import NotificationService
@@ -131,7 +132,7 @@ class QueryService:
                 for col in ad_hoc_mask_columns:
                     masking_cols.add(col.lower())
 
-            is_db_admin = "ADMIN" in [r.strip().upper() for r in user_role.split(",")]
+            is_db_admin = is_admin(user_role)
             query_analysis: dict[str, Any] = self.analyzer.analyze(query, technology=technology)
             risk_level: str | None = query_analysis.get("risk_type")
 

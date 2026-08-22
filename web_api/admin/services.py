@@ -19,6 +19,7 @@ from app_database.models import (
     Workspace,
 )
 from common.exceptions import BaseServiceException
+from common.roles import is_admin, parse
 from common.security import generate_secure_credentials
 from database_provider import DatabaseProvider
 from query_execution import config
@@ -95,10 +96,8 @@ class AdminService(BaseAdminService):
                 )
                 res_assoc = await db.execute(stmt_assoc)
                 assoc = res_assoc.scalars().first()
-                if assoc:
-                    roles = [r.strip().upper() for r in assoc.role.split(",")]
-                    if "ADMIN" in roles:
-                        filtered.append(db_entry)
+                if assoc and is_admin(assoc.role):
+                    filtered.append(db_entry)
             return filtered
 
     async def discover_schema(self, database_id: int, admin_user: User) -> dict[str, list[str]]:
@@ -110,7 +109,7 @@ class AdminService(BaseAdminService):
                 )
             )
             assoc = assoc_res.scalars().first()
-            if not assoc or "ADMIN" not in [r.strip().upper() for r in assoc.role.split(",")]:
+            if not assoc or not is_admin(assoc.role):
                 return {}
 
             db_entry = await db.get(Databases, database_id)
@@ -170,7 +169,7 @@ class AdminService(BaseAdminService):
                 )
             )
             assoc = assoc_res.scalars().first()
-            if not assoc or "ADMIN" not in [r.strip().upper() for r in assoc.role.split(",")]:
+            if not assoc or not is_admin(assoc.role):
                 raise BaseServiceException("You do not have admin permissions for this database.")
 
             result = await db.execute(
@@ -188,7 +187,7 @@ class AdminService(BaseAdminService):
                     )
                 )
                 assoc = assoc_res.scalars().first()
-                if not assoc or "ADMIN" not in [r.strip().upper() for r in assoc.role.split(",")]:
+                if not assoc or not is_admin(assoc.role):
                     raise BaseServiceException("You do not have admin permissions for this database.")
                 await db.execute(delete(MaskingRule).where(MaskingRule.database_id == database_id))
                 for rule in rules_data:
@@ -241,7 +240,7 @@ class AdminApprovalService(BaseAdminService):
                             )
                         )
                         assoc = assoc_res.scalars().first()
-                        if not assoc or "ADMIN" not in [r.strip().upper() for r in assoc.role.split(",")]:
+                        if not assoc or not is_admin(assoc.role):
                             continue
 
                         workspace_result = await db.execute(
@@ -313,7 +312,7 @@ class AdminApprovalService(BaseAdminService):
                 )
             )
             assoc = assoc_res.scalars().first()
-            if not assoc or "ADMIN" not in [r.strip().upper() for r in assoc.role.split(",")]:
+            if not assoc or not is_admin(assoc.role):
                 return {"success": False, "error": "You do not have admin permissions for this database."}
         
         try:
@@ -409,7 +408,7 @@ class AdminApprovalService(BaseAdminService):
                     )
                 )
                 assoc = assoc_res.scalars().first()
-                if not assoc or "ADMIN" not in [r.strip().upper() for r in assoc.role.split(",")]:
+                if not assoc or not is_admin(assoc.role):
                     return {"success": False, "error": "You do not have admin permissions for this database."}
                 
                 query_data.status = "rejected"
@@ -455,7 +454,7 @@ class AdminApprovalService(BaseAdminService):
                     )
                 )
                 assoc = assoc_res.scalars().first()
-                if not assoc or "ADMIN" not in [r.strip().upper() for r in assoc.role.split(",")]:
+                if not assoc or not is_admin(assoc.role):
                     raise BaseServiceException("You do not have admin permissions for this database.")
                 
                 # 3. Update status and description
@@ -558,10 +557,9 @@ class AdminUserAuthService(BaseAdminService):
     async def associate_user_to_database(self, user_id: int, database_id: int, role: str, admin_user: User) -> dict[str, Any]:
         role_upper = role.upper()
         # Clean roles list, allow comma-separated combination of READER, WRITER, ADMIN
-        roles_list = [r.strip() for r in role_upper.split(",")]
-        for r in roles_list:
-            if r not in ["READER", "WRITER", "ADMIN"]:
-                raise BaseServiceException("Invalid role. Role must be READER, WRITER, or ADMIN.")
+        roles_list = parse(role)
+        if not roles_list or any(r not in ["READER", "WRITER", "ADMIN"] for r in roles_list):
+            raise BaseServiceException("Invalid role. Role must be READER, WRITER, or ADMIN.")
             
         async with self.app_db.get_app_db() as db:
             # Check admin permission
@@ -572,7 +570,7 @@ class AdminUserAuthService(BaseAdminService):
                 )
             )
             assoc_admin = assoc_res_admin.scalars().first()
-            if not assoc_admin or "ADMIN" not in [r.strip().upper() for r in assoc_admin.role.split(",")]:
+            if not assoc_admin or not is_admin(assoc_admin.role):
                 raise BaseServiceException("You do not have admin permissions for this database.")
 
             # Check user exists
@@ -613,4 +611,3 @@ class AdminUserAuthService(BaseAdminService):
             await db.commit()
             
         return {"success": True, "message": f"Successfully associated user {user_id} with database {database_id} as {role_upper}."}
-

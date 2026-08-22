@@ -13,11 +13,11 @@ from sqlalchemy.future import select
 
 from app_database.app_database import AppDatabase
 from app_database.models import User, UserDatabaseAssociation
-from authentication import config, schemas
+from authentication import config, schemas, sessions
 from authentication.exceptions import UserAlreadyExistsError
 from authentication.services import get_current_user
-from authentication import sessions
 from common.limiter import limiter
+from common.roles import any_admin
 from database_provider import DatabaseProvider
 from dependencies import get_app_db, get_db_provider
 
@@ -187,16 +187,11 @@ async def read_users_me(
     Returns:
         schemas.User: The user details schema.
     """
-    is_admin = False
     async with app_db.get_app_db() as db:
         stmt = select(UserDatabaseAssociation).where(UserDatabaseAssociation.user_id == current_user.id)
         res = await db.execute(stmt)
         assocs = res.scalars().all()
-        for assoc in assocs:
-            roles = [r.strip().upper() for r in assoc.role.split(",")]
-            if "ADMIN" in roles:
-                is_admin = True
-                break
+        is_admin = any_admin(assocs)
 
     return schemas.User(
         username=current_user.username,

@@ -7,6 +7,8 @@ from enum import Enum
 import sqlglot
 from sqlglot import exp
 
+from common.roles import parse
+
 
 class RiskLevel(Enum):
     """Query risk levels"""
@@ -154,7 +156,7 @@ class QueryAnalyzer:
         except Exception:
             return False
 
-        roles_list = [r.strip().upper() for r in role.split(",")]
+        roles_list = parse(role)
 
         for stmt in statements:
             if not stmt:
@@ -191,4 +193,3 @@ class QueryAnalyzer:
                 return False
 
         return True
-

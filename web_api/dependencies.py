@@ -9,6 +9,7 @@ from admin.services import AdminService
 from app_database.app_database import AppDatabase
 from app_database.models import User, UserDatabaseAssociation, Workspace
 from authentication.services import get_current_user
+from common.roles import any_admin
 from database_provider import DatabaseProvider
 from notification import NotificationService
 from query_execution.services import QueryService
@@ -107,14 +108,7 @@ async def admin_required(
         res = await db.execute(stmt)
         assocs = res.scalars().all()
         
-        is_admin = False
-        for assoc in assocs:
-            roles = [r.strip().upper() for r in assoc.role.split(",")]
-            if "ADMIN" in roles:
-                is_admin = True
-                break
-                
-        if not is_admin:
+        if not any_admin(assocs):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
             
     return current_user
