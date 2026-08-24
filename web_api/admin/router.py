@@ -2,11 +2,16 @@
 Admin Router
 Admin query approval/rejection endpoints
 """
+import json
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import select
 
-from app_database.models import User
-from dependencies import admin_required, get_admin_service
+from app_database.app_database import AppDatabase
+from app_database.models import AuditLog, User
+from common.audit_actions import AuditAction, AuditTarget
+from dependencies import admin_required, get_admin_service, get_app_db
 
 from .schemas import (
     AdminApprovalsList,
@@ -23,6 +28,10 @@ from .services import AdminService
 
 router = APIRouter(prefix="/api/admin")
 
+
+def _peer_ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
+
 @router.get("/queries_to_approve", response_model=AdminApprovalsList)
 async def get_queries_to_approve(
     current_admin: User = Depends(admin_required),
@@ -38,6 +47,7 @@ async def get_queries_to_approve(
 async def approve_query(
     workspace_id: int,
     approval: ApprovalRequest,
+    request: Request,
     current_admin: User = Depends(admin_required),
     service: AdminService = Depends(get_admin_service)
 ):
@@ -45,7 +55,12 @@ async def approve_query(
     Approves and executes the query.
     """
     # call service approve (sets show_results and query status)
-    result = await service.approve(workspace_id, approval.show_results, current_admin)
+    result = await service.approve(
+        workspace_id,
+        approval.show_results,
+        current_admin,
+        client_ip=_peer_ip(request),
+    )
 
     if result.get("success"):
         return result
@@ -58,13 +73,16 @@ async def approve_query(
 @router.post("/reject_query/{workspace_id}")
 async def reject_query(
     workspace_id: int,
+    request: Request,
     current_admin: User = Depends(admin_required),
     service: AdminService = Depends(get_admin_service)
 ):
     """
     Rejects the query.
     """
-    result = await service.reject_query_by_workspace_id(workspace_id, current_admin)
+    result = await service.reject_query_by_workspace_id(
+        workspace_id, current_admin, client_ip=_peer_ip(request)
+    )
     
     if result.get("success"):
         return Response(status_code=status.HTTP_200_OK)
@@ -77,6 +95,7 @@ async def reject_query(
 @router.post("/execute_for_preview/{workspace_id}", response_model=AdminPreviewResponse)
 async def execute_for_preview(
     workspace_id: int,
+    request: Request,
     current_admin : User = Depends(admin_required),
     service : AdminService = Depends(get_admin_service)
 ):
@@ -85,7 +104,9 @@ async def execute_for_preview(
 
     Admin yetkisi gerektirir. execute_for_preview, query'yi çalıştırır ancak status değiştirmez.
     """
-    result = await service.execute_for_preview(workspace_id, current_admin)
+    result = await service.execute_for_preview(
+        workspace_id, current_admin, client_ip=_peer_ip(request)
+    )
 
     if isinstance(result, dict) and result.get("response_type") == "error":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("error"))
@@ -95,6 +116,7 @@ async def execute_for_preview(
 @router.post("/add_database")
 async def add_database(
     request: DatabaseAddRequest,
+    http_request: Request,
     current_admin: User = Depends(admin_required),
     service: AdminService = Depends(get_admin_service)
 ):
@@ -105,7 +127,8 @@ async def add_database(
         servername=request.servername,
         database_name=request.database_name,
         tech_name=request.tech_name,
-        admin_user=current_admin
+        admin_user=current_admin,
+        client_ip=_peer_ip(http_request),
     )
     
     if result.get("success"):
@@ -176,13 +199,19 @@ async def get_masking_rules(
 async def save_masking_rules(
     database_id: int,
     request: MaskingRulesSaveRequest,
+    http_request: Request,
     current_admin: User = Depends(admin_required),
     service: AdminService = Depends(get_admin_service)
 ):
     """
     Saves/updates the masking rules for a database.
     """
-    success = await service.save_masking_rules(database_id, request.rules, current_admin)
+    success = await service.save_masking_rules(
+        database_id,
+        request.rules,
+        current_admin,
+        client_ip=_peer_ip(http_request),
+    )
     if success:
         return {"success": True, "message": "Masking rules saved successfully"}
     else:
@@ -194,6 +223,7 @@ async def save_masking_rules(
 @router.post("/associate_user")
 async def associate_user(
     request: UserAssociationRequest,
+    http_request: Request,
     current_admin: User = Depends(admin_required),
     service: AdminService = Depends(get_admin_service)
 ):
@@ -204,7 +234,8 @@ async def associate_user(
         user_id=request.user_id,
         database_id=request.database_id,
         role=request.role,
-        admin_user=current_admin
+        admin_user=current_admin,
+        client_ip=_peer_ip(http_request),
     )
     if result.get("success"):
         return {"success": True, "message": result.get("message")}
@@ -214,3 +245,61 @@ async def associate_user(
             detail=result.get("error", "Failed to associate user")
         )
 
+
+@router.get("/audit_log")
+async def get_audit_log(
+    action: str | None = None,
+    target_type: str | None = None,
+    target_id: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    _admin_user: User = Depends(admin_required),
+    app_db: AppDatabase = Depends(get_app_db),
+):
+    """Return validated, filtered audit records from newest to oldest."""
+    action_filter: AuditAction | None = None
+    if action is not None:
+        try:
+            action_filter = AuditAction(action)
+        except ValueError as exc:
+            valid_actions = ", ".join(sorted(item.value for item in AuditAction))
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown audit action: '{action}'. Valid actions: {valid_actions}",
+            ) from exc
+
+    target_filter: AuditTarget | None = None
+    if target_type is not None:
+        try:
+            target_filter = AuditTarget(target_type)
+        except ValueError as exc:
+            valid_targets = ", ".join(sorted(item.value for item in AuditTarget))
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Unknown audit target type: '{target_type}'. "
+                    f"Valid target types: {valid_targets}"
+                ),
+            ) from exc
+
+    async with app_db.get_app_db() as db:
+        statement = select(AuditLog).order_by(AuditLog.id.desc()).limit(limit)
+        if action_filter is not None:
+            statement = statement.where(AuditLog.action == action_filter)
+        if target_filter is not None:
+            statement = statement.where(AuditLog.target_type == target_filter)
+        if target_id is not None:
+            statement = statement.where(AuditLog.target_id == str(target_id))
+        rows = (await db.execute(statement)).scalars().all()
+
+    return [
+        {
+            "id": row.id,
+            "at": row.created_at,
+            "actor": row.actor_username,
+            "action": row.action,
+            "target": f"{row.target_type}:{row.target_id}",
+            "details": json.loads(row.details) if row.details else None,
+            "ip": row.client_ip,
+        }
+        for row in rows
+    ]

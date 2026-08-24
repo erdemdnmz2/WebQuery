@@ -7,8 +7,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 
 from app import app
+from app_database.models import AuditLog
+from common.audit_actions import AuditAction
 
 
 @pytest.mark.asyncio
@@ -47,6 +50,22 @@ async def test_register_and_login(async_client: AsyncClient):
     cookie = response.cookies["access_token"]
     assert cookie is not None
 
+    async with app.state.context.app_db.get_app_db() as db:
+        audits = (
+            await db.execute(
+                select(AuditLog).where(
+                    AuditLog.action.in_(
+                        [AuditAction.USER_REGISTERED, AuditAction.LOGIN]
+                    )
+                )
+            )
+        ).scalars().all()
+        assert {row.action for row in audits} == {
+            AuditAction.USER_REGISTERED,
+            AuditAction.LOGIN,
+        }
+        assert all(row.client_ip == "127.0.0.1" for row in audits)
+
 
 @pytest.mark.asyncio
 async def test_login_invalid_credentials(async_client: AsyncClient):
@@ -79,6 +98,15 @@ async def test_login_invalid_credentials(async_client: AsyncClient):
     response = await async_client.post("/api/login", json=bad_login_data)
     assert response.status_code == 400
     assert "Invalid email or password" in response.text
+
+    async with app.state.context.app_db.get_app_db() as db:
+        failed_audits = (
+            await db.execute(
+                select(AuditLog).where(AuditLog.action == AuditAction.LOGIN_FAILED)
+            )
+        ).scalars().all()
+        assert len(failed_audits) == 2
+        assert all(row.client_ip == "127.0.0.1" for row in failed_audits)
 
 
 @pytest.mark.asyncio
@@ -220,6 +248,14 @@ async def test_logout_flow(async_client: AsyncClient):
         mock_close.assert_called_once()
         called_user_id = mock_close.call_args[0][0]
         assert isinstance(called_user_id, int)
+
+    async with app.state.context.app_db.get_app_db() as db:
+        logout_audit = (
+            await db.execute(
+                select(AuditLog).where(AuditLog.action == AuditAction.LOGOUT)
+            )
+        ).scalar_one()
+        assert logout_audit.client_ip == "127.0.0.1"
 
 
 @pytest.mark.asyncio

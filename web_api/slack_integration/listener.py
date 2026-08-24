@@ -12,7 +12,7 @@ from slack_bolt.async_app import AsyncApp
 from sqlalchemy import select
 
 from app_database.app_database import AppDatabase
-from app_database.models import ApprovalStatus, QueryData, User, Workspace
+from app_database.models import ApprovalStatus, Databases, QueryData, User, Workspace
 from common.audit import log_in
 from common.audit_actions import AuditAction, AuditTarget
 from common.audit_details import QueryDecisionAuditDetails
@@ -162,6 +162,79 @@ class SlackListener:
         )
         return slack_email, slack_user_id
 
+    async def _persist_query_decision(
+        self,
+        *,
+        request_id: str,
+        approved_by: str,
+        approved_by_slack_id: str,
+        approve: bool,
+    ) -> bool:
+        """Commit query state, workspace state, and audit as one transaction."""
+        action = AuditAction.APPROVE_QUERY if approve else AuditAction.REJECT_QUERY
+        status = "approved_with_results" if approve else "rejected"
+        decision = "approve" if approve else "reject"
+
+        try:
+            async with self.app_db.get_app_db() as session, session.begin():
+                query_data = (
+                    await session.execute(
+                        select(QueryData).where(QueryData.uuid == request_id)
+                    )
+                ).scalar_one_or_none()
+                if query_data is None:
+                    raise ValueError("Query is not present in the metadata database")
+
+                database = (
+                    await session.execute(
+                        select(Databases).where(
+                            Databases.servername == query_data.servername,
+                            Databases.database_name == query_data.database_name,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if database is None:
+                    raise ValueError("Query database is not registered")
+
+                workspace = (
+                    await session.execute(
+                        select(Workspace).where(Workspace.query_id == query_data.id)
+                    )
+                ).scalar_one_or_none()
+                if workspace is None:
+                    raise ValueError("Query workspace is not present")
+
+                query_data.status = status
+                workspace.show_results = approve
+                workspace.description = (
+                    f"Approved by {approved_by} via Slack"
+                    if approve
+                    else f"Rejected by {approved_by} via Slack"
+                )
+
+                await log_in(
+                    session,
+                    actor_username=approved_by,
+                    actor_slack_id=approved_by_slack_id,
+                    action=action,
+                    target_type=AuditTarget.QUERY,
+                    target_id=query_data.id,
+                    trace_id=request_id,
+                    details=QueryDecisionAuditDetails(
+                        decision=decision,
+                        source="slack",
+                        query_id=query_data.id,
+                        database_id=database.id,
+                        status=status,
+                        show_results=True if approve else None,
+                    ),
+                )
+        except Exception:
+            logger.exception("[Slack] Decision transaction failed for %s", request_id)
+            return False
+
+        return True
+
 
     # ------------------------------------------------------------------
     # Action handlers
@@ -193,43 +266,33 @@ class SlackListener:
             )
             return
 
+        persisted = await self._persist_query_decision(
+            request_id=request_id,
+            approved_by=approved_by,
+            approved_by_slack_id=approved_by_slack_id,
+            approve=True,
+        )
+        if not persisted:
+            await respond(
+                replace_original=False,
+                text=(
+                    "⛔ Query approval failed; no changes were saved. "
+                    f"(ID: {request_id})"
+                ),
+            )
+            return
+
         await respond(
             replace_original=True,
             blocks=[],
-            text=f"✅ Query approved by <@{slack_user_id}>. (ID: {request_id})"
+            text=f"✅ Query approved by <@{slack_user_id}>. (ID: {request_id})",
         )
-
-        # Update QueryData + Workspace
-        async with self.app_db.get_app_db() as session:
-            try:
-                stmt = select(QueryData).where(QueryData.uuid == request_id)
-                result = await session.execute(stmt)
-                query_data = result.scalar_one_or_none()
-
-                if query_data:
-                    query_data.status = "approved_with_results"
-
-                    stmt_ws = select(Workspace).where(Workspace.query_id == query_data.id)
-                    result_ws = await session.execute(stmt_ws)
-                    workspace = result_ws.scalar_one_or_none()
-                    if workspace:
-                        workspace.show_results = True
-                        workspace.description = f"Approved by {approved_by} via Slack"
-
-                    await log_in(session, actor_username=approved_by,
-                        actor_slack_id=approved_by_slack_id, action=AuditAction.APPROVE_QUERY,
-                        target_type=AuditTarget.QUERY, target_id=query_data.id, trace_id=request_id,
-                        details=QueryDecisionAuditDetails(decision="approve", source="slack",
-                            query_id=query_data.id, database_id=None,
-                            status="approved_with_results", show_results=True))
-
-                    await session.commit()
-                    logger.info(f"Query {request_id} approved by {approved_by} (Slack ID: {slack_user_id})")
-                else:
-                    logger.warning(f"[Slack] Query {request_id} not found in QueryData.")
-            except Exception as e:
-                await session.rollback()
-                logger.error(f"[Slack] Approval DB update failed for {request_id}: {e}")
+        logger.info(
+            "Query %s approved by %s (Slack ID: %s)",
+            request_id,
+            approved_by,
+            slack_user_id,
+        )
 
         # Update ActionLogging audit record
         try:
@@ -270,43 +333,33 @@ class SlackListener:
             )
             return
 
+        persisted = await self._persist_query_decision(
+            request_id=request_id,
+            approved_by=approved_by,
+            approved_by_slack_id=approved_by_slack_id,
+            approve=False,
+        )
+        if not persisted:
+            await respond(
+                replace_original=False,
+                text=(
+                    "⛔ Query rejection failed; no changes were saved. "
+                    f"(ID: {request_id})"
+                ),
+            )
+            return
+
         await respond(
             replace_original=True,
             blocks=[],
-            text=f"❌ Query rejected by <@{slack_user_id}>. (ID: {request_id})"
+            text=f"❌ Query rejected by <@{slack_user_id}>. (ID: {request_id})",
         )
-
-        # Update QueryData + Workspace
-        async with self.app_db.get_app_db() as session:
-            try:
-                stmt = select(QueryData).where(QueryData.uuid == request_id)
-                result = await session.execute(stmt)
-                query_data = result.scalar_one_or_none()
-
-                if query_data:
-                    query_data.status = "rejected"
-
-                    stmt_ws = select(Workspace).where(Workspace.query_id == query_data.id)
-                    result_ws = await session.execute(stmt_ws)
-                    workspace = result_ws.scalar_one_or_none()
-                    if workspace:
-                        workspace.show_results = False
-                        workspace.description = f"Rejected by {approved_by} via Slack"
-
-                    await log_in(session, actor_username=approved_by,
-                        actor_slack_id=approved_by_slack_id, action=AuditAction.REJECT_QUERY,
-                        target_type=AuditTarget.QUERY, target_id=query_data.id, trace_id=request_id,
-                        details=QueryDecisionAuditDetails(decision="reject", source="slack",
-                            query_id=query_data.id, database_id=None,
-                            status="rejected"))
-
-                    await session.commit()
-                    logger.info(f"Query {request_id} rejected by {approved_by} (Slack ID: {slack_user_id})")
-                else:
-                    logger.warning(f"[Slack] Query {request_id} not found in QueryData.")
-            except Exception as e:
-                await session.rollback()
-                logger.error(f"[Slack] Rejection DB update failed for {request_id}: {e}")
+        logger.info(
+            "Query %s rejected by %s (Slack ID: %s)",
+            request_id,
+            approved_by,
+            slack_user_id,
+        )
 
         # Update ActionLogging audit record
         try:

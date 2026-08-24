@@ -1,8 +1,8 @@
-# Mini-Spec: Audit log altyapısı
+# Mini-Spec: Audit log altyapısı ve güvenlik olayı entegrasyonları
 
 ## 1. Spec Kartı
 
-- Özellik: Append-only genel audit altyapısı ve masking-rule delta kaydı
+- Özellik: Append-only genel audit altyapısı ve güvenlik olayı entegrasyonları
 - Durum: Implemented
 - Versiyon: 2026-08-24
 - Tarih: 2026-08-24
@@ -19,7 +19,11 @@ olaylarını kaydetmek için güvenli ve genişletilebilir bir veri temeli sağl
 
 - Alembic `upgrade head`, yeni ve önceden oluşturulmuş şemalarda `AuditLog`
   tablosunu güvenle kurar.
-- Masking-rule kaydı yalnız değişen kuralları içeren bir audit satırı üretir.
+- Yetki, yapılandırma, query kararı ve kimlik olayları aynı iş transaction'ında
+  veya açıkça bağımsız audit transaction'ında kaydedilir.
+- Admin, doğrulanmış filtrelerle audit kayıtlarını okuyabilir.
+- Slack kararları yalnız veritabanı değişikliği ve audit satırı commit edildikten
+  sonra başarı olarak bildirilir.
 - Audit action değerleri kalıcı veri sözleşmesi olarak testle korunur.
 
 ## 3. Kapsam / Kapsam Dışı
@@ -28,14 +32,17 @@ olaylarını kaydetmek için güvenli ve genişletilebilir bir veri temeli sağl
 
 - `AuditLog` ORM modeli ve Alembic migration'ı.
 - Kalıcı action/target sözlüğü ile `log_in` ve `log_standalone` yardımcıları.
-- Model, migration ve yardımcı davranışlarına yönelik unit testleri.
+- Model, migration, yardımcı ve uygulama entegrasyon testleri.
 - `save_masking_rules` için table/column bazlı ekleme-kaldırma delta details'i.
+- Database access grant/role change, database ekleme, web ve Slack query
+  approve/reject, query preview, register, login/login-failed, logout ve tekil
+  session revoke çağrı noktaları.
+- Admin-only, filtrelenebilir `GET /api/admin/audit_log` endpoint'i.
 
 ### Kapsam Dışı
 
-- Masking-rules dışındaki admin, auth, web veya Slack action çağrı noktalarına
-  audit eklemek.
-- Audit log görüntüleme API'si.
+- Henüz uygulama endpoint'i olmayan revoke/remove/enable/disable/password-change
+  iş akışları.
 - Audit kayıtlarını güncelleyen veya silen API.
 
 ## 4. Sözleşme
@@ -49,6 +56,11 @@ transaction'ında kayıt yazar.
 bir delta yazar. Details yalnız `added_rules` ve `removed_rules` listelerini
 taşır; aynı `(table_name, column_name)` anahtarındaki özellik değişimi, eski
 kuralın kaldırılması ve yeni kuralın eklenmesi olarak yazılır.
+
+`GET /api/admin/audit_log` yalnız `admin_required` kullanıcılara açıktır.
+`action` ve `target_type` değerleri kalıcı sözlüklere göre doğrulanır;
+`target_id` string karşılaştırmasıyla filtrelenir; `limit` 1 ile 1000
+arasındadır. Sonuçlar `AuditLog.id DESC` sırasındadır.
 
 ## 5. İş Kuralları
 
@@ -74,6 +86,24 @@ anahtarında `masking_type` veya `is_active` değişirse details eski kuralı
 `removed_rules`, yeni kuralı `added_rules` içinde taşır. Aynı anahtar iki kez
 gönderilirse kayıt reddedilir ve hiçbir değişiklik/audit satırı commit edilmez.
 
+### BR-05: Kaynak IP bütünlüğü
+
+HTTP üzerinden başlayan audit olaylarında `client_ip`, doğrudan
+`request.client.host` değerinden alınır. Doğrulanmamış proxy header'ları kaynak
+olarak kullanılmaz.
+
+### BR-06: Slack karar bütünlüğü
+
+Slack approve/reject olayı, `QueryData` üzerindeki server/database bilgisiyle
+kayıtlı `Databases.id` değerini çözer ve audit details'e bu kimliği yazar.
+Kayıt bulunamazsa query durumu değiştirilmez. Kullanıcıya başarı mesajı yalnız
+query durumu, workspace ve audit satırı birlikte commit edildikten sonra verilir.
+
+### BR-07: Audit okuma yetkisi ve doğrulama
+
+Audit endpoint'i admin olmayan kullanıcıya veri döndürmez. Bilinmeyen action
+veya target type boş sonuç gibi davranmaz; HTTP 400 ile reddedilir.
+
 ## 6. Acceptance Criteria
 
 - AC-01: Given boş bir uygulama veritabanı, when `alembic upgrade head`
@@ -92,15 +122,29 @@ gönderilirse kayıt reddedilir ve hiçbir değişiklik/audit satırı commit ed
   temsil eder; tam önce/sonra koleksiyonlarını tekrar saklamaz.
 - AC-07: Given aynı masking kuralları tekrar gönderilir, when kayıt edilir,
   then kural seti korunur ve audit satırı yazılmaz.
+- AC-08: Given yeni database access veya rol değişikliği, when admin işlemi
+  commit eder, then uygun grant/change-role audit satırı aynı transaction'da
+  actor, target, details ve doğrudan client IP ile yazılır.
+- AC-09: Given web approve/reject kararı, when işlem commit eder, then query ve
+  audit satırı aynı transaction'da güncellenir.
+- AC-10: Given Slack approve/reject kararı, when registry database bulunur,
+  then details gerçek database ID taşır ve başarı cevabı commit sonrasında
+  gönderilir; registry kaydı yoksa hiçbir durum değişikliği commit edilmez.
+- AC-11: Given register, login, login-failed veya logout, when olay gerçekleşir,
+  then action'a uygun actor/target/details ve doğrudan client IP kaydedilir.
+- AC-12: Given admin audit endpoint'i, when geçerli filtreler gönderilir, then
+  en yeni kayıtlar önce döner; bilinmeyen action/target HTTP 400, sınır dışı
+  limit HTTP 422 ve admin olmayan kullanıcı HTTP 403 alır.
 
 ## 7. Teknik ve Güvenlik Kısıtları
 
 - `details` alanına parola, access/refresh token, connection string veya ham
-  SQL yazılmayacaktır; action entegrasyonları sonraki kapsamda bunu doğrular.
+  SQL yazılmayacaktır.
 - Migration hem SQLite hem MSSQL ile uyumlu SQLAlchemy tipleri kullanır.
-- Details yalnız table adı, column adı, masking türü ve aktiflik durumunu
-  taşıyabilir; credential, token, connection string veya ham SQL içeremez.
-- Masking dışındaki action'lar entegrasyon tamamlanana kadar audit edilmez.
+- Masking details yalnız table adı, column adı, masking türü ve aktiflik
+  durumunu taşıyabilir.
+- Slack `database_id` alanı nullable yapılarak veri kalitesi düşürülemez; gerçek
+  registry kimliği çözülmelidir.
 
 ## 8. Open Questions
 
@@ -110,5 +154,5 @@ gönderilirse kayıt reddedilir ve hiçbir değişiklik/audit satırı commit ed
 
 - [x] Acceptance criteria için test eklendi veya güncellendi
 - [x] İlgili güvenlik ve hata davranışları doğrulandı
-- [x] ADR oluşturuldu
+- [x] ADR oluşturuldu/güncellendi
 - [x] Doğrulama komutları çalıştırıldı ve sonuçları teslimde raporlandı

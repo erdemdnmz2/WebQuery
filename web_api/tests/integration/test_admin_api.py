@@ -10,7 +10,9 @@ from httpx import AsyncClient
 from sqlalchemy.future import select
 
 from app import app
-from app_database.models import Databases, QueryData, User, Workspace
+from app_database.models import AuditLog, Databases, QueryData, User, Workspace
+from common.audit import log_in
+from common.audit_actions import AuditAction, AuditTarget
 
 
 @pytest.fixture
@@ -143,6 +145,12 @@ async def test_admin_database_registration(async_client: AsyncClient):
         assert db_entry is not None
         assert db_entry.servername == "prod-server"
         assert db_entry.technology == "postgresql"
+        audit = (
+            await db.execute(
+                select(AuditLog).where(AuditLog.action == AuditAction.ADD_DATABASE)
+            )
+        ).scalar_one()
+        assert audit.client_ip == "127.0.0.1"
         
     # 3. Attempt to add duplicate database -> should fail with 400 Bad Request
     response_dup = await async_client.post("/api/admin/add_database", json=db_payload)
@@ -241,6 +249,14 @@ async def test_admin_query_approval_workflow(async_client: AsyncClient, mock_db_
     assert approve_response.status_code == 200
     assert approve_response.json()["success"] is True
     assert approve_response.json()["status"] == "approved_with_results"
+
+    async with app_db.get_app_db() as db:
+        approval_audit = (
+            await db.execute(
+                select(AuditLog).where(AuditLog.action == AuditAction.APPROVE_QUERY)
+            )
+        ).scalar_one()
+        assert approval_audit.client_ip == "127.0.0.1"
     
     # Verify regular user can now execute it
     mock_result.returns_rows = False
@@ -323,8 +339,158 @@ async def test_admin_query_rejection(async_client: AsyncClient, mock_db_session)
         qdata = await db.get(QueryData, ws.query_id)
         assert qdata.status == "rejected"
         assert ws.description == "Rejected by admin"
+        rejection_audit = (
+            await db.execute(
+                select(AuditLog).where(AuditLog.action == AuditAction.REJECT_QUERY)
+            )
+        ).scalar_one()
+        assert rejection_audit.client_ip == "127.0.0.1"
         
     # Verify regular user execution remains blocked (returns 400 Bad Request / QUERY_REJECTED_BY_ANALYZER)
     exec_response = await regular_client.post(f"/api/execute_workspace/{workspace_id}")
     assert exec_response.status_code == 400
     assert exec_response.json()["error_code"] == "QUERY_REJECTED_BY_ANALYZER"
+
+
+@pytest.mark.asyncio
+async def test_admin_audit_log_endpoint_validates_filters_and_authorization(
+    async_client: AsyncClient,
+):
+    app_db = app.state.context.app_db
+    async with app_db.get_app_db() as db:
+        database = Databases(
+            servername="audit-server",
+            database_name="audit-db",
+            technology="sqlite",
+        )
+        db.add(database)
+        await db.commit()
+
+    admin_id = await create_user_and_login(
+        async_client, "audit-admin@example.com", "audit-admin", make_admin=True
+    )
+
+    async with app_db.get_app_db() as db:
+        admin = await db.get(User, admin_id)
+        await log_in(
+            db,
+            actor=admin,
+            action=AuditAction.ADD_DATABASE,
+            target_type=AuditTarget.DATABASE,
+            target_id="first",
+            details={"database_name": "first"},
+            client_ip="127.0.0.1",
+        )
+        await log_in(
+            db,
+            actor=admin,
+            action=AuditAction.ADD_DATABASE,
+            target_type=AuditTarget.DATABASE,
+            target_id="second",
+            details={"database_name": "second"},
+            client_ip="127.0.0.1",
+        )
+        await db.commit()
+
+    response = await async_client.get(
+        "/api/admin/audit_log",
+        params={
+            "action": AuditAction.ADD_DATABASE,
+            "target_type": AuditTarget.DATABASE,
+            "limit": 1,
+        },
+    )
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["action"] == AuditAction.ADD_DATABASE
+    assert response.json()[0]["target"] == "database:second"
+
+    assert (
+        await async_client.get("/api/admin/audit_log", params={"action": "typo"})
+    ).status_code == 400
+    assert (
+        await async_client.get("/api/admin/audit_log", params={"target_type": "typo"})
+    ).status_code == 400
+    assert (
+        await async_client.get("/api/admin/audit_log", params={"limit": 0})
+    ).status_code == 422
+
+    async with AsyncClient(
+        transport=async_client._transport, base_url="http://test"
+    ) as regular_client:
+        await create_user_and_login(
+            regular_client, "audit-regular@example.com", "audit-regular"
+        )
+        forbidden = await regular_client.get("/api/admin/audit_log")
+        assert forbidden.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_association_and_masking_audits_capture_peer_ip(
+    async_client: AsyncClient,
+):
+    app_db = app.state.context.app_db
+    async with app_db.get_app_db() as db:
+        database = Databases(
+            servername="peer-ip-server",
+            database_name="peer-ip-db",
+            technology="sqlite",
+        )
+        db.add(database)
+        await db.commit()
+        await db.refresh(database)
+        database_id = database.id
+
+    await create_user_and_login(
+        async_client, "peer-admin@example.com", "peer-admin", make_admin=True
+    )
+    async with AsyncClient(
+        transport=async_client._transport, base_url="http://test"
+    ) as target_client:
+        target_user_id = await create_user_and_login(
+            target_client, "peer-target@example.com", "peer-target"
+        )
+
+    association = await async_client.post(
+        "/api/admin/associate_user",
+        json={
+            "user_id": target_user_id,
+            "database_id": database_id,
+            "role": "READER",
+        },
+    )
+    assert association.status_code == 200
+
+    masking = await async_client.post(
+        f"/api/admin/databases/{database_id}/masking_rules",
+        json={
+            "rules": [
+                {
+                    "table_name": "customers",
+                    "column_name": "email",
+                    "masking_type": "default",
+                    "is_active": True,
+                }
+            ]
+        },
+    )
+    assert masking.status_code == 200
+
+    async with app_db.get_app_db() as db:
+        rows = (
+            await db.execute(
+                select(AuditLog).where(
+                    AuditLog.action.in_(
+                        [
+                            AuditAction.GRANT_DATABASE_ACCESS,
+                            AuditAction.UPDATE_MASKING_RULES,
+                        ]
+                    )
+                )
+            )
+        ).scalars().all()
+        assert {row.action for row in rows} == {
+            AuditAction.GRANT_DATABASE_ACCESS,
+            AuditAction.UPDATE_MASKING_RULES,
+        }
+        assert all(row.client_ip == "127.0.0.1" for row in rows)

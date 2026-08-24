@@ -15,6 +15,7 @@ aynı değişiklikte tamamlanmalıdır.
 - Query preview
 - Register, başarılı/başarısız login ve logout
 - Tekil session revoke
+- Admin-only, doğrulanmış filtreli audit log görüntüleme endpoint'i
 
 ## Uygulanacak action'lar
 

@@ -74,17 +74,42 @@ class AdminService(BaseAdminService):
     async def get_workspaces_for_approval(self, admin_user: User):
         return await self.approval_service.get_workspaces_for_approval(admin_user)
 
-    async def execute_for_preview(self, workspace_id: int, admin_user: User):
-        return await self.approval_service.execute_for_preview(workspace_id, admin_user)
+    async def execute_for_preview(
+        self, workspace_id: int, admin_user: User, client_ip: str | None = None
+    ):
+        return await self.approval_service.execute_for_preview(
+            workspace_id, admin_user, client_ip
+        )
 
-    async def reject_query_by_workspace_id(self, workspace_id: int, admin_user: User):
-        return await self.approval_service.reject_query_by_workspace_id(workspace_id, admin_user)
+    async def reject_query_by_workspace_id(
+        self, workspace_id: int, admin_user: User, client_ip: str | None = None
+    ):
+        return await self.approval_service.reject_query_by_workspace_id(
+            workspace_id, admin_user, client_ip
+        )
             
-    async def approve(self, workspace_id: int, show_results: bool, admin_user: User):
-        return await self.approval_service.approve(workspace_id, show_results, admin_user)
+    async def approve(
+        self,
+        workspace_id: int,
+        show_results: bool,
+        admin_user: User,
+        client_ip: str | None = None,
+    ):
+        return await self.approval_service.approve(
+            workspace_id, show_results, admin_user, client_ip
+        )
  
-    async def associate_user_to_database(self, user_id: int, database_id: int, role: str, admin_user: User) -> dict[str, Any]:
-        return await self.auth_service.associate_user_to_database(user_id, database_id, role, admin_user)
+    async def associate_user_to_database(
+        self,
+        user_id: int,
+        database_id: int,
+        role: str,
+        admin_user: User,
+        client_ip: str | None = None,
+    ) -> dict[str, Any]:
+        return await self.auth_service.associate_user_to_database(
+            user_id, database_id, role, admin_user, client_ip
+        )
 
     async def list_databases(self, admin_user: User) -> list[Databases]:
         async with self.app_db.get_app_db() as db:
@@ -186,7 +211,13 @@ class AdminService(BaseAdminService):
             )
             return list(result.scalars().all())
 
-    async def save_masking_rules(self, database_id: int, rules_data: list, admin_user: User) -> bool:
+    async def save_masking_rules(
+        self,
+        database_id: int,
+        rules_data: list,
+        admin_user: User,
+        client_ip: str | None = None,
+    ) -> bool:
         action = AuditAction.UPDATE_MASKING_RULES
         async with self.app_db.get_app_db() as db:
             try:
@@ -232,6 +263,7 @@ class AdminService(BaseAdminService):
                             target_type=AuditTarget.DATABASE,
                             target_id=database_id,
                             details=details,
+                            client_ip=client_ip,
                         )
                 return True
             except Exception as e:
@@ -301,7 +333,9 @@ class AdminApprovalService(BaseAdminService):
             print(f"Error: {e!s}")
             return []
         
-    async def execute_for_preview(self, workspace_id: int, admin_user: User):
+    async def execute_for_preview(
+        self, workspace_id: int, admin_user: User, client_ip: str | None = None
+    ):
         """
         Executes and previews the query for the admin.
         """
@@ -393,6 +427,7 @@ class AdminApprovalService(BaseAdminService):
                     query_id=query_data.id, database_id=db_entry.id, row_count=row_count,
                     truncated=row_count >= config.MAX_ROW_COUNT_LIMIT,
                 ),
+                client_ip=client_ip,
             )
 
             return {
@@ -421,7 +456,9 @@ class AdminApprovalService(BaseAdminService):
                 "error": str(e)
             }
 
-    async def reject_query_by_workspace_id(self, workspace_id: int, admin_user: User):
+    async def reject_query_by_workspace_id(
+        self, workspace_id: int, admin_user: User, client_ip: str | None = None
+    ):
         """
         Rejects the query.
         """
@@ -459,7 +496,8 @@ class AdminApprovalService(BaseAdminService):
                 await log_in(db, actor=admin_user, action=AuditAction.REJECT_QUERY,
                     target_type=AuditTarget.QUERY, target_id=query_data.id,
                     details=QueryDecisionAuditDetails(decision="reject", source="web",
-                        query_id=query_data.id, database_id=db_entry.id, status="rejected"))
+                        query_id=query_data.id, database_id=db_entry.id, status="rejected"),
+                    client_ip=client_ip)
                 await db.commit()
                 return {"success": True}
                 
@@ -467,7 +505,13 @@ class AdminApprovalService(BaseAdminService):
                 print(f"Error rejecting query: {e}")
                 return {"success": False, "error": str(e)}
             
-    async def approve(self, workspace_id: int, show_results: bool, admin_user: User) -> dict[str, Any]:
+    async def approve(
+        self,
+        workspace_id: int,
+        show_results: bool,
+        admin_user: User,
+        client_ip: str | None = None,
+    ) -> dict[str, Any]:
         """
         Approves a query, enabling execution for the user.
         """
@@ -520,7 +564,7 @@ class AdminApprovalService(BaseAdminService):
                     target_type=AuditTarget.QUERY, target_id=query_data.id,
                     details=QueryDecisionAuditDetails(decision="approve", source="web",
                         query_id=query_data.id, database_id=db_entry.id, status=new_status,
-                        show_results=show_results))
+                        show_results=show_results), client_ip=client_ip)
                 await db.commit()
                 
                 logger.info(f"Query in workspace {workspace_id} approved by admin (Executable: {show_results})")
@@ -539,7 +583,14 @@ class AdminDBAdditionService(BaseAdminService):
     """
     Service for adding new databases to the platform configuration.
     """
-    async def add_database(self, servername: str, database_name: str, tech_name: str, admin_user: User) -> dict[str, Any]:
+    async def add_database(
+        self,
+        servername: str,
+        database_name: str,
+        tech_name: str,
+        admin_user: User,
+        client_ip: str | None = None,
+    ) -> dict[str, Any]:
         """
         Adds a new database server and database configuration to the application databases.
         """
@@ -572,7 +623,8 @@ class AdminDBAdditionService(BaseAdminService):
                 await log_in(db, actor=admin_user, action=AuditAction.ADD_DATABASE,
                     target_type=AuditTarget.DATABASE, target_id=database.id,
                     details=DatabaseConfigurationAuditDetails(operation="add", servername=servername,
-                        database_name=database_name, technology=tech_name))
+                        database_name=database_name, technology=tech_name),
+                    client_ip=client_ip)
                 await db.commit()
                 
                 # Refresh db_provider db_info dynamically
@@ -598,7 +650,14 @@ class AdminUserAuthService(BaseAdminService):
     """
     Sub-service for admin to manage user database associations and roles.
     """
-    async def associate_user_to_database(self, user_id: int, database_id: int, role: str, admin_user: User) -> dict[str, Any]:
+    async def associate_user_to_database(
+        self,
+        user_id: int,
+        database_id: int,
+        role: str,
+        admin_user: User,
+        client_ip: str | None = None,
+    ) -> dict[str, Any]:
         role_upper = role.upper()
         # Clean roles list, allow comma-separated combination of READER, WRITER, ADMIN
         roles_list = parse(role)
@@ -659,7 +718,7 @@ class AdminUserAuthService(BaseAdminService):
                 await log_in(db, actor=admin_user, action=action, target_type=AuditTarget.USER,
                     target_id=user_id, details=DatabaseAccessAuditDetails(
                         operation="change_role" if previous_role else "grant", database_id=database_id,
-                        previous_role=previous_role, new_role=role_upper))
+                        previous_role=previous_role, new_role=role_upper), client_ip=client_ip)
             await db.commit()
             
         return {"success": True, "message": f"Successfully associated user {user_id} with database {database_id} as {role_upper}."}

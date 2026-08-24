@@ -2,6 +2,7 @@
 Integration tests for Slack Interactive listener and Notification services.
 Mocks out-of-band network calls and verifies database state transitions.
 """
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -10,7 +11,8 @@ from httpx import AsyncClient
 from sqlalchemy.future import select
 
 from app import app
-from app_database.models import QueryData, User, Workspace
+from app_database.models import AuditLog, Databases, QueryData, User, Workspace
+from common.audit_actions import AuditAction
 from notification.services import NotificationService
 from slack_integration.listener import SlackListener
 
@@ -51,7 +53,7 @@ async def create_admin_user(email: str, username: str = "admin") -> None:
         await db.commit()
 
 
-async def create_test_user_and_workspace(email: str, username: str) -> tuple[int, str]:
+async def create_test_user_and_workspace(email: str, username: str) -> tuple[int, str, int]:
     """
     Helper function to create a test user and a workspace with its query data in metadata DB.
     Uses a single transaction to prevent expired attributes lazy loading issues.
@@ -65,6 +67,15 @@ async def create_test_user_and_workspace(email: str, username: str) -> tuple[int
         await db.flush()
         user_id = user.id
         
+        database = Databases(
+            servername="prod-server",
+            database_name="finance_db",
+            technology="mssql",
+        )
+        db.add(database)
+        await db.flush()
+        database_id = database.id
+
         # 2. Create and flush query data to get ID
         qdata = QueryData(
             query="SELECT * FROM confidential_data",
@@ -92,7 +103,7 @@ async def create_test_user_and_workspace(email: str, username: str) -> tuple[int
         ws_id = ws.id
         await db.commit()
         
-        return ws_id, qdata_uuid
+        return ws_id, qdata_uuid, database_id
 
 
 @pytest.mark.asyncio
@@ -103,7 +114,9 @@ async def test_slack_interactive_approval_flow(async_client: AsyncClient):
     """
     # 1. Setup test workspace and query data, plus the WebQuery user the
     # mocked Slack account resolves to.
-    _ws_id, q_uuid = await create_test_user_and_workspace("user_slack_appr@example.com", "slack_appr_user")
+    _ws_id, q_uuid, database_id = await create_test_user_and_workspace(
+        "user_slack_appr@example.com", "slack_appr_user"
+    )
     await create_admin_user("admin@example.com", "admin")
 
     # 2. Instantiate SlackListener with app_db
@@ -112,7 +125,25 @@ async def test_slack_interactive_approval_flow(async_client: AsyncClient):
 
     # 3. Construct mock body and respond callbacks
     mock_ack = AsyncMock()
-    mock_respond = AsyncMock()
+    state_observed_when_responding: list[tuple[str, int]] = []
+
+    async def capture_response_state(**_kwargs):
+        async with app_db.get_app_db() as db:
+            query = (
+                await db.execute(select(QueryData).where(QueryData.uuid == q_uuid))
+            ).scalar_one()
+            audit_count = len(
+                (
+                    await db.execute(
+                        select(AuditLog).where(
+                            AuditLog.action == AuditAction.APPROVE_QUERY
+                        )
+                    )
+                ).scalars().all()
+            )
+            state_observed_when_responding.append((query.status, audit_count))
+
+    mock_respond = AsyncMock(side_effect=capture_response_state)
     mock_body = {
         "user": {"id": "U_ADMIN_123"},
         "actions": [{"value": q_uuid}]
@@ -137,6 +168,7 @@ async def test_slack_interactive_approval_flow(async_client: AsyncClient):
     respond_args = mock_respond.call_args[1]
     assert "Query approved" in respond_args["text"]
     assert "U_ADMIN_123" in respond_args["text"]
+    assert state_observed_when_responding == [("approved_with_results", 1)]
     
     # Verify DB state was updated successfully
     async with app_db.get_app_db() as db:
@@ -149,6 +181,13 @@ async def test_slack_interactive_approval_flow(async_client: AsyncClient):
         assert ws.show_results is True
         assert "Approved by admin via Slack" in ws.description
 
+        audit = (
+            await db.execute(
+                select(AuditLog).where(AuditLog.action == AuditAction.APPROVE_QUERY)
+            )
+        ).scalar_one()
+        assert json.loads(audit.details)["database_id"] == database_id
+
 
 @pytest.mark.asyncio
 async def test_slack_interactive_rejection_flow(async_client: AsyncClient):
@@ -158,7 +197,9 @@ async def test_slack_interactive_rejection_flow(async_client: AsyncClient):
     """
     # 1. Setup test workspace and query data, plus the WebQuery user the
     # mocked Slack account resolves to.
-    _ws_id, q_uuid = await create_test_user_and_workspace("user_slack_rej@example.com", "slack_rej_user")
+    _ws_id, q_uuid, database_id = await create_test_user_and_workspace(
+        "user_slack_rej@example.com", "slack_rej_user"
+    )
     await create_admin_user("admin@example.com", "admin")
 
     # 2. Instantiate SlackListener
@@ -203,6 +244,63 @@ async def test_slack_interactive_rejection_flow(async_client: AsyncClient):
         ws = result_ws.scalars().first()
         assert ws.show_results is False
         assert "Rejected by admin via Slack" in ws.description
+
+        audit = (
+            await db.execute(
+                select(AuditLog).where(AuditLog.action == AuditAction.REJECT_QUERY)
+            )
+        ).scalar_one()
+        assert json.loads(audit.details)["database_id"] == database_id
+
+
+@pytest.mark.asyncio
+async def test_slack_approval_rolls_back_when_database_is_not_registered(
+    async_client: AsyncClient,
+):
+    _ws_id, q_uuid, database_id = await create_test_user_and_workspace(
+        "user_slack_missing_db@example.com", "slack_missing_db_user"
+    )
+    await create_admin_user("admin@example.com", "admin")
+
+    app_db = app.state.context.app_db
+    async with app_db.get_app_db() as db:
+        database = await db.get(Databases, database_id)
+        await db.delete(database)
+        await db.commit()
+
+    listener = SlackListener(app_db=app_db)
+    mock_ack = AsyncMock()
+    mock_respond = AsyncMock()
+    mock_body = {
+        "user": {"id": "U_ADMIN_MISSING_DB"},
+        "actions": [{"value": q_uuid}],
+    }
+
+    with patch.object(
+        listener.app.client,
+        "users_info",
+        new=AsyncMock(return_value=_fake_users_info_response("admin@example.com")),
+    ):
+        await listener.handle_approve_with_results(
+            ack=mock_ack,
+            body=mock_body,
+            respond=mock_respond,
+        )
+
+    mock_ack.assert_called_once()
+    mock_respond.assert_called_once()
+    assert "failed" in mock_respond.call_args.kwargs["text"].lower()
+
+    async with app_db.get_app_db() as db:
+        query = (
+            await db.execute(select(QueryData).where(QueryData.uuid == q_uuid))
+        ).scalar_one()
+        assert query.status == "waiting_for_approval"
+        assert (
+            await db.execute(
+                select(AuditLog).where(AuditLog.action == AuditAction.APPROVE_QUERY)
+            )
+        ).scalars().all() == []
 
 
 @pytest.mark.asyncio
