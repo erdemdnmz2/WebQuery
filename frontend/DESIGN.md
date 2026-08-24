@@ -372,7 +372,76 @@ Yazım kuralları:
 - Teknik terim şişirilmez. "Sorgu çalıştırılıyor", "Sorgu yürütme motoru
   başlatılıyor" değil.
 
-## 14. Kırılmaz teknik kısıtlar
+## 14. Backend sözleşmesi
+
+Bu bölüm bir kez gerçekten kayan sözleşmenin tekrar kaymaması içindir. Arayüz
+uzun süre, backend'in çoktan değiştirdiği bir API şekliyle konuştu ve hiçbir
+şey çalışma anına kadar hata vermedi.
+
+### 14.1 Tek kaynak: `types.ts`
+
+[`types.ts`](types.ts) backend'in Pydantic şemalarını **birebir**, snake_case
+alan adlarıyla yansıtır. Alan adını arayüz için güzelleştirmek yasaktır; uyumsuzluk
+burada görünmelidir, çalışma anında değil. Yeniden şekillendirme `lib/` altında,
+onu yapan kodun yanında yaşar.
+
+### 14.2 Hedef veritabanı uuid ile adreslenir
+
+`servername` ve `database_name` yalnızca **gösterim** içindir. Çalıştırma,
+maskeleme kuralı okuma ve çalışma alanı oluşturma çağrılarının hepsi `db_uuid`
+ister. Seçim bileşenlerinin `value`'su uuid'dir, etiketi addır.
+
+[`lib/targets.ts`](lib/targets.ts) bu dönüşümü kapsar. Bir çalışma alanının
+hedefi kullanıcının yetkileri arasında değilse hedef **boş bırakılır ve
+bildirilir**; sessizce başka bir veritabanına düşmek üretim verisinde yanlış
+yere sorgu çalıştırmak demektir.
+
+### 14.3 Çalıştırma sonucu tek yerde çözümlenir
+
+`SQLResponse` yalnızca `{response_type, data, message, error}` döndürür. Satır
+sayısı ve kırpma bilgisi İngilizce `message` metninin içindedir
+(`"Truncated to MAX_ROW_COUNT_LIMIT (1000)"`, `"42 rows affected"`).
+
+[`lib/execution.ts`](lib/execution.ts) bu metni bir kez ayrıştırıp
+`ExecutionOutcome` üretir. Hiçbir ekran `message` içinde arama yapmaz.
+
+### 14.4 Hata zarfı
+
+Servis katmanı hataları `{success, error_code, message, error, trace_id}`
+döndürür. `ApiError` bunlardan `code` ve `traceId` alanlarını taşır.
+
+- **`error_code` ile dallanın, mesaj metniyle değil.** Mesaj değişir, kod
+  geçmiş veri sözleşmesidir.
+- **`QUERY_REJECTED_BY_ANALYZER` bir hata değildir.** Risk analizi sorguyu
+  çalışma alanı olarak kaydedip yöneticiye yönlendirmiştir. Arayüz bunu kırmızı
+  başarısızlık değil, sarı bekleme durumu olarak gösterir.
+- `trace_id` kullanıcıya gösterilir; destek talebinde tek bağlayıcı referans odur.
+
+### 14.5 Bilinen sözleşme sınırları
+
+| Sınır | Sonuç |
+| --- | --- |
+| `PUT /api/workspaces/{id}` yalnız `query` ve `status` kabul eder | Ad, açıklama ve hedef arayüzden güncellenemez |
+| `GET /api/me` e-posta döndürmez | Hesap menüsü kullanıcı adı ve rol gösterir |
+| `POST /api/workspaces` `{success, workspace_id}` döndürür | Oluşturulan kayıt ayrıca okunur |
+| `POST /api/admin/associate_user` `user_id` ister, kullanıcı listeleyen endpoint yok | Yetkilendirme ekranı yapılamadı |
+
+### 14.6 Otomatik denetim
+
+```bash
+npm --prefix frontend run audit:api
+```
+
+[`scripts/api-contract-audit.mjs`](scripts/api-contract-audit.mjs) `services/api.ts`
+içindeki her çağrıyı FastAPI router'larındaki rotalarla karşılaştırır ve
+karşılığı olmayan çağrıda sıfırdan farklı çıkış verir. Ayrıca arayüzü olmayan
+backend rotalarını bilgi olarak listeler. Endpoint ekleyen veya değiştiren her
+işten sonra çalıştırılır.
+
+Bu betik yolu ve metodu doğrular, gövde alanlarını **doğrulamaz**. Gövde
+değişikliklerinde ilgili Pydantic şeması hâlâ elle okunmalıdır.
+
+## 15. Kırılmaz teknik kısıtlar
 
 1. **Çalışma zamanında CDN yok.** Bu uygulama üretim veritabanlarını sorgular
    ve kapalı ağda çalışabilmelidir. Font, stil ve script paketin içinde
@@ -391,7 +460,7 @@ Yazım kuralları:
    [`services/api.ts`](services/api.ts) içindeki `api` nesnesinden geçer;
    bileşenler doğrudan `fetch` çağırmaz.
 
-## 15. Yeni bir şey eklerken
+## 16. Yeni bir şey eklerken
 
 Sırayla:
 
@@ -407,14 +476,14 @@ Sırayla:
 6. **Doğrula:**
 
 ```bash
-npm --prefix frontend run typecheck && npm --prefix frontend run audit:contrast && npm --prefix frontend run build
+npm --prefix frontend run typecheck && npm --prefix frontend run audit:contrast && npm --prefix frontend run audit:api && npm --prefix frontend run build
 ```
 
 Bu projede frontend için otomatik test komutu **yoktur**. Test sonucu
 uydurmayın; yukarıdaki üç komut artı tarayıcı kontrolü mevcut doğrulama
 yüzeyidir.
 
-## 16. Dosya haritası
+## 17. Dosya haritası
 
 ```
 frontend/
@@ -433,6 +502,8 @@ frontend/
 │   ├── session.tsx      oturum durumu
 │   ├── workspaces.tsx   paylaşılan çalışma alanı önbelleği
 │   ├── workspace-status.ts  durum sözlüğü
+│   ├── targets.ts       db_uuid <-> sunucu/veritabanı çözümlemesi
+│   ├── execution.ts     SQLResponse -> ExecutionOutcome adaptörü
 │   ├── format.ts        sayı, boyut, süre, hücre biçimleme
 │   ├── hooks.ts         useHotkey, useIsMac, usePersistentState
 │   └── export.ts        xlsx ve csv dışa aktarma
@@ -443,16 +514,18 @@ frontend/
 │                        Register, NotFound
 ├── services/api.ts      tek tip API istemcisi
 └── scripts/
-    └── contrast-audit.mjs   WCAG kontrast kapısı
+    ├── contrast-audit.mjs      WCAG kontrast kapısı
+    └── api-contract-audit.mjs  frontend/backend endpoint kapısı
 ```
 
-## 17. Sonraki oturum için kısa özet
+## 18. Sonraki oturum için kısa özet
 
-Bir şey değiştirecekseniz üç dosyaya bakmanız yeter:
+Bir şey değiştirecekseniz dört dosyaya bakmanız yeter:
 
 1. Renk veya ölçek → `styles/tokens.css`
 2. Bir kontrolün nasıl göründüğü → `components/ui/` içindeki ilgili dosya
 3. Bir ekranın nasıl kurulduğu → `pages/` içindeki ilgili dosya
+4. Bir endpoint'in ne kabul ettiği → `services/api.ts` ve `types.ts`
 
 Ve bir kural hatırlayın: **renk anlam taşır.** Eklediğiniz renk bir durumu
 işaretlemiyorsa, gri olmalı.

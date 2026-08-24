@@ -18,6 +18,8 @@ interface ToastApi {
   notify: (toast: Omit<ToastRecord, 'id'>) => void;
   success: (title: string, description?: string) => void;
   error: (title: string, description?: string) => void;
+  /** An outcome that is neither failure nor completion, such as a pending review. */
+  warning: (title: string, description?: string) => void;
 }
 
 const ToastContext = createContext<ToastApi | null>(null);
@@ -41,6 +43,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       notify,
       success: (title, description) => notify({ tone: 'success', title, description }),
       error: (title, description) => notify({ tone: 'danger', title, description }),
+      warning: (title, description) => notify({ tone: 'warning', title, description }),
     }),
     [notify],
   );

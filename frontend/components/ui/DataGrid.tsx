@@ -13,6 +13,8 @@ export interface DataGridProps {
   maskedColumns?: string[];
   /** Shown when the backend capped the result set. */
   truncated?: boolean;
+  /** Explains the cap in the reader's terms, next to the truncation notice. */
+  truncationNote?: string;
 }
 
 /**
@@ -21,7 +23,13 @@ export interface DataGridProps {
  * empty string, and long results render incrementally instead of putting
  * tens of thousands of cells into the DOM at once.
  */
-export const DataGrid: React.FC<DataGridProps> = ({ rows, className, maskedColumns = [], truncated }) => {
+export const DataGrid: React.FC<DataGridProps> = ({
+  rows,
+  className,
+  maskedColumns = [],
+  truncated,
+  truncationNote,
+}) => {
   const [visible, setVisible] = useState(PAGE);
 
   // A fresh result set starts at the first page rather than inheriting the
@@ -113,7 +121,7 @@ export const DataGrid: React.FC<DataGridProps> = ({ rows, className, maskedColum
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface px-3 py-2">
           <p className="text-[12px] text-subtle">
             {formatCount(shown.length)} / {formatCount(rows.length)} satır gösteriliyor
-            {truncated && ' · sonuç sunucu tarafında kırpıldı'}
+            {truncated && (truncationNote ? ` · ${truncationNote}` : ' · sonuç sunucu tarafında kırpıldı')}
           </p>
           {visible < rows.length && (
             <Button size="sm" icon={<ArrowsOutSimpleIcon size={13} />} onClick={() => setVisible((v) => v + PAGE)}>

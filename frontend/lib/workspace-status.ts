@@ -56,6 +56,6 @@ export function isEditable(status: string): boolean {
 }
 
 /** Only an explicitly shared result set can be run from the execute screen. */
-export function isRunnable(status: string, showResults?: boolean): boolean {
+export function isRunnable(status: string, showResults?: boolean | null): boolean {
   return status === 'approved_with_results' && Boolean(showResults);
 }

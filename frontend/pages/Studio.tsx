@@ -8,6 +8,7 @@ import {
   LockKeyIcon,
   PlayIcon,
   PlusIcon,
+  WarningCircleIcon,
   XIcon,
 } from '@phosphor-icons/react';
 import { api, errorMessage, UnauthorizedError } from '../services/api';
@@ -15,6 +16,8 @@ import { cn } from '../lib/cn';
 import { useHotkey, useIsMac } from '../lib/hooks';
 import { useWorkspaces } from '../lib/workspaces';
 import { isEditable, statusMeta } from '../lib/workspace-status';
+import { outcomeFromError, outcomeFromResponse, type ExecutionOutcome } from '../lib/execution';
+import { databasesOf, findTarget, listTargets, resolveUuid, serverNames, technologyOf } from '../lib/targets';
 import { CodeEditor } from '../components/app/CodeEditor';
 import { ResultPanel } from '../components/app/ResultPanel';
 import { SplitPane } from '../components/app/SplitPane';
@@ -28,7 +31,7 @@ import { PanelHeader } from '../components/ui/Panel';
 import { Picker, type PickerItem } from '../components/ui/Picker';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useToast } from '../components/ui/Toast';
-import type { DatabaseInfo, QueryResult, Workspace } from '../types';
+import type { DatabaseInfo, Workspace } from '../types';
 
 const STARTER_QUERY = 'SELECT TOP 100 *\nFROM ';
 
@@ -41,13 +44,15 @@ const Studio: React.FC = () => {
 
   const [query, setQuery] = useState(STARTER_QUERY);
   const [servers, setServers] = useState<DatabaseInfo>({});
+  const [targetsLoaded, setTargetsLoaded] = useState(false);
   const [server, setServer] = useState('');
-  const [database, setDatabase] = useState('');
+  /* The API addresses a database by uuid; the names are for the reader. */
+  const [dbUuid, setDbUuid] = useState('');
 
   const [current, setCurrent] = useState<Workspace | null>(null);
   const [savedQuery, setSavedQuery] = useState<string | null>(null);
 
-  const [result, setResult] = useState<QueryResult | null>(null);
+  const [outcome, setOutcome] = useState<ExecutionOutcome | null>(null);
   const [running, setRunning] = useState(false);
   const [durationMs, setDurationMs] = useState<number | null>(null);
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
@@ -64,10 +69,15 @@ const Studio: React.FC = () => {
 
   const runTimer = useRef<number>(0);
 
+  const target = useMemo(() => findTarget(servers, dbUuid), [servers, dbUuid]);
+  const database = target?.databaseName ?? '';
+  const technology = technologyOf(servers, server);
   const editable = current === null || isEditable(current.status);
-  const technology = server ? servers[server]?.technology : undefined;
   const maskedCount = persistentMasked.length + adHocMasked.length;
   const dirty = current !== null && savedQuery !== null && savedQuery !== query;
+  const noGrants = targetsLoaded && listTargets(servers).length === 0;
+  /* A saved workspace can point at a database the user no longer holds. */
+  const targetUnavailable = targetsLoaded && current !== null && dbUuid === '';
 
   /* ---------------------------------------------------------------- data */
 
@@ -78,10 +88,12 @@ const Studio: React.FC = () => {
       .then((info) => {
         if (cancelled) return;
         setServers(info);
-        setServer((currentServer) => currentServer || Object.keys(info)[0] || '');
+        setTargetsLoaded(true);
       })
       .catch((caught) => {
-        if (!cancelled && !(caught instanceof UnauthorizedError)) {
+        if (cancelled) return;
+        setTargetsLoaded(true);
+        if (!(caught instanceof UnauthorizedError)) {
           toast.error('Bağlantı listesi alınamadı', errorMessage(caught));
         }
       });
@@ -106,14 +118,12 @@ const Studio: React.FC = () => {
         setQuery(workspace.query);
         setSavedQuery(workspace.query);
         setServer(workspace.servername);
-        setDatabase(workspace.database_name);
-        setResult(null);
+        setOutcome(null);
       })
       .catch((caught) => {
-        if (!cancelled && !(caught instanceof UnauthorizedError)) {
-          toast.error('Çalışma alanı açılamadı', errorMessage(caught));
-          navigate('/');
-        }
+        if (cancelled || caught instanceof UnauthorizedError) return;
+        toast.error('Çalışma alanı açılamadı', errorMessage(caught));
+        navigate('/');
       })
       .finally(() => {
         if (!cancelled) setLoadingWorkspace(false);
@@ -123,27 +133,35 @@ const Studio: React.FC = () => {
     };
   }, [workspaceId, navigate, toast]);
 
-  // Keep the database selection valid whenever the server changes.
+  /*
+   * Point the editor at the workspace's own database. The backend resolves
+   * db_uuid by name and returns an empty string when the registration moved,
+   * so the names are the fallback. The target is never silently swapped for a
+   * different one: an unresolvable target stays empty and is reported.
+   */
   useEffect(() => {
-    const databases = server ? (servers[server]?.databases ?? []) : [];
-    if (databases.length === 0) {
-      setDatabase('');
-      return;
-    }
-    setDatabase((currentDatabase) =>
-      currentDatabase && databases.includes(currentDatabase) ? currentDatabase : databases[0],
-    );
-  }, [server, servers]);
+    if (!current) return;
+    setDbUuid(current.db_uuid || resolveUuid(servers, current.servername, current.database_name));
+  }, [current, servers]);
+
+  /* A fresh query starts on the first grant the user actually holds. */
+  useEffect(() => {
+    if (workspaceId || server || dbUuid) return;
+    const first = listTargets(servers)[0];
+    if (!first) return;
+    setServer(first.servername);
+    setDbUuid(first.uuid);
+  }, [servers, workspaceId, server, dbUuid]);
 
   useEffect(() => {
     setAdHocMasked([]);
-    if (!server || !database) {
+    if (!dbUuid) {
       setPersistentMasked([]);
       return;
     }
     let cancelled = false;
     api
-      .maskingRules(server, database)
+      .maskingRules(dbUuid)
       .then((rules) => {
         if (!cancelled) setPersistentMasked(rules ?? []);
       })
@@ -153,12 +171,17 @@ const Studio: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [server, database]);
+  }, [dbUuid]);
 
   /* -------------------------------------------------------------- actions */
 
+  const chooseServer = (name: string) => {
+    setServer(name);
+    setDbUuid(databasesOf(servers, name)[0]?.uuid ?? '');
+  };
+
   const runQuery = useCallback(async () => {
-    if (!server || !database) {
+    if (!dbUuid) {
       toast.error('Hedef seçilmedi', 'Çalıştırmadan önce bir sunucu ve veritabanı seçin.');
       return;
     }
@@ -168,25 +191,29 @@ const Studio: React.FC = () => {
     }
 
     setRunning(true);
-    setResult(null);
+    setOutcome(null);
     runTimer.current = performance.now();
     try {
       const response = await api.executeQuery({
+        db_uuid: dbUuid,
         query,
-        servername: server,
-        database_name: database,
-        ad_hoc_mask_columns: adHocMasked,
+        ad_hoc_mask_columns: adHocMasked.length > 0 ? adHocMasked : undefined,
       });
-      setResult(response);
-      void reload();
+      setOutcome(outcomeFromResponse(response));
     } catch (caught) {
       if (caught instanceof UnauthorizedError) return;
-      setResult({ error: errorMessage(caught) });
+      const failure = outcomeFromError(caught);
+      setOutcome(failure);
+      if (failure.sentForApproval) {
+        /* The analyzer saved the statement as a workspace of its own. */
+        toast.warning('Sorgu onaya gönderildi', 'Risk analizi bu ifadeyi yönetici incelemesine yönlendirdi.');
+        void reload();
+      }
     } finally {
       setDurationMs(performance.now() - runTimer.current);
       setRunning(false);
     }
-  }, [server, database, query, adHocMasked, reload, toast]);
+  }, [dbUuid, query, adHocMasked, reload, toast]);
 
   const saveWorkspace = useCallback(async () => {
     if (!current) {
@@ -197,39 +224,35 @@ const Studio: React.FC = () => {
     }
     setSaving(true);
     try {
-      await api.updateWorkspace(current.id, {
-        name: current.name,
-        description: current.description,
-        query,
-        servername: server,
-        database_name: database,
-      });
+      // The update endpoint accepts the SQL and status only.
+      await api.updateWorkspace(current.id, { query });
       setSavedQuery(query);
       void reload();
-      toast.success('Çalışma alanı güncellendi', current.name);
+      toast.success('Sorgu güncellendi', current.name);
     } catch (caught) {
+      if (caught instanceof UnauthorizedError) return;
       toast.error('Kaydedilemedi', errorMessage(caught));
     } finally {
       setSaving(false);
     }
-  }, [current, query, server, database, reload, toast]);
+  }, [current, query, reload, toast]);
 
   const createWorkspace = async () => {
-    if (!saveName.trim()) return;
+    if (!saveName.trim() || !dbUuid) return;
     setSaving(true);
     try {
       const created = await api.createWorkspace({
         name: saveName.trim(),
-        description: saveDescription.trim(),
+        description: saveDescription.trim() || undefined,
         query,
-        servername: server,
-        database_name: database,
+        db_uuid: dbUuid,
       });
       setSaveOpen(false);
       void reload();
       toast.success('Çalışma alanı kaydedildi', saveName.trim());
-      if (created?.id) navigate(`/editor/${created.id}`);
+      if (created?.workspace_id) navigate(`/editor/${created.workspace_id}`);
     } catch (caught) {
+      if (caught instanceof UnauthorizedError) return;
       toast.error('Kaydedilemedi', errorMessage(caught));
     } finally {
       setSaving(false);
@@ -273,7 +296,7 @@ const Studio: React.FC = () => {
 
   const serverItems = useMemo<PickerItem[]>(
     () =>
-      Object.keys(servers).map((name) => ({
+      serverNames(servers).map((name) => ({
         value: name,
         label: name,
         meta: `${servers[name].databases.length} veritabanı`,
@@ -287,7 +310,7 @@ const Studio: React.FC = () => {
   );
 
   const databaseItems = useMemo<PickerItem[]>(
-    () => (server ? (servers[server]?.databases ?? []).map((name) => ({ value: name, label: name })) : []),
+    () => databasesOf(servers, server).map((entry) => ({ value: entry.uuid, label: entry.name })),
     [server, servers],
   );
 
@@ -313,7 +336,7 @@ const Studio: React.FC = () => {
                 setCurrent(null);
                 setSavedQuery(null);
                 setQuery(STARTER_QUERY);
-                setResult(null);
+                setOutcome(null);
                 navigate('/editor');
               }}
               className="flex w-full items-center gap-2 border-b border-line px-3 py-2 text-left text-[13px] text-accent hover:bg-hover"
@@ -328,7 +351,7 @@ const Studio: React.FC = () => {
           label="Sunucu seçin"
           placeholder="Sunucu"
           value={server || null}
-          onChange={setServer}
+          onChange={chooseServer}
           items={serverItems}
           triggerClassName="w-[210px]"
           emptyMessage="Yetkili olduğunuz sunucu yok"
@@ -339,22 +362,18 @@ const Studio: React.FC = () => {
         <Picker
           label="Veritabanı seçin"
           placeholder="Veritabanı"
-          value={database || null}
-          onChange={setDatabase}
+          value={dbUuid || null}
+          onChange={setDbUuid}
           items={databaseItems}
           disabled={!server}
           triggerClassName="w-[190px]"
-          emptyMessage="Bu sunucuda veritabanı yok"
+          emptyMessage="Bu sunucuda yetkili olduğunuz veritabanı yok"
           searchPlaceholder="Veritabanı ara"
           leading={<DatabaseIcon size={14} className="shrink-0 text-subtle" />}
         />
 
         <div className="ml-auto flex items-center gap-2">
-          <Button
-            icon={<LockKeyIcon size={14} />}
-            disabled={!server || !database}
-            onClick={() => setMaskingOpen(true)}
-          >
+          <Button icon={<LockKeyIcon size={14} />} disabled={!dbUuid} onClick={() => setMaskingOpen(true)}>
             Maskeleme
             {maskedCount > 0 && (
               <span className="ml-0.5 rounded-[var(--r-pill)] bg-warning-soft px-1.5 text-[10.5px] font-medium leading-[16px] text-warning">
@@ -366,7 +385,7 @@ const Studio: React.FC = () => {
           <Button
             icon={<FloppyDiskIcon size={14} />}
             loading={saving}
-            disabled={!editable}
+            disabled={!editable || !dbUuid}
             onClick={() => void saveWorkspace()}
           >
             {current ? 'Kaydet' : 'Farklı kaydet'}
@@ -378,6 +397,7 @@ const Studio: React.FC = () => {
               variant="primary"
               icon={<PlayIcon size={13} weight="fill" />}
               loading={running}
+              disabled={!dbUuid}
               onClick={() => void runQuery()}
             >
               Çalıştır
@@ -385,6 +405,33 @@ const Studio: React.FC = () => {
           </Tooltip>
         </div>
       </div>
+
+      {noGrants && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-2 rounded-md border border-warning-line bg-warning-soft px-3.5 py-2.5 text-[12.5px] text-warning"
+        >
+          <WarningCircleIcon size={15} weight="fill" className="shrink-0" />
+          <span>
+            Hiçbir veritabanına erişim yetkiniz yok. Sorgu çalıştırabilmek için bir yöneticinin sizi bir
+            veritabanına yetkilendirmesi gerekir.
+          </span>
+        </div>
+      )}
+
+      {targetUnavailable && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-2 rounded-md border border-danger-line bg-danger-soft px-3.5 py-2.5 text-[12.5px] text-danger"
+        >
+          <WarningCircleIcon size={15} weight="fill" className="shrink-0" />
+          <span>
+            Bu çalışma alanının hedefi (<span className="font-mono">{current?.servername}</span> /{' '}
+            <span className="font-mono">{current?.database_name}</span>) erişebildiğiniz veritabanları arasında
+            değil. Çalıştırmadan önce yetkili bir hedef seçin.
+          </span>
+        </div>
+      )}
 
       {statusInfo && !editable && (
         <div
@@ -449,7 +496,7 @@ const Studio: React.FC = () => {
         }
         second={
           <ResultPanel
-            result={result}
+            outcome={outcome}
             running={running}
             durationMs={durationMs}
             maskedColumns={[...persistentMasked, ...adHocMasked]}
@@ -558,7 +605,12 @@ const Studio: React.FC = () => {
             <Button variant="secondary" onClick={() => setSaveOpen(false)} disabled={saving}>
               Vazgeç
             </Button>
-            <Button variant="primary" loading={saving} disabled={!saveName.trim()} onClick={() => void createWorkspace()}>
+            <Button
+              variant="primary"
+              loading={saving}
+              disabled={!saveName.trim() || !dbUuid}
+              onClick={() => void createWorkspace()}
+            >
               Kaydet
             </Button>
           </>

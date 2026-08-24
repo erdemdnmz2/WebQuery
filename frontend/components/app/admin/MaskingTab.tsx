@@ -111,7 +111,7 @@ export const MaskingTab: React.FC = () => {
         database_name: form.database_name.trim(),
         tech_name: form.technology,
       });
-      setCredentials({ username: created.db_username, password: created.db_password });
+      setCredentials(created);
       setForm({ servername: '', database_name: '', technology: 'mssql' });
       void loadDatabases();
     } catch (caught) {

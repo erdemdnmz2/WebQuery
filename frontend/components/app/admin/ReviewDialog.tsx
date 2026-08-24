@@ -9,7 +9,7 @@ import { Dialog } from '../../ui/Dialog';
 import { EmptyState } from '../../ui/EmptyState';
 import { useToast } from '../../ui/Toast';
 import { CodeEditor } from '../CodeEditor';
-import type { PendingQuery, ResultRow } from '../../../types';
+import type { PendingQuery, PreviewResponse } from '../../../types';
 
 export interface ReviewDialogProps {
   request: PendingQuery | null;
@@ -19,7 +19,7 @@ export interface ReviewDialogProps {
 
 const FACTS: { label: string; get: (request: PendingQuery) => string }[] = [
   { label: 'Talep eden', get: (request) => request.username },
-  { label: 'Sunucu', get: (request) => request.servername },
+  { label: 'Sunucu', get: (request) => request.servername || 'Bilinmiyor' },
   { label: 'Veritabanı', get: (request) => request.database },
 ];
 
@@ -30,10 +30,14 @@ const FACTS: { label: string; get: (request: PendingQuery) => string }[] = [
  */
 export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, onDecided }) => {
   const toast = useToast();
-  const [preview, setPreview] = useState<ResultRow[] | null>(null);
+  const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [deciding, setDeciding] = useState(false);
+
+  const previewRows = preview?.data ?? [];
+  /* The service reports its row cap in the message, not as a flag. */
+  const previewTruncated = /truncated/i.test(preview?.message ?? '');
 
   const runPreview = async () => {
     if (!request) return;
@@ -139,8 +143,10 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-[12.5px] font-medium text-muted">
                 Sonuç önizleme
-                {preview && preview.length > 0 && (
-                  <span className="ml-2 font-normal text-subtle">{formatCount(preview.length)} satır</span>
+                {previewRows.length > 0 && (
+                  <span className="ml-2 font-normal text-subtle">
+                    {formatCount(preview?.row_count ?? previewRows.length)} satır
+                  </span>
                 )}
               </h3>
               <Button size="sm" icon={<EyeIcon size={13} />} loading={previewing} onClick={() => void runPreview()}>
@@ -155,8 +161,8 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
                     {previewError}
                   </pre>
                 </div>
-              ) : preview && preview.length > 0 ? (
-                <DataGrid rows={preview} className="h-full" />
+              ) : previewRows.length > 0 ? (
+                <DataGrid rows={previewRows} truncated={previewTruncated} className="h-full" />
               ) : preview ? (
                 <EmptyState size="sm" title="Sorgu satır döndürmedi" />
               ) : (

@@ -62,7 +62,12 @@ export const AppShell: React.FC<AppShellProps> = ({ children, fullBleed }) => {
     );
 
   return (
-    <div className="flex min-h-dvh flex-col bg-canvas">
+    /*
+     * A full-bleed route (the editor, the run screen) owns the viewport: its
+     * panels scroll internally, so the shell is a fixed height. Ordinary
+     * routes keep normal page scrolling.
+     */
+    <div className={cn('flex flex-col bg-canvas', fullBleed ? 'h-dvh overflow-hidden' : 'min-h-dvh')}>
       <a href="#main" className="skip-link">
         İçeriğe geç
       </a>
@@ -181,8 +186,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, fullBleed }) => {
               <MenuContent>
                 <div className="px-2 py-1.5">
                   <p className="truncate text-[13px] font-medium text-fg">{user?.username ?? 'Misafir'}</p>
-                  <p className="truncate text-[12px] text-subtle">{user?.email ?? ''}</p>
-                  {user?.is_admin && <p className="mt-1 text-[11.5px] text-accent">Yönetici</p>}
+                  <p className="truncate text-[12px] text-subtle">{user?.is_admin ? 'Yönetici' : 'Kullanıcı'}</p>
                 </div>
                 <MenuSeparator />
                 <div className="md:hidden">

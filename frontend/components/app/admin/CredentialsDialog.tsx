@@ -59,12 +59,12 @@ export const CredentialsDialog: React.FC<CredentialsDialogProps> = ({ credential
             <div className="flex items-center gap-3 px-3.5 py-3">
               <span className="w-24 shrink-0 text-[12.5px] text-subtle">Kullanıcı</span>
               <code className="min-w-0 flex-1 select-all truncate font-mono text-[13px] text-fg">
-                {credentials.username}
+                {credentials.db_username}
               </code>
               <IconButton
                 label="Kullanıcı adını kopyala"
                 size="sm"
-                onClick={() => void copy(credentials.username, 'user')}
+                onClick={() => void copy(credentials.db_username, 'user')}
               >
                 {copied === 'user' ? <CheckIcon size={14} className="text-success" /> : <CopyIcon size={14} />}
               </IconButton>
@@ -73,7 +73,7 @@ export const CredentialsDialog: React.FC<CredentialsDialogProps> = ({ credential
             <div className="flex items-center gap-3 px-3.5 py-3">
               <span className="w-24 shrink-0 text-[12.5px] text-subtle">Parola</span>
               <code className="min-w-0 flex-1 select-all truncate font-mono text-[13px] text-fg">
-                {revealed ? credentials.password : '•'.repeat(Math.min(credentials.password.length, 24))}
+                {revealed ? credentials.db_password : '•'.repeat(Math.min(credentials.db_password.length, 24))}
               </code>
               <IconButton
                 label={revealed ? 'Parolayı gizle' : 'Parolayı göster'}
@@ -85,7 +85,7 @@ export const CredentialsDialog: React.FC<CredentialsDialogProps> = ({ credential
               <IconButton
                 label="Parolayı kopyala"
                 size="sm"
-                onClick={() => void copy(credentials.password, 'password')}
+                onClick={() => void copy(credentials.db_password, 'password')}
               >
                 {copied === 'password' ? <CheckIcon size={14} className="text-success" /> : <CopyIcon size={14} />}
               </IconButton>

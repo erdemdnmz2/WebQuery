@@ -3,22 +3,23 @@ import {
   DownloadSimpleIcon,
   FileCsvIcon,
   FileXlsIcon,
+  ShieldCheckIcon,
   TableIcon,
   WarningCircleIcon,
 } from '@phosphor-icons/react';
 import { cn } from '../../lib/cn';
 import { formatCount, formatDuration } from '../../lib/format';
 import { exportToCsv, exportToXlsx } from '../../lib/export';
+import { summarise, type ExecutionOutcome } from '../../lib/execution';
 import { Button } from '../ui/Button';
 import { DataGrid } from '../ui/DataGrid';
 import { EmptyState } from '../ui/EmptyState';
 import { PanelHeader } from '../ui/Panel';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../ui/Menu';
 import { Skeleton } from '../ui/Skeleton';
-import type { QueryResult } from '../../types';
 
 export interface ResultPanelProps {
-  result: QueryResult | null;
+  outcome: ExecutionOutcome | null;
   running: boolean;
   /** Wall-clock time of the last completed run. */
   durationMs: number | null;
@@ -31,12 +32,12 @@ export interface ResultPanelProps {
 }
 
 /**
- * Renders every outcome a query can have: running, failed, succeeded with no
- * rows, succeeded with rows. The panel never shows a blank area without
- * saying why it is blank.
+ * Renders every outcome a query can have: running, sent for approval, failed,
+ * succeeded with no rows, succeeded with rows. The panel never shows a blank
+ * area without saying why it is blank.
  */
 export const ResultPanel: React.FC<ResultPanelProps> = ({
-  result,
+  outcome,
   running,
   durationMs,
   maskedColumns,
@@ -46,8 +47,15 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
   className,
   title = 'Sonuçlar',
 }) => {
-  const rows = result?.data ?? [];
+  const rows = outcome?.rows ?? [];
   const hasRows = rows.length > 0;
+  const summary = outcome ? summarise(outcome, formatCount) : null;
+
+  const description = running
+    ? 'Sorgu çalışıyor'
+    : summary
+      ? `${summary}${durationMs !== null ? ` · ${formatDuration(durationMs)}` : ''}`
+      : undefined;
 
   return (
     <section
@@ -57,13 +65,7 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
       <PanelHeader
         dense
         title={title}
-        description={
-          running
-            ? 'Sorgu çalışıyor'
-            : hasRows
-              ? `${formatCount(rows.length)} satır${durationMs !== null ? ` · ${formatDuration(durationMs)}` : ''}`
-              : undefined
-        }
+        description={description}
         actions={
           hasRows ? (
             <Menu>
@@ -94,7 +96,30 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
               <Skeleton key={index} className={cn('h-4', width)} />
             ))}
           </div>
-        ) : result?.error ? (
+        ) : outcome?.sentForApproval ? (
+          /*
+           * Not a failure. The analyzer flagged the statement, saved it as a
+           * workspace and routed it to an administrator, so this reads as a
+           * pending state rather than an error.
+           */
+          <div className="overflow-auto p-4" role="status">
+            <div className="rounded-sm border border-warning-line bg-warning-soft p-3.5">
+              <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-warning">
+                <ShieldCheckIcon size={14} weight="fill" />
+                Sorgu onaya gönderildi
+              </p>
+              <p className="mt-2 text-[12.5px] leading-relaxed text-warning">
+                Risk analizi bu ifadeyi doğrudan çalıştırmadı. Sorgu çalışma alanlarınıza kaydedildi ve
+                yönetici incelemesine düştü. Karar verildiğinde listede durumu değişecek.
+              </p>
+              {outcome.error && (
+                <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-warning">
+                  {outcome.error}
+                </pre>
+              )}
+            </div>
+          </div>
+        ) : outcome?.error ? (
           <div className="overflow-auto p-4" role="alert">
             <div className="rounded-sm border border-danger-line bg-danger-soft p-3.5">
               <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-danger">
@@ -102,19 +127,32 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
                 Sorgu çalıştırılamadı
               </p>
               <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-danger">
-                {result.error}
+                {outcome.error}
               </pre>
+              {outcome.traceId && (
+                <p className="mt-2 font-mono text-[11.5px] text-danger">İz kaydı: {outcome.traceId}</p>
+              )}
             </div>
           </div>
         ) : hasRows ? (
-          <DataGrid rows={rows} maskedColumns={maskedColumns} truncated={result?.truncated} className="flex-1" />
-        ) : result?.message ? (
+          <DataGrid
+            rows={rows}
+            maskedColumns={maskedColumns}
+            truncated={outcome?.truncated}
+            truncationNote={
+              outcome?.truncated && outcome.limit !== null
+                ? `Sunucu ilk ${formatCount(outcome.limit)} satırı döndürdü. Tamamı için sorguyu daraltın.`
+                : undefined
+            }
+            className="flex-1"
+          />
+        ) : outcome?.affectedRows !== null && outcome?.affectedRows !== undefined ? (
           <EmptyState
             icon={<TableIcon size={18} />}
             title="Sorgu tamamlandı"
-            description={result.message}
+            description={`${formatCount(outcome.affectedRows)} satır etkilendi. Bu ifade sonuç kümesi döndürmez.`}
           />
-        ) : result ? (
+        ) : outcome ? (
           <EmptyState
             icon={<TableIcon size={18} />}
             title="Sonuç kümesi boş"

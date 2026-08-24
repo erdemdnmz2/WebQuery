@@ -4,6 +4,7 @@ import { ArrowLeftIcon, PlayIcon, WarningCircleIcon } from '@phosphor-icons/reac
 import { api, errorMessage, UnauthorizedError } from '../services/api';
 import { useHotkey, useIsMac } from '../lib/hooks';
 import { statusMeta } from '../lib/workspace-status';
+import { outcomeFromError, outcomeFromResponse, type ExecutionOutcome } from '../lib/execution';
 import { CodeEditor } from '../components/app/CodeEditor';
 import { ResultPanel } from '../components/app/ResultPanel';
 import { SplitPane } from '../components/app/SplitPane';
@@ -13,7 +14,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { PanelHeader } from '../components/ui/Panel';
 import { Skeleton } from '../components/ui/Skeleton';
 import { Tooltip } from '../components/ui/Tooltip';
-import type { QueryResult, Workspace } from '../types';
+import type { Workspace } from '../types';
 
 /**
  * Read-only run screen for a query an administrator approved and shared. The
@@ -28,7 +29,7 @@ const RunWorkspace: React.FC = () => {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [result, setResult] = useState<QueryResult | null>(null);
+  const [outcome, setOutcome] = useState<ExecutionOutcome | null>(null);
   const [running, setRunning] = useState(false);
   const [durationMs, setDurationMs] = useState<number | null>(null);
   const timer = useRef(0);
@@ -55,13 +56,13 @@ const RunWorkspace: React.FC = () => {
 
   const execute = useCallback(async () => {
     setRunning(true);
-    setResult(null);
+    setOutcome(null);
     timer.current = performance.now();
     try {
-      setResult(await api.executeWorkspace(Number(workspaceId)));
+      setOutcome(outcomeFromResponse(await api.executeWorkspace(Number(workspaceId))));
     } catch (caught) {
       if (caught instanceof UnauthorizedError) return;
-      setResult({ error: errorMessage(caught) });
+      setOutcome(outcomeFromError(caught));
     } finally {
       setDurationMs(performance.now() - timer.current);
       setRunning(false);
@@ -159,7 +160,7 @@ const RunWorkspace: React.FC = () => {
         }
         second={
           <ResultPanel
-            result={result}
+            outcome={outcome}
             running={running}
             durationMs={durationMs}
             exportBaseName={workspace.name}
