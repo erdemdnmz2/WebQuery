@@ -11,7 +11,14 @@ from httpx import AsyncClient
 from sqlalchemy.future import select
 
 from app import app
-from app_database.models import AuditLog, Databases, QueryData, User, Workspace
+from app_database.models import (
+    AuditLog,
+    Databases,
+    QueryData,
+    User,
+    UserDatabaseAssociation,
+    Workspace,
+)
 from common.audit_actions import AuditAction
 from notification.services import NotificationService
 from slack_integration.listener import SlackListener
@@ -50,6 +57,17 @@ async def create_admin_user(email: str, username: str = "admin") -> None:
         admin = User(username=username, email=email)
         admin.set_password("Password123!")
         db.add(admin)
+        await db.flush()
+        databases = (await db.execute(select(Databases))).scalars().all()
+        for database in databases:
+            db.add(
+                UserDatabaseAssociation(
+                    user_id=admin.id,
+                    database_id=database.id,
+                    role="ADMIN",
+                    is_admin=True,
+                )
+            )
         await db.commit()
 
 
@@ -187,6 +205,18 @@ async def test_slack_interactive_approval_flow(async_client: AsyncClient):
             )
         ).scalar_one()
         assert json.loads(audit.details)["database_id"] == database_id
+
+    # A second Slack decision must lose the conditional state transition.
+    conflict_respond = AsyncMock()
+    with patch.object(
+        listener.app.client,
+        "users_info",
+        new=AsyncMock(return_value=_fake_users_info_response("admin@example.com")),
+    ):
+        await listener.handle_approve_with_results(
+            ack=AsyncMock(), body=mock_body, respond=conflict_respond
+        )
+    assert "conflict" in conflict_respond.call_args.kwargs["text"].lower()
 
 
 @pytest.mark.asyncio

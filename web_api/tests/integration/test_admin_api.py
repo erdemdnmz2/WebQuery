@@ -250,6 +250,12 @@ async def test_admin_query_approval_workflow(async_client: AsyncClient, mock_db_
     assert approve_response.json()["success"] is True
     assert approve_response.json()["status"] == "approved_with_results"
 
+    conflict_response = await admin_client.post(
+        f"/api/admin/approve_query/{workspace_id}", json=approve_payload
+    )
+    assert conflict_response.status_code == 409
+    assert conflict_response.json()["error_code"] == "APPROVAL_CONFLICT"
+
     async with app_db.get_app_db() as db:
         approval_audit = (
             await db.execute(

@@ -4,13 +4,16 @@ Admin approval and management operations for risky queries
 """
 import logging
 import uuid
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, inspect
+from sqlalchemy import delete, inspect, update
 from sqlalchemy.sql import select, text
 
 from app_database.app_database import AppDatabase
 from app_database.models import (
+    ActionLogging,
+    ApprovalStatus,
     Databases,
     MaskingRule,
     QueryData,
@@ -27,6 +30,7 @@ from common.audit_details import (
     QueryDecisionAuditDetails,
     QueryPreviewAuditDetails,
 )
+from common.constants import QUERY_STATUS_WAITING_FOR_APPROVAL
 from common.exceptions import BaseServiceException
 from common.roles import is_admin, parse
 from common.security import generate_secure_credentials
@@ -34,7 +38,7 @@ from database_provider import DatabaseProvider
 from query_execution import config
 from workspaces.exceptions import WorkspaceNotFoundError
 
-from .exceptions import DatabaseAlreadyExistsError
+from .exceptions import ApprovalConflictError, DatabaseAlreadyExistsError
 from .schemas import AdminApprovals
 
 logger = logging.getLogger(__name__)
@@ -284,7 +288,9 @@ class AdminApprovalService(BaseAdminService):
             async with self.app_db.get_app_db() as db:
                 # We need to query QueryData where status is waiting_for_approval,
                 # then filter to databases where this user is ADMIN
-                stmt = select(QueryData).where(QueryData.status == "waiting_for_approval")
+                stmt = select(QueryData).where(
+                    QueryData.status == QUERY_STATUS_WAITING_FOR_APPROVAL
+                )
                 results = await db.execute(stmt)
                 queries = results.scalars().all()
                 if queries:
@@ -464,45 +470,91 @@ class AdminApprovalService(BaseAdminService):
         """
         async with self.app_db.get_app_db() as db:
             try:
-                workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
-                workspace = workspace_result.scalars().first()
-                if not workspace:
-                    return {"success": False, "error": "Workspace not found"}
-                    
-                query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
-                query_data = query_result.scalars().first()
-                if not query_data:
-                    return {"success": False, "error": "Query data not found"}
-                
-                db_res = await db.execute(
-                    select(Databases).where(Databases.servername == query_data.servername, Databases.database_name == query_data.database_name)
-                )
-                db_entry = db_res.scalars().first()
-                if not db_entry:
-                    return {"success": False, "error": "Database not found in registry."}
-
-                assoc_res = await db.execute(
-                    select(UserDatabaseAssociation).where(
-                        UserDatabaseAssociation.user_id == admin_user.id,
-                        UserDatabaseAssociation.database_id == db_entry.id
+                async with db.begin():
+                    workspace_result = await db.execute(
+                        select(Workspace).where(Workspace.id == workspace_id)
                     )
-                )
-                assoc = assoc_res.scalars().first()
-                if not assoc or not is_admin(assoc.role):
-                    return {"success": False, "error": "You do not have admin permissions for this database."}
-                
-                query_data.status = "rejected"
-                workspace.description = "Rejected by admin"
-                await log_in(db, actor=admin_user, action=AuditAction.REJECT_QUERY,
-                    target_type=AuditTarget.QUERY, target_id=query_data.id,
-                    details=QueryDecisionAuditDetails(decision="reject", source="web",
-                        query_id=query_data.id, database_id=db_entry.id, status="rejected"),
-                    client_ip=client_ip)
-                await db.commit()
-                return {"success": True}
-                
+                    workspace = workspace_result.scalars().first()
+                    if not workspace:
+                        return {"success": False, "error": "Workspace not found"}
+
+                    query_result = await db.execute(
+                        select(QueryData).where(QueryData.id == workspace.query_id)
+                    )
+                    query_data = query_result.scalars().first()
+                    if not query_data:
+                        return {"success": False, "error": "Query data not found"}
+
+                    db_res = await db.execute(
+                        select(Databases).where(
+                            Databases.servername == query_data.servername,
+                            Databases.database_name == query_data.database_name,
+                        )
+                    )
+                    db_entry = db_res.scalars().first()
+                    if not db_entry:
+                        return {"success": False, "error": "Database not found in registry."}
+
+                    assoc_res = await db.execute(
+                        select(UserDatabaseAssociation).where(
+                            UserDatabaseAssociation.user_id == admin_user.id,
+                            UserDatabaseAssociation.database_id == db_entry.id,
+                        )
+                    )
+                    assoc = assoc_res.scalars().first()
+                    if not assoc or not is_admin(assoc.role):
+                        return {
+                            "success": False,
+                            "error": "You do not have admin permissions for this database.",
+                        }
+
+                    result = await db.execute(
+                        update(QueryData)
+                        .where(
+                            QueryData.id == query_data.id,
+                            QueryData.status == QUERY_STATUS_WAITING_FOR_APPROVAL,
+                        )
+                        .values(status="rejected")
+                    )
+                    if result.rowcount != 1:
+                        raise ApprovalConflictError(
+                            "This query has already been decided. Please refresh the page."
+                        )
+
+                    workspace.description = "Rejected by admin"
+                    await db.execute(
+                        update(ActionLogging)
+                        .where(ActionLogging.trace_id == query_data.uuid)
+                        .values(
+                            approval_status=ApprovalStatus.REJECTED,
+                            approved_execution=False,
+                            approved_by=admin_user.username,
+                            approved_at=datetime.now(),  # noqa: DTZ005 - legacy naive DB timestamps
+                        )
+                    )
+                    await log_in(
+                        db,
+                        actor=admin_user,
+                        action=AuditAction.REJECT_QUERY,
+                        target_type=AuditTarget.QUERY,
+                        target_id=query_data.id,
+                        details=QueryDecisionAuditDetails(
+                            decision="reject",
+                            source="web",
+                            query_id=query_data.id,
+                            database_id=db_entry.id,
+                            status="rejected",
+                        ),
+                        client_ip=client_ip,
+                    )
+                    return {"success": True}
+
+            except BaseServiceException:
+                await db.rollback()
+                raise
             except Exception as e:
-                print(f"Error rejecting query: {e}")
+                await db.rollback()
+                logger.error(f"Error rejecting query: {e}")
                 return {"success": False, "error": str(e)}
             
     async def approve(
@@ -517,65 +569,108 @@ class AdminApprovalService(BaseAdminService):
         """
         async with self.app_db.get_app_db() as db:
             try:
-                # 1. Fetch workspace by ID
-                workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
-                workspace: Workspace | None = workspace_result.scalars().first()
-                if not workspace:
-                    raise WorkspaceNotFoundError("Workspace not found")
-                
-                # 2. Fetch related QueryData
-                query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
-                query_data: QueryData | None = query_result.scalars().first()
-                if not query_data:
-                    raise WorkspaceNotFoundError("Query data not found for this workspace")
-                
-                db_res = await db.execute(
-                    select(Databases).where(Databases.servername == query_data.servername, Databases.database_name == query_data.database_name)
-                )
-                db_entry = db_res.scalars().first()
-                if not db_entry:
-                    raise BaseServiceException("Database not found in registry.")
-
-                assoc_res = await db.execute(
-                    select(UserDatabaseAssociation).where(
-                        UserDatabaseAssociation.user_id == admin_user.id,
-                        UserDatabaseAssociation.database_id == db_entry.id
+                async with db.begin():
+                    workspace_result = await db.execute(
+                        select(Workspace).where(Workspace.id == workspace_id)
                     )
-                )
-                assoc = assoc_res.scalars().first()
-                if not assoc or not is_admin(assoc.role):
-                    raise BaseServiceException("You do not have admin permissions for this database.")
-                
-                # 3. Update status and description
-                new_status: str = ""
-                new_desc: str = ""
-                if show_results:
-                    new_status = "approved_with_results"
-                    new_desc = "Approved by admin - User can execute"
-                    workspace.show_results = True
-                else:
-                    new_status = "approved"
-                    new_desc = "Approved by admin - User cannot execute"
-                    workspace.show_results = False
-                
-                query_data.status = new_status
-                workspace.description = new_desc
-                await log_in(db, actor=admin_user, action=AuditAction.APPROVE_QUERY,
-                    target_type=AuditTarget.QUERY, target_id=query_data.id,
-                    details=QueryDecisionAuditDetails(decision="approve", source="web",
-                        query_id=query_data.id, database_id=db_entry.id, status=new_status,
-                        show_results=show_results), client_ip=client_ip)
-                await db.commit()
-                
-                logger.info(f"Query in workspace {workspace_id} approved by admin (Executable: {show_results})")
-                return {
-                    "success": True,
-                    "status": new_status,
-                    "message": f"Query approved successfully ({'executable' if show_results else 'not executable'})"
-                }
+                    workspace: Workspace | None = workspace_result.scalars().first()
+                    if not workspace:
+                        raise WorkspaceNotFoundError("Workspace not found")
+
+                    query_result = await db.execute(
+                        select(QueryData).where(QueryData.id == workspace.query_id)
+                    )
+                    query_data: QueryData | None = query_result.scalars().first()
+                    if not query_data:
+                        raise WorkspaceNotFoundError("Query data not found for this workspace")
+
+                    db_res = await db.execute(
+                        select(Databases).where(
+                            Databases.servername == query_data.servername,
+                            Databases.database_name == query_data.database_name,
+                        )
+                    )
+                    db_entry = db_res.scalars().first()
+                    if not db_entry:
+                        raise BaseServiceException("Database not found in registry.")
+
+                    assoc_res = await db.execute(
+                        select(UserDatabaseAssociation).where(
+                            UserDatabaseAssociation.user_id == admin_user.id,
+                            UserDatabaseAssociation.database_id == db_entry.id,
+                        )
+                    )
+                    assoc = assoc_res.scalars().first()
+                    if not assoc or not is_admin(assoc.role):
+                        raise BaseServiceException(
+                            "You do not have admin permissions for this database."
+                        )
+
+                    new_status = "approved_with_results" if show_results else "approved"
+                    new_desc = (
+                        "Approved by admin - User can execute"
+                        if show_results
+                        else "Approved by admin - User cannot execute"
+                    )
+                    result = await db.execute(
+                        update(QueryData)
+                        .where(
+                            QueryData.id == query_data.id,
+                            QueryData.status == QUERY_STATUS_WAITING_FOR_APPROVAL,
+                        )
+                        .values(status=new_status)
+                    )
+                    if result.rowcount != 1:
+                        raise ApprovalConflictError(
+                            "This query has already been decided. Please refresh the page."
+                        )
+
+                    workspace.show_results = show_results
+                    workspace.description = new_desc
+                    await db.execute(
+                        update(ActionLogging)
+                        .where(ActionLogging.trace_id == query_data.uuid)
+                        .values(
+                            approval_status=ApprovalStatus.APPROVED,
+                            approved_execution=show_results,
+                            approved_by=admin_user.username,
+                            approved_at=datetime.now(),  # noqa: DTZ005 - legacy naive DB timestamps
+                        )
+                    )
+                    await log_in(
+                        db,
+                        actor=admin_user,
+                        action=AuditAction.APPROVE_QUERY,
+                        target_type=AuditTarget.QUERY,
+                        target_id=query_data.id,
+                        details=QueryDecisionAuditDetails(
+                            decision="approve",
+                            source="web",
+                            query_id=query_data.id,
+                            database_id=db_entry.id,
+                            status=new_status,
+                            show_results=show_results,
+                        ),
+                        client_ip=client_ip,
+                    )
+
+                    logger.info(
+                        f"Query in workspace {workspace_id} approved by admin "
+                        f"(Executable: {show_results})"
+                    )
+                    return {
+                        "success": True,
+                        "status": new_status,
+                        "message": (
+                            "Query approved successfully "
+                            f"({'executable' if show_results else 'not executable'})"
+                        ),
+                    }
             except BaseServiceException:
+                await db.rollback()
                 raise
             except Exception as e:
+                await db.rollback()
                 logger.error(f"Approval failed for workspace {workspace_id}: {e}")
                 raise BaseServiceException(f"Approval failed: {e!s}", original_exception=e)
 

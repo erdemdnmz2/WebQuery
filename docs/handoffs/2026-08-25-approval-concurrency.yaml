@@ -1,0 +1,68 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "Codex"
+  to: "WebQuery reviewer"
+  created_at: "2026-08-25T01:45:45+03:00"
+  task: "Adım 10: onay yarışını koşullu UPDATE ile kapatma"
+
+  scope:
+    completed:
+      - "Web approve/reject akışında QueryData durum geçişi waiting_for_approval koşullu UPDATE ile atomikleştirildi."
+      - "Yarışı kaybeden karar için APPROVAL_CONFLICT ve HTTP 409 eklendi."
+      - "Slack approve/reject akışına aynı koşullu geçiş, transaction kapsamı ve hedef veritabanı ADMIN yetki kontrolü eklendi."
+      - "Workspace, ActionLogging ve AuditLog yan etkileri başarılı karar transaction'ı ile tutarlı hâle getirildi."
+      - "Approval concurrency spec'i ve koşullu UPDATE ADR'i oluşturuldu."
+      - "Tekrar karar ve Slack çakışması için entegrasyon testleri eklendi/güncellendi."
+    excluded:
+      - "decision_reason alanı ve zorunlu red gerekçesi API değişikliği yapılmadı; mevcut branch sözleşmesi korunmuştur."
+      - "Yeni migration dosyası eklenmedi; bu değişiklik model şeması değiştirmiyor."
+
+  changed_files:
+    created:
+      - "docs/specs/SPEC-0012-approval-concurrency.md"
+      - "docs/adr/ADR-0011-conditional-approval-update.md"
+      - "web_api/common/constants.py"
+      - "docs/handoffs/2026-08-25-approval-concurrency.yaml"
+    modified:
+      - "web_api/admin/exceptions.py"
+      - "web_api/admin/services.py"
+      - "web_api/query_execution/services.py"
+      - "web_api/slack_integration/listener.py"
+      - "web_api/tests/integration/test_admin_api.py"
+      - "web_api/tests/integration/test_notifications_and_slack.py"
+    deleted: []
+
+  decisions:
+    - decision: "Onay/red durum geçişleri SELECT FOR UPDATE yerine status koşullu UPDATE ile yapılır."
+      rationale: "Kontrol ve yazmayı tek SQL ifadesinde birleştirir, stale ORM nesnesi riskini azaltır ve kaybeden işlemi rowcount üzerinden görünür kılar."
+      recorded_in: "docs/adr/ADR-0011-conditional-approval-update.md"
+    - decision: "Slack kararları hedef veritabanında ADMIN rolü olmayan kullanıcılar için reddedilir."
+      rationale: "Slack kanalındaki herhangi bir kullanıcının onay verebilmesi yetki açığıdır."
+      recorded_in: "docs/specs/SPEC-0012-approval-concurrency.md"
+
+  validation:
+    commands_run:
+      - command: "cd web_api && python3 -m py_compile admin/services.py admin/exceptions.py slack_integration/listener.py query_execution/services.py common/constants.py"
+        result: "passed"
+        evidence: "Sözdizimi kontrolü başarılı."
+      - command: "cd web_api && ../.venv/bin/python -m pytest -q tests/integration/test_admin_api.py tests/integration/test_notifications_and_slack.py"
+        result: "passed"
+        evidence: "10 passed, 1 Pydantic deprecation warning."
+      - command: "cd web_api && ../.venv/bin/python -m pytest -q"
+        result: "passed"
+        evidence: "82 passed, 1 Pydantic deprecation warning, 64.66s."
+      - command: "git diff --check"
+        result: "passed"
+        evidence: "Whitespace/diff doğrulaması başarılı."
+      - command: "cd web_api && ../.venv/bin/ruff check admin/services.py slack_integration/listener.py query_execution/services.py common/constants.py admin/exceptions.py tests/integration/test_admin_api.py"
+        result: "failed"
+        evidence: "13 mevcut BLE001 broad-exception uyarısı kaldı; yeni import sıralama ve datetime uyarıları temizlendi."
+
+  open_questions: []
+
+  known_risks:
+    - "SQLite testleri üretimdeki PostgreSQL/SQL Server satır kilidi davranışını tam temsil etmez."
+    - "SQL Server SET NOCOUNT ON veya trigger kullanımı rowcount değerini etkileyebilir; üretim motorunda doğrulanmalıdır."
+    - "Çalışma ağacında bu görevden önce mevcut olan UUID normalizasyon değişiklikleri korunmuştur."
+
+  next_step: "Reviewer koşullu UPDATE diff'ini inceleyip gerçek SQL Server üzerinde eşzamanlı approve/reject senaryosunu doğrulasın."

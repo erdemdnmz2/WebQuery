@@ -21,6 +21,7 @@ from app_database.models import (
     UserDatabaseAssociation,
     Workspace,
 )
+from common.constants import QUERY_STATUS_WAITING_FOR_APPROVAL
 from common.errors import redact_passwords, scrub
 from common.exceptions import BaseServiceException
 from common.roles import is_admin
@@ -165,7 +166,7 @@ class QueryService:
                             database_name=database_name,
                             query=query,
                             uuid=query_uuid,
-                            status="waiting_for_approval",
+                            status=QUERY_STATUS_WAITING_FOR_APPROVAL,
                             risk_type=query_analysis.get('risk_type')
                         )
                         db_session.add(query_data)

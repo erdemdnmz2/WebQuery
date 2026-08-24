@@ -9,13 +9,24 @@ import logging
 
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from slack_bolt.async_app import AsyncApp
-from sqlalchemy import select
+from sqlalchemy import select, update
 
+from admin.exceptions import ApprovalAuthorizationError, ApprovalConflictError
 from app_database.app_database import AppDatabase
-from app_database.models import ApprovalStatus, Databases, QueryData, User, Workspace
+from app_database.models import (
+    ActionLogging,
+    ApprovalStatus,
+    Databases,
+    QueryData,
+    User,
+    UserDatabaseAssociation,
+    Workspace,
+)
 from common.audit import log_in
 from common.audit_actions import AuditAction, AuditTarget
 from common.audit_details import QueryDecisionAuditDetails
+from common.constants import QUERY_STATUS_WAITING_FOR_APPROVAL
+from common.roles import is_admin
 from slack_integration.config import SLACK_APP_TOKEN, SLACK_BOT_TOKEN
 
 logger = logging.getLogger(__name__)
@@ -196,6 +207,29 @@ class SlackListener:
                 if database is None:
                     raise ValueError("Query database is not registered")
 
+                actor = (
+                    await session.execute(
+                        select(User).where(User.username == approved_by)
+                    )
+                ).scalar_one_or_none()
+                if actor is None:
+                    raise ApprovalAuthorizationError(
+                        "The Slack user is not a WebQuery administrator."
+                    )
+
+                association = (
+                    await session.execute(
+                        select(UserDatabaseAssociation).where(
+                            UserDatabaseAssociation.user_id == actor.id,
+                            UserDatabaseAssociation.database_id == database.id,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if association is None or not is_admin(association.role):
+                    raise ApprovalAuthorizationError(
+                        "The Slack user is not an ADMIN for this database."
+                    )
+
                 workspace = (
                     await session.execute(
                         select(Workspace).where(Workspace.query_id == query_data.id)
@@ -204,12 +238,39 @@ class SlackListener:
                 if workspace is None:
                     raise ValueError("Query workspace is not present")
 
-                query_data.status = status
+                result = await session.execute(
+                    update(QueryData)
+                    .where(
+                        QueryData.id == query_data.id,
+                        QueryData.status == QUERY_STATUS_WAITING_FOR_APPROVAL,
+                    )
+                    .values(status=status)
+                )
+                if result.rowcount != 1:
+                    raise ApprovalConflictError(
+                        "This query has already been decided. Please refresh the Slack message."
+                    )
+
                 workspace.show_results = approve
                 workspace.description = (
                     f"Approved by {approved_by} via Slack"
                     if approve
                     else f"Rejected by {approved_by} via Slack"
+                )
+
+                await session.execute(
+                    update(ActionLogging)
+                    .where(ActionLogging.trace_id == request_id)
+                    .values(
+                        approval_status=(
+                            ApprovalStatus.APPROVED
+                            if approve
+                            else ApprovalStatus.REJECTED
+                        ),
+                        approved_execution=approve,
+                        approved_by=approved_by,
+                        approved_by_slack_id=approved_by_slack_id,
+                    )
                 )
 
                 await log_in(
@@ -229,6 +290,9 @@ class SlackListener:
                         show_results=True if approve else None,
                     ),
                 )
+        except (ApprovalAuthorizationError, ApprovalConflictError):
+            logger.warning("[Slack] Approval decision blocked for %s", request_id)
+            raise
         except Exception:
             logger.exception("[Slack] Decision transaction failed for %s", request_id)
             return False
@@ -266,12 +330,25 @@ class SlackListener:
             )
             return
 
-        persisted = await self._persist_query_decision(
-            request_id=request_id,
-            approved_by=approved_by,
-            approved_by_slack_id=approved_by_slack_id,
-            approve=True,
-        )
+        try:
+            persisted = await self._persist_query_decision(
+                request_id=request_id,
+                approved_by=approved_by,
+                approved_by_slack_id=approved_by_slack_id,
+                approve=True,
+            )
+        except ApprovalAuthorizationError as e:
+            await respond(
+                replace_original=False,
+                text=f"⛔ Approval blocked: {e.message} (ID: {request_id})",
+            )
+            return
+        except ApprovalConflictError as e:
+            await respond(
+                replace_original=False,
+                text=f"⚠️ Approval conflict: {e.message} (ID: {request_id})",
+            )
+            return
         if not persisted:
             await respond(
                 replace_original=False,
@@ -293,19 +370,6 @@ class SlackListener:
             approved_by,
             slack_user_id,
         )
-
-        # Update ActionLogging audit record
-        try:
-            updated = await self.app_db.update_approval_status(
-                trace_id=request_id,
-                approval_status=ApprovalStatus.APPROVED,
-                approved_by=approved_by,
-                approved_by_slack_id=approved_by_slack_id,
-            )
-            if not updated:
-                logger.warning(f"[Slack] No ActionLogging record found with trace_id={request_id}")
-        except Exception as e:
-            logger.error(f"[Slack] ActionLogging update failed for trace_id={request_id}: {e}")
 
     async def handle_reject_query(self, ack, body, respond):
         """
@@ -333,12 +397,25 @@ class SlackListener:
             )
             return
 
-        persisted = await self._persist_query_decision(
-            request_id=request_id,
-            approved_by=approved_by,
-            approved_by_slack_id=approved_by_slack_id,
-            approve=False,
-        )
+        try:
+            persisted = await self._persist_query_decision(
+                request_id=request_id,
+                approved_by=approved_by,
+                approved_by_slack_id=approved_by_slack_id,
+                approve=False,
+            )
+        except ApprovalAuthorizationError as e:
+            await respond(
+                replace_original=False,
+                text=f"⛔ Rejection blocked: {e.message} (ID: {request_id})",
+            )
+            return
+        except ApprovalConflictError as e:
+            await respond(
+                replace_original=False,
+                text=f"⚠️ Rejection conflict: {e.message} (ID: {request_id})",
+            )
+            return
         if not persisted:
             await respond(
                 replace_original=False,
@@ -360,16 +437,3 @@ class SlackListener:
             approved_by,
             slack_user_id,
         )
-
-        # Update ActionLogging audit record
-        try:
-            updated = await self.app_db.update_approval_status(
-                trace_id=request_id,
-                approval_status=ApprovalStatus.REJECTED,
-                approved_by=approved_by,
-                approved_by_slack_id=approved_by_slack_id,
-            )
-            if not updated:
-                logger.warning(f"[Slack] No ActionLogging record found with trace_id={request_id}")
-        except Exception as e:
-            logger.error(f"[Slack] ActionLogging update failed for trace_id={request_id}: {e}")
