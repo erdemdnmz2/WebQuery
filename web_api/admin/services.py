@@ -18,6 +18,15 @@ from app_database.models import (
     UserDatabaseAssociation,
     Workspace,
 )
+from common.audit import log_in, log_standalone
+from common.audit_actions import AuditAction, AuditTarget
+from common.audit_details import (
+    DatabaseAccessAuditDetails,
+    DatabaseConfigurationAuditDetails,
+    MaskingRulesAuditDetails,
+    QueryDecisionAuditDetails,
+    QueryPreviewAuditDetails,
+)
 from common.exceptions import BaseServiceException
 from common.roles import is_admin, parse
 from common.security import generate_secure_credentials
@@ -178,31 +187,54 @@ class AdminService(BaseAdminService):
             return list(result.scalars().all())
 
     async def save_masking_rules(self, database_id: int, rules_data: list, admin_user: User) -> bool:
+        action = AuditAction.UPDATE_MASKING_RULES
         async with self.app_db.get_app_db() as db:
             try:
-                assoc_res = await db.execute(
-                    select(UserDatabaseAssociation).where(
-                        UserDatabaseAssociation.user_id == admin_user.id,
-                        UserDatabaseAssociation.database_id == database_id
+                async with db.begin():
+                    assoc_res = await db.execute(
+                        select(UserDatabaseAssociation).where(
+                            UserDatabaseAssociation.user_id == admin_user.id,
+                            UserDatabaseAssociation.database_id == database_id
+                        )
                     )
-                )
-                assoc = assoc_res.scalars().first()
-                if not assoc or not is_admin(assoc.role):
-                    raise BaseServiceException("You do not have admin permissions for this database.")
-                await db.execute(delete(MaskingRule).where(MaskingRule.database_id == database_id))
-                for rule in rules_data:
-                    new_rule = MaskingRule(
-                        database_id=database_id,
-                        table_name=rule.table_name,
-                        column_name=rule.column_name,
-                        masking_type=rule.masking_type,
-                        is_active=rule.is_active
+                    assoc = assoc_res.scalars().first()
+                    if not assoc or not is_admin(assoc.role):
+                        raise BaseServiceException(
+                            "You do not have admin permissions for this database."
+                        )
+
+                    existing_result = await db.execute(
+                        select(MaskingRule).where(MaskingRule.database_id == database_id)
                     )
-                    db.add(new_rule)
-                await db.commit()
+                    details = MaskingRulesAuditDetails.from_rule_sets(
+                        existing_result.scalars().all(), rules_data
+                    )
+
+                    await db.execute(
+                        delete(MaskingRule).where(MaskingRule.database_id == database_id)
+                    )
+                    for rule in rules_data:
+                        db.add(
+                            MaskingRule(
+                                database_id=database_id,
+                                table_name=rule.table_name,
+                                column_name=rule.column_name,
+                                masking_type=rule.masking_type,
+                                is_active=rule.is_active,
+                            )
+                        )
+
+                    if details.has_changes:
+                        await log_in(
+                            db,
+                            actor=admin_user,
+                            action=action,
+                            target_type=AuditTarget.DATABASE,
+                            target_id=database_id,
+                            details=details,
+                        )
                 return True
             except Exception as e:
-                await db.rollback()
                 logger.error(f"Failed to save masking rules for database {database_id}: {e}")
                 return False
 
@@ -351,6 +383,17 @@ class AdminApprovalService(BaseAdminService):
                 successfull=True,
                 row_count=row_count
             )
+            await log_standalone(
+                self.app_db,
+                action=AuditAction.PREVIEW_QUERY,
+                actor=admin_user,
+                target_type=AuditTarget.QUERY,
+                target_id=query_data.id,
+                details=QueryPreviewAuditDetails(
+                    query_id=query_data.id, database_id=db_entry.id, row_count=row_count,
+                    truncated=row_count >= config.MAX_ROW_COUNT_LIMIT,
+                ),
+            )
 
             return {
                 "response_type": "data",
@@ -413,12 +456,14 @@ class AdminApprovalService(BaseAdminService):
                 
                 query_data.status = "rejected"
                 workspace.description = "Rejected by admin"
-                
+                await log_in(db, actor=admin_user, action=AuditAction.REJECT_QUERY,
+                    target_type=AuditTarget.QUERY, target_id=query_data.id,
+                    details=QueryDecisionAuditDetails(decision="reject", source="web",
+                        query_id=query_data.id, database_id=db_entry.id, status="rejected"))
                 await db.commit()
                 return {"success": True}
                 
             except Exception as e:
-                await db.rollback()
                 print(f"Error rejecting query: {e}")
                 return {"success": False, "error": str(e)}
             
@@ -471,7 +516,11 @@ class AdminApprovalService(BaseAdminService):
                 
                 query_data.status = new_status
                 workspace.description = new_desc
-                
+                await log_in(db, actor=admin_user, action=AuditAction.APPROVE_QUERY,
+                    target_type=AuditTarget.QUERY, target_id=query_data.id,
+                    details=QueryDecisionAuditDetails(decision="approve", source="web",
+                        query_id=query_data.id, database_id=db_entry.id, status=new_status,
+                        show_results=show_results))
                 await db.commit()
                 
                 logger.info(f"Query in workspace {workspace_id} approved by admin (Executable: {show_results})")
@@ -483,7 +532,6 @@ class AdminApprovalService(BaseAdminService):
             except BaseServiceException:
                 raise
             except Exception as e:
-                await db.rollback()
                 logger.error(f"Approval failed for workspace {workspace_id}: {e}")
                 raise BaseServiceException(f"Approval failed: {e!s}", original_exception=e)
 
@@ -518,16 +566,13 @@ class AdminDBAdditionService(BaseAdminService):
                     uuid=db_uuid
                 )
                 db.add(database)
-                await db.flush() # Flush to get database.id
-
-                # Automatically associate the adding admin user as ADMIN for this database
-                assoc = UserDatabaseAssociation(
-                    user_id=admin_user.id,
-                    database_id=database.id,
-                    role="ADMIN",
-                    is_admin=True
-                )
-                db.add(assoc)
+                await db.flush()
+                db.add(UserDatabaseAssociation(user_id=admin_user.id, database_id=database.id,
+                    role="ADMIN", is_admin=True))
+                await log_in(db, actor=admin_user, action=AuditAction.ADD_DATABASE,
+                    target_type=AuditTarget.DATABASE, target_id=database.id,
+                    details=DatabaseConfigurationAuditDetails(operation="add", servername=servername,
+                        database_name=database_name, technology=tech_name))
                 await db.commit()
                 
                 # Refresh db_provider db_info dynamically
@@ -545,7 +590,6 @@ class AdminDBAdditionService(BaseAdminService):
             except BaseServiceException:
                 raise
             except Exception as e:
-                await db.rollback()
                 logger.error(f"Error adding database: {e}")
                 raise BaseServiceException(f"Error adding database: {e!s}", original_exception=e)
 
@@ -596,6 +640,7 @@ class AdminUserAuthService(BaseAdminService):
             
             is_admin_val = (role_upper == "ADMIN")
             
+            previous_role = assoc.role if assoc else None
             if assoc:
                 assoc.role = role_upper
                 assoc.is_admin = is_admin_val
@@ -608,6 +653,13 @@ class AdminUserAuthService(BaseAdminService):
                 )
                 db.add(assoc)
                 
+            if previous_role != role_upper:
+                action = (AuditAction.CHANGE_DATABASE_ROLE if assoc and previous_role
+                          else AuditAction.GRANT_DATABASE_ACCESS)
+                await log_in(db, actor=admin_user, action=action, target_type=AuditTarget.USER,
+                    target_id=user_id, details=DatabaseAccessAuditDetails(
+                        operation="change_role" if previous_role else "grant", database_id=database_id,
+                        previous_role=previous_role, new_role=role_upper))
             await db.commit()
             
         return {"success": True, "message": f"Successfully associated user {user_id} with database {database_id} as {role_upper}."}

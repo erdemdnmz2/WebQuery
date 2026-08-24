@@ -16,6 +16,9 @@ from app_database.models import User, UserDatabaseAssociation
 from authentication import config, schemas, sessions
 from authentication.exceptions import UserAlreadyExistsError
 from authentication.services import get_current_user
+from common.audit import log_in, log_standalone
+from common.audit_actions import AuditAction, AuditTarget
+from common.audit_details import SessionAuditDetails, UserLifecycleAuditDetails
 from common.limiter import limiter
 from common.roles import any_admin
 from database_provider import DatabaseProvider
@@ -51,12 +54,15 @@ async def login(
         result = await db.execute(select(User).where(User.email == user.email))
         authenticated_user: User | None = result.scalars().first()
         
+        client_ip: str = request.client.host if request.client else "unknown"
         if not authenticated_user or not authenticated_user.check_password(user.password):
+            await log_standalone(app_db, action=AuditAction.LOGIN_FAILED,
+                details=SessionAuditDetails(event="login_failed"), client_ip=client_ip,
+                trace_id=getattr(request.state, "request_id", None))
             raise HTTPException(status_code=400, detail="Invalid email or password")
         
         user_id: int = int(authenticated_user.id)
         
-        client_ip: str = request.client.host if request.client else "unknown"
         session_id, refresh_token = await sessions.create_session(
             app_db, user_id, client_ip, request.headers.get("user-agent")
         )
@@ -81,6 +87,10 @@ async def login(
             path="/api",
         )
         await app_db.create_login_log(user_id=user_id, client_ip=client_ip)
+        await log_standalone(app_db, action=AuditAction.LOGIN, actor=authenticated_user,
+            target_type=AuditTarget.USER, target_id=user_id,
+            details=SessionAuditDetails(event="login"), client_ip=client_ip,
+            trace_id=getattr(request.state, "request_id", None))
         
         return {"access_token": token}
 
@@ -158,12 +168,17 @@ async def register(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        db.add(new_user)
         try:
+            db.add(new_user)
+            await db.flush()
+            await log_in(db, actor=new_user, action=AuditAction.USER_REGISTERED,
+                target_type=AuditTarget.USER, target_id=new_user.id,
+                details=UserLifecycleAuditDetails(event="registered", source="web"),
+                client_ip=request.client.host if request.client else "unknown",
+                trace_id=getattr(request.state, "request_id", None))
             await db.commit()
             await db.refresh(new_user)
         except Exception as e:
-            await db.rollback()
             raise HTTPException(status_code=500, detail=f"Database error during registration: {e!s}")
         
         return {
@@ -252,6 +267,11 @@ async def logout(
     )
     
     await app_db.update_login_log(user_id=current_user.id)
+    await log_standalone(app_db, action=AuditAction.LOGOUT, actor=current_user,
+        target_type=AuditTarget.USER, target_id=current_user.id,
+        details=SessionAuditDetails(event="logout"),
+        client_ip=request.client.host if request.client else "unknown",
+        trace_id=getattr(request.state, "request_id", None))
     await db_provider.close_user_engines(current_user.id)
 
     return {"message": "Successfully logged out"}

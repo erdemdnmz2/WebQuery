@@ -10,6 +10,9 @@ from sqlalchemy import select, update
 
 from app_database.models import User, UserSession
 from authentication import config
+from common.audit import log_in
+from common.audit_actions import AuditAction, AuditTarget
+from common.audit_details import SessionAuditDetails
 
 ACCESS_TTL_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "20"))
 REFRESH_TTL_HOURS = int(os.getenv("REFRESH_TOKEN_EXPIRE_HOURS", "12"))
@@ -131,12 +134,16 @@ async def rotate_refresh(app_db, refresh_token: str) -> dict | None:
 async def revoke_session(app_db, session_id: int, reason: str) -> None:
     async with app_db.get_app_db() as db:
         async with db.begin():
-            await db.execute(
-                update(UserSession)
-                .where(UserSession.id == session_id,
-                       UserSession.revoked_at.is_(None))
-                .values(revoked_at=_db_now(), revoked_reason=reason)
-            )
+            session = (await db.execute(
+                select(UserSession).where(UserSession.id == session_id,
+                    UserSession.revoked_at.is_(None)).with_for_update()
+            )).scalars().first()
+            if session:
+                session.revoked_at = _db_now()
+                session.revoked_reason = reason
+                await log_in(db, action=AuditAction.SESSION_REVOKED,
+                    target_type=AuditTarget.SESSION, target_id=session.id,
+                    details=SessionAuditDetails(event="revoked", reason=reason))
 
 
 async def revoke_user_sessions(app_db, user_id: int, reason: str) -> int:

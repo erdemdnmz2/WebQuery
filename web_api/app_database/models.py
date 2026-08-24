@@ -6,6 +6,7 @@ import enum
 import os
 import re
 import uuid
+from datetime import datetime
 
 import bcrypt
 from cryptography.fernet import Fernet
@@ -269,3 +270,24 @@ class UserSession(Base):
     revoked_reason = Column(String(200), nullable=True)
     client_ip = Column(String(45), nullable=True)
     user_agent = Column(String(300), nullable=True)
+
+
+class AuditLog(Base):
+    """Append-only audit record for non-query-execution security events."""
+
+    __tablename__ = "AuditLog"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    created_at = Column(AppDateTime, nullable=False, default=datetime.now, index=True)
+
+    actor_user_id = Column(Integer, ForeignKey("Users.id"), nullable=True, index=True)
+    actor_username = Column(String(50), nullable=True)
+    actor_slack_id = Column(String(20), nullable=True)
+
+    action = Column(String(64), nullable=False, index=True)
+    target_type = Column(String(32), nullable=True)
+    target_id = Column(String(64), nullable=True, index=True)
+    details = Column(AppText, nullable=True)
+
+    client_ip = Column(String(45), nullable=True)
+    trace_id = Column(String(36), nullable=True, index=True)

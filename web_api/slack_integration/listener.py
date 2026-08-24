@@ -13,6 +13,9 @@ from sqlalchemy import select
 
 from app_database.app_database import AppDatabase
 from app_database.models import ApprovalStatus, QueryData, User, Workspace
+from common.audit import log_in
+from common.audit_actions import AuditAction, AuditTarget
+from common.audit_details import QueryDecisionAuditDetails
 from slack_integration.config import SLACK_APP_TOKEN, SLACK_BOT_TOKEN
 
 logger = logging.getLogger(__name__)
@@ -213,6 +216,13 @@ class SlackListener:
                         workspace.show_results = True
                         workspace.description = f"Approved by {approved_by} via Slack"
 
+                    await log_in(session, actor_username=approved_by,
+                        actor_slack_id=approved_by_slack_id, action=AuditAction.APPROVE_QUERY,
+                        target_type=AuditTarget.QUERY, target_id=query_data.id, trace_id=request_id,
+                        details=QueryDecisionAuditDetails(decision="approve", source="slack",
+                            query_id=query_data.id, database_id=None,
+                            status="approved_with_results", show_results=True))
+
                     await session.commit()
                     logger.info(f"Query {request_id} approved by {approved_by} (Slack ID: {slack_user_id})")
                 else:
@@ -282,6 +292,13 @@ class SlackListener:
                     if workspace:
                         workspace.show_results = False
                         workspace.description = f"Rejected by {approved_by} via Slack"
+
+                    await log_in(session, actor_username=approved_by,
+                        actor_slack_id=approved_by_slack_id, action=AuditAction.REJECT_QUERY,
+                        target_type=AuditTarget.QUERY, target_id=query_data.id, trace_id=request_id,
+                        details=QueryDecisionAuditDetails(decision="reject", source="slack",
+                            query_id=query_data.id, database_id=None,
+                            status="rejected"))
 
                     await session.commit()
                     logger.info(f"Query {request_id} rejected by {approved_by} (Slack ID: {slack_user_id})")
