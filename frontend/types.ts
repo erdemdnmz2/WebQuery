@@ -64,6 +64,13 @@ export interface SqlResponse {
   data: ResultRow[];
   message?: string | null;
   error?: string | null;
+  /**
+   * Columns the server actually redacted in `data`, spelled as they appear in
+   * the rows. Empty when nothing was masked - including when the caller is a
+   * database admin and masking is deliberately bypassed. Never infer masking
+   * from what was requested; see SPEC-0012 BR-04.
+   */
+  masked_columns?: string[] | null;
 }
 
 /** POST /api/admin/execute_for_preview/{id} carries a little more. */

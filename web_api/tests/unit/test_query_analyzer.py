@@ -92,3 +92,33 @@ def test_safe_query(analyzer: QueryAnalyzer):
     result = analyzer.analyze(query)
     assert result["return"] is True
     assert result["risk_type"] is None
+
+
+class TestParseFailureIsNotAPermissionDecision:
+    """
+    A query that will not parse tells us nothing about the user's role. The
+    permission check used to swallow the parse error and return False, so a
+    typo reached the user as "your role is not authorized" - sending them to
+    their administrator instead of to their SQL. See SPEC-0012 BR-06.
+    """
+
+    def test_unparseable_query_raises_parse_error(self):
+        import sqlglot.errors
+        from query_execution.query_analyzer import QueryAnalyzer
+
+        analyzer = QueryAnalyzer()
+        with pytest.raises(sqlglot.errors.ParseError):
+            # The editor's placeholder text: a SELECT with a bare FROM.
+            analyzer.check_permissions_match_role("SELECT TOP 100 *\nFROM", "READER")
+
+    def test_valid_select_still_allowed_for_reader(self):
+        from query_execution.query_analyzer import QueryAnalyzer
+
+        analyzer = QueryAnalyzer()
+        assert analyzer.check_permissions_match_role("SELECT 1", "READER") is True
+
+    def test_reader_still_blocked_from_delete(self):
+        from query_execution.query_analyzer import QueryAnalyzer
+
+        analyzer = QueryAnalyzer()
+        assert analyzer.check_permissions_match_role("DELETE FROM Customer", "READER") is False

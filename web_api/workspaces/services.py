@@ -18,8 +18,9 @@ from app_database.models import User
 import logging
 from common.exceptions import BaseServiceException
 from workspaces.exceptions import WorkspaceNotFoundError, WorkspaceAccessDeniedError
-from query_execution.exceptions import QueryAnalysisRejectedError, QueryExecutionError
-from common.security import mask_result_set
+from query_execution.exceptions import QueryAnalysisRejectedError, QueryExecutionError, QuerySyntaxError
+import sqlglot.errors
+from common.security import mask_result_set, masked_columns_in
 from query_execution.query_analyzer import QueryAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -124,7 +125,7 @@ class WorkspaceService:
         
         # Load database mapping to resolve db_uuid
         db_results = await db.execute(select(Databases))
-        db_map = {(d.servername, d.database_name): d.uuid for d in db_results.scalars().all()}
+        db_map = {(d.servername, d.database_name): str(d.uuid) for d in db_results.scalars().all()}
  
         workspace_list = []
         for ws in workspaces:
@@ -246,7 +247,7 @@ class WorkspaceService:
         db_res = await db.execute(
             select(Databases.uuid).where(Databases.servername == query_data.servername, Databases.database_name == query_data.database_name)
         )
-        db_uuid = db_res.scalars().first() or ""
+        db_uuid = str(db_res.scalars().first() or "")
             
         return {
             "id": workspace.id,
@@ -298,7 +299,7 @@ class WorkspaceService:
             if not db_entry:
                 raise BaseServiceException("Target database does not exist in registry.")
             db_id = db_entry.id
-            db_uuid = db_entry.uuid
+            db_uuid = str(db_entry.uuid)
 
             assoc_result = await db.execute(
                 select(UserDatabaseAssociation).where(
@@ -324,11 +325,16 @@ class WorkspaceService:
             log_id = await self.app_db.create_log(user=current_user, query=query_data.query, machine_name=query_data.servername, approved_execution=True)
 
             masking_cols = set()
+            masked_now: list[str] = []
             db_info_entry = db_provider.db_by_uuid.get(db_uuid, {})
             technology = db_info_entry.get("technology", "mssql")
             
             # Role capability verification using SQLGlot AST analyzer
-            if not self.analyzer.check_permissions_match_role(query_data.query, user_role, technology=technology):
+            try:
+                permitted = self.analyzer.check_permissions_match_role(query_data.query, user_role, technology=technology)
+            except sqlglot.errors.ParseError as exc:
+                raise QuerySyntaxError('Query blocked: the statement could not be parsed. Check the SQL syntax.', original_exception=exc)
+            if not permitted:
                 raise QueryAnalysisRejectedError(
                     f"Query blocked: Your role '{user_role}' is not authorized to execute this query."
                 )
@@ -359,7 +365,10 @@ class WorkspaceService:
                           message = f"{row_count} rows returned"
                       
                       result_data = [dict(row._mapping) for row in rows]
+                      # Report what was masked, not what was asked for; see
+                      # SPEC-0012 BR-03.
                       if not is_db_admin and masking_cols:
+                          masked_now = masked_columns_in(result_data, masking_cols)
                           result_data = mask_result_set(result_data, masking_cols)
                   else:
                       row_count = result.rowcount if result.rowcount is not None else 0
@@ -370,7 +379,7 @@ class WorkspaceService:
             await self.app_db.update_log(log_id=log_id, successfull=True, row_count=row_count, applied_masking_rules=applied_rules_str)
             
             logger.info(f"Workspace {workspace_id} executed successfully. Result: {message}")
-            return {"response_type": "data", "data": result_data, "message": message}
+            return {"response_type": "data", "data": result_data, "message": message, "masked_columns": masked_now}
 
         except BaseServiceException:
             raise

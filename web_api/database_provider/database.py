@@ -43,7 +43,10 @@ class DatabaseProvider:
                 # db_data is {"name": "db_name", "uuid": "db_uuid"}
                 print(f"[DEBUG set_db_info] Processing db_data: {db_data}")
                 if isinstance(db_data, dict) and "uuid" in db_data:
-                    db_uuid = db_data["uuid"]
+                    # The ORM hands back uuid.UUID for MSSQL UNIQUEIDENTIFIER, while every
+                    # lookup arrives as a string from the request body. Normalise to str
+                    # so db_by_uuid stays keyed the way its Dict[str, ...] type declares.
+                    db_uuid = str(db_data["uuid"])
                     self.db_by_uuid[db_uuid] = {
                         "servername": servername,
                         "database_name": db_data["name"],

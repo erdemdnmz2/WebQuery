@@ -115,7 +115,7 @@ class AdminService(BaseAdminService):
         self.db_provider.set_db_info(db_info)
         
         try:
-            async with self.db_provider.get_session(admin_user, db_entry.uuid) as session:
+            async with self.db_provider.get_session(admin_user, str(db_entry.uuid)) as session:
                 def get_schema(connection):
                     inspector = inspect(connection)
                     schema = {}
@@ -297,7 +297,7 @@ class AdminApprovalService(BaseAdminService):
             db_entry = db_res.scalars().first()
             if not db_entry:
                 return {"success": False, "error": "Database not registered in Databases table"}
-            db_uuid = db_entry.uuid
+            db_uuid = str(db_entry.uuid)
             
             # Check admin permissions on the target database
             assoc_res = await db.execute(

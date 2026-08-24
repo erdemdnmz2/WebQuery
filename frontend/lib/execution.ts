@@ -23,6 +23,8 @@ export interface ExecutionOutcome {
   traceId?: string;
   /** The analyzer refused the query and routed it to an administrator. */
   sentForApproval: boolean;
+  /** Columns the server reported as redacted in these rows. */
+  maskedColumns: string[];
 }
 
 const TRUNCATED = /^Truncated to MAX_ROW_COUNT_LIMIT \((\d+)\)/i;
@@ -37,6 +39,7 @@ function emptyOutcome(): ExecutionOutcome {
     limit: null,
     error: null,
     sentForApproval: false,
+    maskedColumns: [],
   };
 }
 
@@ -51,6 +54,7 @@ export function outcomeFromResponse(response: SqlResponse): ExecutionOutcome {
 
   outcome.rows = response.data ?? [];
   outcome.rowCount = outcome.rows.length;
+  outcome.maskedColumns = response.masked_columns ?? [];
 
   const truncated = TRUNCATED.exec(message);
   if (truncated) {

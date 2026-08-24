@@ -19,6 +19,11 @@ class SQLResponse(BaseModel):
     data: List[Dict[str, Any]]
     message: Optional[str] = None
     error: Optional[str] = None
+    # Columns actually masked in `data`, spelled as they appear in the result
+    # rows. Empty when no masking was applied - including when the caller is a
+    # database admin and masking is deliberately bypassed. Clients must drive
+    # any "masked" affordance from this, never from what they requested.
+    masked_columns: List[str] = []
 
 
 class ExecutionInfo(BaseModel):

@@ -55,3 +55,25 @@ def mask_result_set(data: List[Dict[str, Any]], mask_columns: Set[str]) -> List[
         masked_data.append(masked_row)
         
     return masked_data
+
+
+def masked_columns_in(data: List[Dict[str, Any]], mask_columns: Set[str]) -> List[str]:
+    """
+    Reports which columns `mask_result_set` actually masks for this result set.
+
+    Matching mirrors `mask_result_set`: case-insensitive, but the names are
+    returned with the spelling they carry in the result rows so the caller can
+    line them up with the column headers it renders.
+
+    Args:
+        data: The query result rows as a list of dictionaries.
+        mask_columns: A set of column names that should be masked.
+
+    Returns:
+        List[str]: Column names present in the result set that are masked.
+    """
+    if not data or not mask_columns:
+        return []
+
+    lower_mask_cols = {col.lower() for col in mask_columns}
+    return [name for name in data[0].keys() if name.lower() in lower_mask_cols]

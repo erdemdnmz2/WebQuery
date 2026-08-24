@@ -287,6 +287,11 @@ yerinden oynamamalı.
 - Sayısal sütunlar sağa hizalı ve mono; `isNumericColumn()` ile tespit edilir.
 - Maskelenmiş sütunlar başlıkta işaretlenir. Kullanıcı gördüğü değerin
   maskelendiğini bilmek zorundadır.
+- Bu işaret **yalnızca** yanıttaki `masked_columns` alanından beslenir; istenen
+  maskeleme kümesinden değil. İkisi ayrışır: veritabanı yöneticisi için
+  maskeleme bilinçli olarak atlanır, o zaman rozet de çıkmamalıdır. Rozeti
+  niyetten türetmek, maskelenmemiş veriyi maskeliymiş gibi göstermek demektir.
+  Bkz. SPEC-0012 BR-04.
 - `NULL`, boş metin ve gerçek değer üç ayrı görünümdür. `formatCell()` bunu
   döndürür; `NULL`'u boş hücre gibi göstermek veri yanlışı üretir.
 - Başlık yapışkandır (`.grid-head-cell`), bulanıklık değil opak zemin kullanır.
@@ -398,7 +403,9 @@ yere sorgu çalıştırmak demektir.
 
 ### 14.3 Çalıştırma sonucu tek yerde çözümlenir
 
-`SQLResponse` yalnızca `{response_type, data, message, error}` döndürür. Satır
+`SQLResponse` `{response_type, data, message, error, masked_columns}` döndürür.
+`masked_columns`, bu yanıtta **gerçekten** maskelenmiş sütunların adlarını
+sonuç satırlarındaki yazımıyla taşır. Satır
 sayısı ve kırpma bilgisi İngilizce `message` metninin içindedir
 (`"Truncated to MAX_ROW_COUNT_LIMIT (1000)"`, `"42 rows affected"`).
 

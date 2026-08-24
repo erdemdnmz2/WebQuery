@@ -499,7 +499,6 @@ const Studio: React.FC = () => {
             outcome={outcome}
             running={running}
             durationMs={durationMs}
-            maskedColumns={[...persistentMasked, ...adHocMasked]}
             exportBaseName={current?.name ?? 'webquery-sonuc'}
             emptyTitle="Henüz sorgu çalıştırılmadı"
             emptyDescription={`Sorgunuzu yazın ve ${isMac ? '⌘' : 'Ctrl'} + Enter ile çalıştırın. Sonuçlar burada görünür.`}

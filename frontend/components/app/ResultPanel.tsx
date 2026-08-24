@@ -23,7 +23,6 @@ export interface ResultPanelProps {
   running: boolean;
   /** Wall-clock time of the last completed run. */
   durationMs: number | null;
-  maskedColumns?: string[];
   exportBaseName: string;
   emptyTitle: string;
   emptyDescription: string;
@@ -40,7 +39,6 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
   outcome,
   running,
   durationMs,
-  maskedColumns,
   exportBaseName,
   emptyTitle,
   emptyDescription,
@@ -137,7 +135,7 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
         ) : hasRows ? (
           <DataGrid
             rows={rows}
-            maskedColumns={maskedColumns}
+            maskedColumns={outcome?.maskedColumns}
             truncated={outcome?.truncated}
             truncationNote={
               outcome?.truncated && outcome.limit !== null
