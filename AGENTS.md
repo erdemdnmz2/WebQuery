@@ -27,7 +27,9 @@ the choice.
 
 - `web_api/`: FastAPI/Python backend. Domain modules own their router, schemas,
   service layer, and domain exceptions.
-- `frontend/`: Vite + React + TypeScript frontend.
+- `frontend/`: Vite + React + TypeScript frontend. Arayüz değişikliklerinden
+  önce `frontend/DESIGN.md` okunur; tasarım token'ları, bileşen envanteri ve
+  erişilebilirlik sözleşmesi oradadır.
 - `docs/specs/`: feature specifications and acceptance criteria.
 - `docs/adr/`: accepted and superseded architecture decisions.
 - `docs/features/`: executable Gherkin scenarios only.

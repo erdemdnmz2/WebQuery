@@ -1,103 +1,156 @@
+import React, { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { CheckCircleIcon, EyeIcon, EyeSlashIcon, WarningCircleIcon } from '@phosphor-icons/react';
+import { api, errorMessage } from '../services/api';
+import { AuthLayout } from '../components/app/AuthLayout';
+import { Button, IconButton } from '../components/ui/Button';
+import { Field } from '../components/ui/Field';
+import { Input } from '../components/ui/Input';
+import { cn } from '../lib/cn';
 
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { authenticatedFetch } from '../services/api';
+/** Four independent checks, shown live so the rule is never a surprise. */
+function passwordChecks(password: string) {
+  return [
+    { label: 'En az 8 karakter', ok: password.length >= 8 },
+    { label: 'Bir büyük harf', ok: /[A-ZĞÜŞİÖÇ]/.test(password) },
+    { label: 'Bir rakam', ok: /\d/.test(password) },
+    { label: 'Bir sembol', ok: /[^\p{L}\d]/u.test(password) },
+  ];
+}
 
 const Register: React.FC = () => {
+  const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
-  const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMessage(null);
+  const checks = useMemo(() => passwordChecks(password), [password]);
+  const passwordReady = checks.every((check) => check.ok);
 
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    setSubmitting(true);
     try {
-      const response = await authenticatedFetch('/api/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password })
-      });
-
-      if (response && response.ok) {
-        setMessage({ type: 'success', text: 'Registration successful! Redirecting...' });
-        setTimeout(() => navigate('/login'), 2000);
-      } else {
-        const data = await response?.json();
-        setMessage({ type: 'error', text: data?.detail || data?.error || 'Registration failed.' });
-      }
-    } catch (err) {
-      setMessage({ type: 'error', text: 'A network error occurred.' });
+      await api.register(username, email, password);
+      setDone(true);
+      window.setTimeout(() => navigate('/login'), 1400);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950 p-4 relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-        <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600 rounded-full blur-[120px]"></div>
-        <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-600 rounded-full blur-[120px]"></div>
-      </div>
-
-      <div className="w-full max-w-md bg-gray-900/50 backdrop-blur-xl rounded-3xl shadow-2xl p-10 border border-gray-800 relative z-10">
-        <div className="flex flex-col items-center mb-8">
-          <h2 className="text-4xl font-black text-white tracking-tighter uppercase">Register</h2>
-          <p className="text-gray-500 text-[10px] font-bold mt-1 tracking-[0.3em] uppercase">Initialize Profile</p>
-        </div>
-        
-        {message && (
-          <div className={`mb-4 p-3 border rounded text-[10px] font-bold uppercase text-center tracking-widest ${message.type === 'success' ? 'bg-green-900/20 border-green-700/50 text-green-400' : 'bg-red-900/20 border-red-900/50 text-red-400'}`}>
-            {message.text}
+    <AuthLayout
+      title="Hesap oluşturun"
+      subtitle="Hesabınız açıldıktan sonra yöneticinizin size veritabanı yetkisi tanımlaması gerekir."
+      footer={
+        <p>
+          Hesabınız var mı?{' '}
+          <Link to="/login" className="font-medium text-accent underline-offset-4 hover:underline">
+            Oturum açın
+          </Link>
+        </p>
+      }
+    >
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {error && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-sm border border-danger-line bg-danger-soft px-3 py-2.5 text-[13px] text-danger"
+          >
+            <WarningCircleIcon size={15} weight="fill" className="mt-px shrink-0" />
+            <span>{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Username</label>
-            <input 
-              type="text" 
-              className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl p-3.5 focus:ring-1 focus:ring-indigo-500 outline-none transition-all placeholder:text-gray-700 font-medium" 
-              value={username} 
-              onChange={(e) => setUsername(e.target.value)} 
-              placeholder="operator_01"
-              required 
-            />
+        {done && (
+          <div
+            role="status"
+            className="flex items-start gap-2 rounded-sm border border-success-line bg-success-soft px-3 py-2.5 text-[13px] text-success"
+          >
+            <CheckCircleIcon size={15} weight="fill" className="mt-px shrink-0" />
+            <span>Hesap oluşturuldu. Giriş ekranına yönlendiriliyorsunuz.</span>
           </div>
-          <div>
-            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Email</label>
-            <input 
-              type="email" 
-              className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl p-3.5 focus:ring-1 focus:ring-indigo-500 outline-none transition-all placeholder:text-gray-700 font-medium" 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
-              placeholder="email@webquery.io"
-              required 
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Password</label>
-            <input 
-              type="password" 
-              className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl p-3.5 focus:ring-1 focus:ring-indigo-500 outline-none transition-all placeholder:text-gray-700 font-medium" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
-              placeholder="••••••••"
-              required 
-            />
-          </div>
-          
-          <div className="pt-4 flex flex-col gap-3">
-            <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 px-4 rounded-xl transition-all shadow-xl shadow-indigo-600/20 active:scale-95 uppercase tracking-widest text-xs">
-              Create Account
-            </button>
-            <Link to="/login" className="w-full bg-gray-800/50 hover:bg-gray-800 text-gray-400 hover:text-white font-black py-4 px-4 rounded-xl transition-all border border-gray-800 text-center uppercase tracking-widest text-xs">
-              Back to Connection
-            </Link>
-          </div>
-        </form>
-      </div>
-    </div>
+        )}
+
+        <Field label="Kullanıcı adı" required hint="Denetim kayıtlarında bu ad görünür.">
+          <Input
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            autoComplete="username"
+            autoFocus
+            required
+            minLength={3}
+            placeholder="ali.donmez"
+          />
+        </Field>
+
+        <Field label="E-posta" required>
+          <Input
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            autoComplete="email"
+            required
+            placeholder="ad.soyad@sirket.com"
+          />
+        </Field>
+
+        <Field label="Parola" required>
+          <Input
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="new-password"
+            required
+            addon={
+              <IconButton
+                label={showPassword ? 'Parolayı gizle' : 'Parolayı göster'}
+                size="sm"
+                className="size-6"
+                onClick={() => setShowPassword((visible) => !visible)}
+              >
+                {showPassword ? <EyeSlashIcon size={14} /> : <EyeIcon size={14} />}
+              </IconButton>
+            }
+          />
+        </Field>
+
+        <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+          {checks.map((check) => (
+            <li
+              key={check.label}
+              className={cn(
+                'flex items-center gap-1.5 text-[12px] transition-colors duration-[var(--dur-fast)]',
+                check.ok ? 'text-success' : 'text-subtle',
+              )}
+            >
+              <CheckCircleIcon size={13} weight={check.ok ? 'fill' : 'regular'} className="shrink-0" />
+              {check.label}
+            </li>
+          ))}
+        </ul>
+
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          fullWidth
+          loading={submitting}
+          disabled={!passwordReady || done}
+          className="mt-1"
+        >
+          Hesabı oluştur
+        </Button>
+      </form>
+    </AuthLayout>
   );
 };
 

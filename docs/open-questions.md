@@ -15,13 +15,13 @@ with status `Open` before doing task work; see `AGENTS.md`.
 
 ### OQ-2026-002: Hedef DB sorgu bağlantısında hangi kimlik bilgisi modeli amaçlanıyor?
 
-- Status: Open
+- Status: Deferred
 - Raised: 2026-08-20
 - Scope: merkezi erişim ve credential ADR'si; `web_api/database_provider/database.py` ve admin DB kayıt akışı
 - Question: Runtime sorgu bağlantılarında yalnızca `CENTRAL_DB_USER/CENTRAL_DB_PASSWORD` mı kullanılmalı (mevcut `DatabaseProvider`), yoksa admin kaydında üretilip şifrelenen veritabanı başına `db_username/db_password` mı kullanılmalı?
 - Why it matters: İki modelin yetki sınırı, credential rotasyonu, erişim izolasyonu ve veri modelindeki alanların anlamı farklıdır. Bu karar bilinmeden merkezi erişim ADR'si doğru yazılamaz.
-- Answer:
-- Recorded in:
+- Answer: Karar daha sonra verilecek.
+- Recorded in: User deferred the decision on 2026-08-24.
 
 ## Entry Format
 

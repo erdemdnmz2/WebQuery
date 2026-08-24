@@ -4,21 +4,30 @@ export interface User {
   is_admin: boolean;
 }
 
+export type WorkspaceStatus =
+  | 'saved_in_workspace'
+  | 'waiting_for_approval'
+  | 'approved_and_executed'
+  | 'approved_with_results'
+  | 'rejected';
+
 export interface Workspace {
   id: number;
   name: string;
   description?: string;
-  status: 'saved_in_workspace' | 'waiting_for_approval' | 'approved_and_executed' | 'approved_with_results' | 'rejected';
+  status: WorkspaceStatus;
   query: string;
   servername: string;
   database_name: string;
   show_results?: boolean;
 }
 
+export type ResultRow = Record<string, unknown>;
+
 export interface QueryResult {
   message?: string;
   error?: string;
-  data?: any[];
+  data?: ResultRow[];
   servername?: string;
   database?: string;
   row_count?: number;
@@ -45,12 +54,24 @@ export interface PendingQuery {
   risk_type?: string;
 }
 
-export interface MultipleQueryResultItem {
-  data?: any[];
-  error?: string;
+export interface RegisteredDatabase {
+  id: number;
+  servername: string;
+  database_name: string;
+  technology: string;
+  db_username?: string;
 }
 
-export interface MultipleQueryResponse {
-  results: MultipleQueryResultItem[];
-  error?: string;
+export interface MaskingRule {
+  table_name: string;
+  column_name: string;
+  masking_type: string;
+  is_active: boolean;
 }
+
+export interface GeneratedCredentials {
+  username: string;
+  password: string;
+}
+
+export type DatabaseSchema = Record<string, string[]>;
