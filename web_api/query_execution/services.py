@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+import sqlglot.errors
 from sqlalchemy.future import select
 from sqlalchemy.sql import text
 
@@ -25,11 +26,15 @@ from common.constants import QUERY_STATUS_WAITING_FOR_APPROVAL
 from common.errors import redact_passwords, scrub
 from common.exceptions import BaseServiceException
 from common.roles import is_admin
-from common.security import mask_result_set
+from common.security import mask_result_set, masked_columns_in
 from database_provider import DatabaseProvider
 from notification import NotificationService
 from query_execution import config
-from query_execution.exceptions import QueryAnalysisRejectedError, QueryExecutionError
+from query_execution.exceptions import (
+    QueryAnalysisRejectedError,
+    QueryExecutionError,
+    QuerySyntaxError,
+)
 from query_execution.query_analyzer import QueryAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -119,7 +124,11 @@ class QueryService:
                 user_role = assoc.role
 
             # Role capability verification using SQLGlot AST analyzer
-            if not self.analyzer.check_permissions_match_role(query, user_role, technology=technology):
+            try:
+                permitted = self.analyzer.check_permissions_match_role(query, user_role, technology=technology)
+            except sqlglot.errors.ParseError as exc:
+                raise QuerySyntaxError('Query blocked: the statement could not be parsed. Check the SQL syntax.', original_exception=exc)
+            if not permitted:
                 raise QueryAnalysisRejectedError(
                     message=f"Query blocked: Your role '{user_role}' is not authorized to execute this query."
                 )
@@ -231,13 +240,19 @@ class QueryService:
                         message = f"{row_count} rows returned"
                     
                     raw_data = [dict(row._mapping) for row in rows]
+                    # Report what was masked, not what was asked for: a database
+                    # admin bypasses masking entirely, and the client must not
+                    # claim otherwise.
+                    masked_now: list[str] = []
                     if not is_db_admin and masking_cols:
+                        masked_now = masked_columns_in(raw_data, masking_cols)
                         raw_data = mask_result_set(raw_data, masking_cols)
-                        
+
                     result_data = {
                         "response_type": "data",
                         "data": raw_data,
-                        "message": message
+                        "message": message,
+                        "masked_columns": masked_now
                     }
                 else:
                     row_count = result.rowcount if result.rowcount is not None else 0
@@ -245,7 +260,8 @@ class QueryService:
                     result_data = {
                         "response_type": "data",
                         "data": [],
-                        "message": message
+                        "message": message,
+                        "masked_columns": []
                     }
                 
                 applied_rules_str = json.dumps(list(masking_cols)) if masking_cols else None

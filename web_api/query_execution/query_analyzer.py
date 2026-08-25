@@ -151,10 +151,11 @@ class QueryAnalyzer:
             "postgres": "postgres"
         }
         dialect = dialect_map.get(technology.lower().strip(), "tsql")
-        try:
-            statements = sqlglot.parse(q, read=dialect)
-        except Exception:
-            return False
+        # A query that will not parse is not a permission decision. Swallowing the
+        # parse error here made every typo surface as "your role is not authorized",
+        # which sends the user to their administrator instead of to their SQL.
+        # The caller turns this into a syntax error; the query is still blocked.
+        statements = sqlglot.parse(q, read=dialect)
 
         roles_list = parse(role)
 

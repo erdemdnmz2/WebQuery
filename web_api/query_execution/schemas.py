@@ -20,6 +20,11 @@ class SQLResponse(BaseModel):
     data: list[dict[str, Any]]
     message: str | None = None
     error: str | None = None
+    # Columns actually masked in `data`, spelled as they appear in the result
+    # rows. Empty when no masking was applied - including when the caller is a
+    # database admin and masking is deliberately bypassed. Clients must drive
+    # any "masked" affordance from this, never from what they requested.
+    masked_columns: list[str] = []
 
 
 class ExecutionInfo(BaseModel):

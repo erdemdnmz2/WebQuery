@@ -1,81 +1,43 @@
-
-<!DOCTYPE html>
-<html lang="en" class="dark">
+<!doctype html>
+<html lang="tr">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>WebQuery Platform</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="WebQuery: kayıtlı veritabanlarına denetlenebilir SQL sorguları çalıştırmak için kurumsal sorgu konsolu."
+    />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>WebQuery</title>
+
+    <!--
+      The theme is applied before first paint so a dark-mode user never sees a
+      light flash. It mirrors the resolution order in lib/theme.tsx.
+    -->
     <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            colors: {
-              gray: {
-                750: '#2d3748',
-                850: '#1a202c',
-                950: '#0d1117',
-              }
-            }
+      (function () {
+        try {
+          var stored = localStorage.getItem('webquery.theme');
+          if (stored === 'light' || stored === 'dark') {
+            document.documentElement.setAttribute('data-theme', stored);
           }
+        } catch (error) {
+          /* Storage can be blocked; the media query still resolves the theme. */
         }
-      }
+      })();
     </script>
-    <!-- Ace Editor & Extensions -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/mode-sql.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/theme-dracula.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ext-language_tools.min.js"></script>
-    <!-- Inter Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-      body {
-        font-family: 'Inter', sans-serif;
-        background-color: #111827;
-        color: #f3f4f6;
-      }
-      /* Custom Scrollbar */
-      ::-webkit-scrollbar {
-          width: 8px;
-          height: 8px;
-      }
-      ::-webkit-scrollbar-track {
-          background: #1f2937; 
-      }
-      ::-webkit-scrollbar-thumb {
-          background: #4b5563; 
-          border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-          background: #6b7280; 
-      }
-      
-      /* Ace Editor VS Code Style Overrides */
-      .ace_editor {
-          border-radius: 0.5rem;
-      }
-      .ace_gutter {
-          background-color: #1f2937 !important;
-          color: #9ca3af !important;
-      }
-    </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.10.0",
-    "xlsx": "https://aistudiocdn.com/xlsx@^0.18.5"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
+
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Crect x='0.75' y='0.75' width='18.5' height='18.5' rx='4.25' fill='none' stroke='%23167f96' stroke-width='1.5'/%3E%3Cpath d='M4.5 7.25h11' stroke='%23167f96' stroke-width='1.5' stroke-linecap='round' opacity='0.45'/%3E%3Cpath d='M4.5 10.5h11' stroke='%23167f96' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M4.5 13.75h6' stroke='%23167f96' stroke-width='1.5' stroke-linecap='round' opacity='0.45'/%3E%3C/svg%3E"
+    />
+  </head>
   <body>
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <noscript>
+      WebQuery çalışmak için JavaScript gerektirir. Tarayıcınızda JavaScript'i etkinleştirin.
+    </noscript>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>

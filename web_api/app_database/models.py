@@ -198,8 +198,12 @@ class Workspace(Base):
     __tablename__ = "Workspaces"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("Users.id"), nullable=False)
-    name = Column(String(100), nullable=False)
-    description = Column(String(255), nullable=True)
+    # Free text the user types. String() maps to VARCHAR on MSSQL, and the
+    # server codepage has no room for the Turkish-specific letters: a name
+    # saved as "Veritabanı envanteri" reads back as "Veritabani envanteri".
+    # User-entered text therefore has to be NVARCHAR. See SPEC-0012 BR-05.
+    name = Column(AppNVarChar, nullable=False)
+    description = Column(AppNVarChar, nullable=True)
     query_id = Column(Integer, ForeignKey("QueryData.id"), nullable=False, unique=True)
     show_results = Column(Boolean, nullable=True, default=None)
     query_data = relationship("QueryData")
