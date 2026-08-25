@@ -4,9 +4,10 @@ Admin approval and management operations for risky queries
 """
 import logging
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, inspect
+from sqlalchemy import delete, inspect, update
 from sqlalchemy.sql import select, text
 
 from app_database.app_database import AppDatabase
@@ -16,6 +17,7 @@ from app_database.models import (
     QueryData,
     User,
     UserDatabaseAssociation,
+    UserSession,
     Workspace,
 )
 from approval.service import decide
@@ -26,6 +28,7 @@ from common.audit_details import (
     DatabaseConfigurationAuditDetails,
     MaskingRulesAuditDetails,
     QueryPreviewAuditDetails,
+    UserLifecycleAuditDetails,
 )
 from common.constants import QUERY_STATUS_WAITING_FOR_APPROVAL
 from common.exceptions import BaseServiceException
@@ -33,10 +36,20 @@ from common.roles import is_admin, parse
 from common.security import generate_secure_credentials
 from database_provider import DatabaseProvider
 from query_execution import config
-from .exceptions import DatabaseAlreadyExistsError
+
+from .exceptions import (
+    AdminUserNotFoundError,
+    CannotDisableSelfError,
+    DatabaseAlreadyExistsError,
+)
 from .schemas import AdminApprovals
 
 logger = logging.getLogger(__name__)
+
+
+def _db_now() -> datetime:
+    """Return naive UTC for the cross-database AppDateTime columns."""
+    return datetime.now(UTC).replace(tzinfo=None)
 
 class BaseAdminService:
     """
@@ -112,6 +125,31 @@ class AdminService(BaseAdminService):
     ) -> dict[str, Any]:
         return await self.auth_service.associate_user_to_database(
             user_id, database_id, role, admin_user, client_ip
+        )
+
+    async def disable_user(
+        self,
+        user_id: int,
+        admin_user: User,
+        client_ip: str | None = None,
+        trace_id: str | None = None,
+    ) -> dict[str, Any]:
+        return await self.auth_service.disable_user(
+            user_id, admin_user, client_ip, trace_id
+        )
+
+    async def list_users(self) -> list[User]:
+        return await self.auth_service.list_users()
+
+    async def enable_user(
+        self,
+        user_id: int,
+        admin_user: User,
+        client_ip: str | None = None,
+        trace_id: str | None = None,
+    ) -> dict[str, Any]:
+        return await self.auth_service.enable_user(
+            user_id, admin_user, client_ip, trace_id
         )
 
     async def list_databases(self, admin_user: User) -> list[Databases]:
@@ -574,6 +612,95 @@ class AdminUserAuthService(BaseAdminService):
     """
     Sub-service for admin to manage user database associations and roles.
     """
+
+    async def list_users(self) -> list[User]:
+        async with self.app_db.get_app_db() as db:
+            result = await db.execute(select(User).order_by(User.username.asc()))
+            return list(result.scalars().all())
+
+    async def enable_user(
+        self,
+        user_id: int,
+        admin_user: User,
+        client_ip: str | None = None,
+        trace_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Activate a pending/disabled account and record the transition."""
+        async with self.app_db.get_app_db() as db, db.begin():
+            target = await db.get(User, user_id)
+            if target is None:
+                raise AdminUserNotFoundError("Kullanıcı bulunamadı.")
+
+            if target.is_active:
+                return {"success": True, "message": "User is already active"}
+
+            target.is_active = True
+            target.disabled_at = None
+            target.disabled_by = None
+            await log_in(
+                db,
+                actor=admin_user,
+                action=AuditAction.USER_ENABLED,
+                target_type=AuditTarget.USER,
+                target_id=user_id,
+                details=UserLifecycleAuditDetails(event="enabled", source="admin"),
+                client_ip=client_ip,
+                trace_id=trace_id,
+            )
+
+        return {"success": True, "message": "User enabled successfully"}
+
+    async def disable_user(
+        self,
+        user_id: int,
+        admin_user: User,
+        client_ip: str | None = None,
+        trace_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Disable a user and revoke all of the user's active sessions."""
+        if user_id == admin_user.id:
+            raise CannotDisableSelfError("Kendi hesabınızı devre dışı bırakamazsınız.")
+
+        async with self.app_db.get_app_db() as db, db.begin():
+            target = await db.get(User, user_id)
+            if target is None:
+                raise AdminUserNotFoundError("Kullanıcı bulunamadı.")
+
+            if target.is_active:
+                target.is_active = False
+                target.disabled_at = _db_now()
+                target.disabled_by = admin_user.username
+            elif target.disabled_at is None:
+                # Preserve the original disable actor/time when present,
+                # while making legacy/incomplete rows safe to finish.
+                target.disabled_at = _db_now()
+                target.disabled_by = admin_user.username
+
+            await db.execute(
+                update(UserSession)
+                .where(
+                    UserSession.user_id == user_id,
+                    UserSession.revoked_at.is_(None),
+                )
+                .values(
+                    revoked_at=_db_now(),
+                    revoked_reason="user disabled",
+                )
+            )
+
+            await log_in(
+                db,
+                actor=admin_user,
+                action=AuditAction.USER_DISABLED,
+                target_type=AuditTarget.USER,
+                target_id=user_id,
+                details=UserLifecycleAuditDetails(event="disabled", source="admin"),
+                client_ip=client_ip,
+                trace_id=trace_id,
+            )
+
+        return {"success": True, "message": "User disabled successfully"}
+
     async def associate_user_to_database(
         self,
         user_id: int,

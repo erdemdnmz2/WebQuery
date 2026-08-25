@@ -20,6 +20,7 @@ from common.audit import log_in, log_standalone
 from common.audit_actions import AuditAction, AuditTarget
 from common.audit_details import SessionAuditDetails, UserLifecycleAuditDetails
 from common.limiter import limiter
+from common.platform_access import is_platform_admin
 from common.roles import any_admin
 from database_provider import DatabaseProvider
 from dependencies import get_app_db, get_db_provider
@@ -55,11 +56,17 @@ async def login(
         authenticated_user: User | None = result.scalars().first()
         
         client_ip: str = request.client.host if request.client else "unknown"
-        if not authenticated_user or not authenticated_user.check_password(user.password):
+        if (
+            not authenticated_user
+            or not authenticated_user.is_active
+            or not authenticated_user.check_password(user.password)
+        ):
             await log_standalone(app_db, action=AuditAction.LOGIN_FAILED,
                 details=SessionAuditDetails(event="login_failed"), client_ip=client_ip,
                 trace_id=getattr(request.state, "request_id", None))
             raise HTTPException(status_code=400, detail="Invalid email or password")
+
+        authenticated_user.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
         
         user_id: int = int(authenticated_user.id)
         
@@ -91,6 +98,7 @@ async def login(
             target_type=AuditTarget.USER, target_id=user_id,
             details=SessionAuditDetails(event="login"), client_ip=client_ip,
             trace_id=getattr(request.state, "request_id", None))
+        await db.commit()
         
         return {"access_token": token}
 
@@ -152,6 +160,12 @@ async def register(
     Returns:
         dict[str, any]: A dictionary indicating success or failure.
     """
+    if not config.is_registration_domain_allowed(user.email):
+        raise HTTPException(
+            status_code=403,
+            detail="Bu e-posta alan adıyla kayıt yapılamaz.",
+        )
+
     async with app_db.get_app_db() as db:
         result = await db.execute(select(User).where(User.email == user.email))
         existing_user: User | None = result.scalars().first()
@@ -161,7 +175,8 @@ async def register(
         
         new_user: User = User(
             username=user.username,
-            email=user.email
+            email=user.email,
+            is_active=not config.REGISTRATION_REQUIRES_ACTIVATION,
         )
         try:
             new_user.set_password(user.password)
@@ -183,7 +198,12 @@ async def register(
         
         return {
             "success": True,
-            "message": "Registration successful! Redirecting to login page..."
+            "message": (
+                "Kayıt başvurunuz alındı. Yönetici hesabınızı etkinleştirdiğinde "
+                "giriş yapabilirsiniz."
+                if config.REGISTRATION_REQUIRES_ACTIVATION
+                else "Registration successful! Redirecting to login page..."
+            ),
         }
 
 
@@ -210,7 +230,8 @@ async def read_users_me(
 
     return schemas.User(
         username=current_user.username,
-        is_admin=is_admin
+        is_admin=is_admin,
+        is_platform_admin=is_platform_admin(current_user.username),
     )
 
 

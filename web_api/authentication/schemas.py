@@ -23,6 +23,7 @@ class User(BaseModel):
     """User response schema"""
     username: str
     is_admin: bool
+    is_platform_admin: bool = False
 
     class Config:
         from_attributes = True

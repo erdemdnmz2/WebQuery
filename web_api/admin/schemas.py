@@ -2,6 +2,7 @@
 Admin Schemas
 Pydantic models for admin approval endpoints
 """
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -111,3 +112,12 @@ class UserAssociationRequest(BaseModel):
     user_id: int
     database_id: int
     role: str # "READER", "WRITER", "ADMIN"
+
+
+class AdminUserSummary(BaseModel):
+    id: int
+    username: str
+    email: str
+    is_active: bool
+    status: str
+    created_at: datetime | None = None

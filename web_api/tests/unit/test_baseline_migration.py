@@ -8,7 +8,6 @@ from sqlalchemy.dialects import mssql
 
 from app_database.models import Base, Workspace
 
-
 WEB_API_DIR = Path(__file__).resolve().parents[2]
 
 
@@ -91,6 +90,31 @@ def test_query_decision_metadata_migration_creates_expected_columns(tmp_path: Pa
             column["name"] for column in inspector.get_columns("QueryData")
         }
         assert {"decision_reason", "decided_by", "decided_at"} <= query_data_columns
+    finally:
+        engine.dispose()
+
+
+def test_user_lifecycle_migration_creates_expected_columns(tmp_path: Path) -> None:
+    database_path = tmp_path / "user-lifecycle.db"
+    result = _run_upgrade(database_path)
+
+    assert result.returncode == 0, result.stderr
+
+    engine = create_engine(f"sqlite:///{database_path}")
+    try:
+        user_columns = {
+            column["name"] for column in inspect(engine).get_columns("Users")
+        }
+        assert {
+            "is_active",
+            "disabled_at",
+            "disabled_by",
+            "created_at",
+            "last_login_at",
+        } <= user_columns
+        assert "ix_Users_is_active" in {
+            index["name"] for index in inspect(engine).get_indexes("Users")
+        }
     finally:
         engine.dispose()
 

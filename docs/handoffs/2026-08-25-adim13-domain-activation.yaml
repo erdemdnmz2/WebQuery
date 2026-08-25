@@ -1,0 +1,158 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "Codex"
+  to: "WebQuery reviewer / next-session-agent"
+  created_at: "2026-08-25T16:53:08+03:00"
+  task: "Adım 13 (2.2) — şirket domainiyle kayıt, pasif kullanıcı ve platform aktivasyonu"
+
+  summary: >-
+    Şirket domaini allowlist'inde bulunan kullanıcıların kayıt sırasında Users
+    tablosuna oluşturulması, varsayılan olarak pasif tutulması ve platform
+    yöneticisinin kullanıcıyı etkinleştirebilmesi için backend ve frontend
+    altyapısı hazırlandı. Kullanıcıyı etkinleştirmek DB erişimi veya rol vermek
+    anlamına gelmez; bu iki işlem ayrı tutuldu.
+
+  scope:
+    completed:
+      - >-
+        ALLOWED_EMAIL_DOMAINS ile backend tarafında normalize edilmiş, tam
+        eşleşmeli ve fail-closed domain kontrolü eklendi.
+      - >-
+        İzin verilen domain'den gelen kayıt Users tablosunda oluşturuluyor;
+        REGISTRATION_REQUIRES_ACTIVATION=true iken kullanıcı is_active=false
+        olarak başlıyor.
+      - >-
+        PLATFORM_ADMINS allowlist'i ve platform_admin_required bağımlılığı
+        eklendi. Bu kapsam bilinçli olarak gerçek OWNER rolü yerine geçici
+        platform yetkisi olarak tanımlandı.
+      - >-
+        GET /api/admin/users ile kullanıcı listesi ve
+        POST /api/admin/users/{user_id}/enable ile etkinleştirme uçları eklendi.
+        Etkinleştirme disabled_at/disabled_by alanlarını temizliyor ve
+        USER_ENABLED audit kaydı oluşturuyor.
+      - >-
+        Frontend kayıt ekranında backend'in bekleyen aktivasyon mesajı
+        gösteriliyor; otomatik giriş varsayılmıyor.
+      - >-
+        Platform yöneticileri için Users sekmesi, bekleyen kullanıcı listesi
+        ve etkinleştirme aksiyonu eklendi.
+      - >-
+        Davranış SPEC-0016 ve karar ADR-0013 içinde kayda alındı; dışarıdaki
+        uygulama sırası dokümanında Adım 13 bu akışa göre güncellendi.
+    excluded:
+      - >-
+        Gerçek OWNER rolü, OWNER bootstrap akışı veya is_platform_owner veri
+        modeli uygulanmadı; bunlar Adım 20 kapsamındadır.
+      - >-
+        Kullanıcıya DB rolü/DB erişimi verme akışı değiştirilmedi. Mevcut
+        associate_user akışı ayrı bir yetkilendirme adımı olarak korunuyor.
+      - >-
+        E-posta doğrulama, davet gönderme ve mailbox sahipliği doğrulaması
+        uygulanmadı.
+      - >-
+        Production/staging migration çalıştırılmadı. Adım 13, Adım 12'deki
+        is_active migration'ını önkoşul olarak kullanıyor.
+
+  changed_files:
+    created:
+      - "docs/specs/SPEC-0016-domain-allowlisted-user-activation.md"
+      - "docs/adr/ADR-0013-domain-allowlisted-user-activation.md"
+      - "frontend/components/app/admin/UsersTab.tsx"
+      - "web_api/common/platform_access.py"
+      - "web_api/tests/integration/test_domain_registration_activation.py"
+    modified:
+      - "frontend/DESIGN.md"
+      - "frontend/pages/Admin.tsx"
+      - "frontend/pages/Register.tsx"
+      - "frontend/services/api.ts"
+      - "frontend/types.ts"
+      - "web_api/.env.example"
+      - "web_api/admin/router.py"
+      - "web_api/admin/schemas.py"
+      - "web_api/admin/services.py"
+      - "web_api/authentication/config.py"
+      - "web_api/authentication/router.py"
+      - "web_api/authentication/schemas.py"
+      - "web_api/common/audit_details.py"
+      - "web_api/common/config_guard.py"
+      - "web_api/dependencies.py"
+      - "web_api/tests/conftest.py"
+    deleted: []
+
+  decisions:
+    -
+      decision: "Domain allowlist kayıt kapısıdır; tek başına erişim yetkisi değildir."
+      rationale: >-
+        Şirket içi kullanıcı beklemeden sisteme kaydolabilsin, ancak admin
+        aktivasyonu olmadan uygulamayı kullanamasın. Böylece kayıt ile DB
+        erişimi ve uygulama yetkisi birbirine karıştırılmıyor.
+      recorded_in:
+        - "docs/specs/SPEC-0016-domain-allowlisted-user-activation.md"
+        - "docs/adr/ADR-0013-domain-allowlisted-user-activation.md"
+    -
+      decision: "Aktivasyon için Adım 12'deki is_active alanı kullanıldı."
+      rationale: >-
+        Yeni bir pending kullanıcı durumu eklemek yerine mevcut auth
+        middleware ve login kontrolleri yeniden kullanılıyor. Pasif ama
+        devre dışı bırakılmamış kullanıcı bekleyen aktivasyon olarak ele alınıyor.
+    -
+      decision: "PLATFORM_ADMINS geçici platform kapsamıdır; OWNER Adım 20'ye bırakıldı."
+      rationale: >-
+        Şu an gerçek OWNER altyapısı olmadığı için bu adımda yeni ve yarım bir
+        rol modeli oluşturulmadı. Platform yönetimi ile DB ADMIN yetkisi ayrı
+        tutuldu.
+
+  validation:
+    commands_run:
+      -
+        command: "cd web_api && python3 -m pytest -q"
+        result: "passed"
+        evidence: "106 passed, 1 warning"
+      -
+        command: "cd web_api && python3 -m pytest -q tests/integration/test_domain_registration_activation.py"
+        result: "passed"
+        evidence: "3 passed, 1 warning"
+      -
+        command: "cd frontend && npm run typecheck && npm run build && npm run audit:api && npm run audit:contrast"
+        result: "passed"
+        evidence: "TypeScript, Vite build, API contract audit ve contrast audit başarılı"
+      -
+        command: "cd web_api && python3 -m compileall -q web_api"
+        result: "passed"
+        evidence: "Python derleme kontrolü başarılı"
+      -
+        command: "git diff --check"
+        result: "passed"
+        evidence: "Whitespace hatası bulunmadı"
+      -
+        command: "cd web_api && ruff check web_api/"
+        result: "informational-failure"
+        evidence: >-
+          Repo genelinde mevcut 54 bulgu var. Yeni akış için hedefli import
+          kontrolleri düzeltildi; kalan bulgular çoğunlukla mevcut BLE001,
+          naive-datetime ve benzeri repo geneli lint borçlarıdır.
+
+  known_risks:
+    - >-
+      PLATFORM_ADMINS boşsa kullanıcılar oluşturulabilir ancak hiçbir platform
+      yöneticisi aktivasyon yapamaz; deployment öncesi env kontrolü gereklidir.
+    - >-
+      Domain kontrolü mailbox sahipliğini kanıtlamaz. E-posta doğrulama veya
+      davet akışı ilerleyen bir güvenlik adımıdır.
+    - >-
+      Gerçek OWNER rolü henüz mevcut değildir ve platform yönetimi env allowlist
+      üzerinden yapılmaktadır.
+    - >-
+      Mevcut kullanıcı devre dışı bırakma endpoint'i Adım 12 sözleşmesi gereği
+      DB admin kapsamındadır; merkezi platform yöneticisi kapsamına taşınması
+      OWNER/platform yetki tasarımıyla birlikte ayrıca ele alınmalıdır.
+    - >-
+      Adım 12 migration'ı staging/production ortamlarında alembic upgrade head
+      ile uygulanmadan bu akış güvenle kullanıma alınmamalıdır.
+
+  next_step: >-
+    Adım 12 migration'ını staging'de doğrula; ardından Adım 14'te username
+    tabanlı login throttle'ı uygula. Sonraki kritik yetki adımı Adım 16'da
+    role-based DB credential akışıdır; gerçek OWNER rolü Adım 20'de ele alınır.
+
+  open_questions: []

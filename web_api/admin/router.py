@@ -11,11 +11,17 @@ from sqlalchemy import select
 from app_database.app_database import AppDatabase
 from app_database.models import AuditLog, User
 from common.audit_actions import AuditAction, AuditTarget
-from dependencies import admin_required, get_admin_service, get_app_db
+from dependencies import (
+    admin_required,
+    get_admin_service,
+    get_app_db,
+    platform_admin_required,
+)
 
 from .schemas import (
     AdminApprovalsList,
     AdminPreviewResponse,
+    AdminUserSummary,
     ApprovalRequest,
     DatabaseAddRequest,
     DatabaseListResponse,
@@ -249,6 +255,64 @@ async def associate_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=result.get("error", "Failed to associate user")
         )
+
+
+@router.post("/users/{user_id}/disable")
+async def disable_user(
+    user_id: int,
+    http_request: Request,
+    current_admin: User = Depends(admin_required),
+    service: AdminService = Depends(get_admin_service),
+):
+    """Disable a user and revoke all of their active sessions."""
+    return await service.disable_user(
+        user_id=user_id,
+        admin_user=current_admin,
+        client_ip=_peer_ip(http_request),
+        trace_id=getattr(http_request.state, "request_id", None),
+    )
+
+
+@router.get("/users", response_model=list[AdminUserSummary])
+async def list_users(
+    _platform_admin: User = Depends(platform_admin_required),
+    service: AdminService = Depends(get_admin_service),
+):
+    """List users for the platform-scoped activation console."""
+    users = await service.list_users()
+    return [
+        AdminUserSummary(
+            id=user.id,
+            username=user.username,
+            email=user.email,
+            is_active=bool(user.is_active),
+            status=(
+                "active"
+                if user.is_active
+                else "disabled"
+                if user.disabled_at is not None
+                else "pending"
+            ),
+            created_at=user.created_at,
+        )
+        for user in users
+    ]
+
+
+@router.post("/users/{user_id}/enable")
+async def enable_user(
+    user_id: int,
+    http_request: Request,
+    platform_admin: User = Depends(platform_admin_required),
+    service: AdminService = Depends(get_admin_service),
+):
+    """Enable a pending or disabled account at platform scope."""
+    return await service.enable_user(
+        user_id=user_id,
+        admin_user=platform_admin,
+        client_ip=_peer_ip(http_request),
+        trace_id=getattr(http_request.state, "request_id", None),
+    )
 
 
 @router.get("/audit_log")

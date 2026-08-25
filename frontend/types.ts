@@ -10,6 +10,16 @@
 export interface User {
   username: string;
   is_admin: boolean;
+  is_platform_admin: boolean;
+}
+
+export interface AdminUser {
+  id: number;
+  username: string;
+  email: string;
+  is_active: boolean;
+  status: 'pending' | 'active' | 'disabled';
+  created_at?: string | null;
 }
 
 export type WorkspaceStatus =

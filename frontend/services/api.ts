@@ -2,6 +2,7 @@ import type {
   DatabaseInfo,
   DatabaseSchema,
   GeneratedCredentials,
+  AdminUser,
   MaskingRule,
   PendingQuery,
   PreviewResponse,
@@ -268,6 +269,11 @@ export const api = {
     request<{ success?: boolean; message?: string }>('/api/admin/associate_user', {
       method: 'POST',
       body: payload,
+    }),
+  platformUsers: () => request<AdminUser[]>('/api/admin/users'),
+  enableUser: (userId: number) =>
+    request<{ success?: boolean; message?: string }>(`/api/admin/users/${userId}/enable`, {
+      method: 'POST',
     }),
 };
 

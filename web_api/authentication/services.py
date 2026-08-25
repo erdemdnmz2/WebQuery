@@ -124,12 +124,16 @@ async def get_current_user(
         except (TypeError, ValueError):
             raise credentials_exception
     
-    # Retrieve user from AppDatabase
-    async with app_db.get_app_db() as db:
-        result = await db.execute(select(User).filter(User.id == int(token_data.sub)))
-        user = result.scalars().first()
-    
+    # AuthMiddleware loads the user once per request and shares it through
+    # request.state. Keep a database fallback so this dependency remains safe
+    # when called without the middleware (for example in isolated tests).
+    user = getattr(request.state, "authenticated_user", None)
     if user is None:
+        async with app_db.get_app_db() as db:
+            result = await db.execute(select(User).filter(User.id == int(token_data.sub)))
+            user = result.scalars().first()
+
+    if user is None or not user.is_active:
         raise credentials_exception
     
     return user

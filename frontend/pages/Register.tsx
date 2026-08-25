@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { CheckCircleIcon, EyeIcon, EyeSlashIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import { api, errorMessage } from '../services/api';
 import { AuthLayout } from '../components/app/AuthLayout';
@@ -11,7 +11,7 @@ import { cn } from '../lib/cn';
 /** Four independent checks, shown live so the rule is never a surprise. */
 function passwordChecks(password: string) {
   return [
-    { label: 'En az 8 karakter', ok: password.length >= 8 },
+    { label: 'En az 12 karakter', ok: password.length >= 12 },
     { label: 'Bir büyük harf', ok: /[A-ZĞÜŞİÖÇ]/.test(password) },
     { label: 'Bir rakam', ok: /\d/.test(password) },
     { label: 'Bir sembol', ok: /[^\p{L}\d]/u.test(password) },
@@ -19,13 +19,13 @@ function passwordChecks(password: string) {
 }
 
 const Register: React.FC = () => {
-  const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const checks = useMemo(() => passwordChecks(password), [password]);
@@ -36,9 +36,9 @@ const Register: React.FC = () => {
     setError(null);
     setSubmitting(true);
     try {
-      await api.register(username, email, password);
+      const result = await api.register(username, email, password);
       setDone(true);
-      window.setTimeout(() => navigate('/login'), 1400);
+      setSuccessMessage(result.message ?? 'Kayıt başvurunuz alındı.');
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -76,7 +76,7 @@ const Register: React.FC = () => {
             className="flex items-start gap-2 rounded-sm border border-success-line bg-success-soft px-3 py-2.5 text-[13px] text-success"
           >
             <CheckCircleIcon size={15} weight="fill" className="mt-px shrink-0" />
-            <span>Hesap oluşturuldu. Giriş ekranına yönlendiriliyorsunuz.</span>
+            <span>{successMessage ?? 'Kayıt başvurunuz alındı.'} Giriş yapmadan önce hesabınızın etkinleştirilmesi gerekebilir.</span>
           </div>
         )}
 

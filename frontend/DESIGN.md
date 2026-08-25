@@ -258,7 +258,7 @@ varsa ikisi de `secondary` olur.
 | `CommandPalette.tsx` | ⌘K; Git / Eylem / Çalışma alanları / Görünüm / Hesap grupları |
 | `ResultPanel.tsx` | Sonuç durumları + dışa aktarma menüsü |
 | `SplitPane.tsx` | Sürükle veya ok tuşuyla ayarlanır, oran kalıcı, `lg` altında dikey yığılır |
-| `admin/*.tsx` | Onaylar, inceleme diyaloğu, maskeleme sekmesi, kimlik bilgisi diyaloğu |
+| `admin/*.tsx` | Onaylar, inceleme diyaloğu, maskeleme, kimlik bilgisi ve kullanıcı aktivasyonu sekmeleri |
 
 ## 8. Durum örüntüleri
 
@@ -468,7 +468,7 @@ Tekrarlanan istek ikinci kez yenileme denemez.
 | `PUT /api/workspaces/{id}` yalnız `query` ve `status` kabul eder | Ad, açıklama ve hedef arayüzden güncellenemez |
 | `GET /api/me` e-posta döndürmez | Hesap menüsü kullanıcı adı ve rol gösterir |
 | `POST /api/workspaces` `{success, workspace_id}` döndürür | Oluşturulan kayıt ayrıca okunur |
-| `POST /api/admin/associate_user` `user_id` ister, kullanıcı listeleyen endpoint yok | Yetkilendirme ekranı yapılamadı |
+| `POST /api/admin/associate_user` `user_id` ister; kullanıcı listesi/aktivasyonu platform admin ekranında bulunur, DB rol ataması ayrı kapsamlıdır | Kullanıcı aktivasyon ekranı yapılabilir; DB rol atama ekranı ilgili DB ADMIN kapsamıyla ayrıca tasarlanmalıdır |
 | `GET /api/admin/audit_log` var, arayüzü yok | Denetim kayıtları yalnız API'den okunur |
 
 ### 14.8 Otomatik denetim

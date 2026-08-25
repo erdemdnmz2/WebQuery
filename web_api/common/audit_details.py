@@ -119,8 +119,8 @@ class QueryPreviewAuditDetails(BaseModel):
 
 class UserLifecycleAuditDetails(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    event: Literal["registered"]
-    source: Literal["web"]
+    event: Literal["registered", "disabled", "enabled"]
+    source: Literal["web", "admin"]
 
 
 class SessionAuditDetails(BaseModel):

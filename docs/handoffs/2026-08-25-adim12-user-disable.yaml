@@ -1,0 +1,84 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "Codex"
+  to: "WebQuery reviewer / next-session-agent"
+  created_at: "2026-08-25T15:24:01+03:00"
+  task: "Adım 12 (`2.1`) — kullanıcı devre dışı bırakma ve istek başı aktiflik kontrolü"
+
+  scope:
+    completed:
+      - "Users tablosu/modeli için is_active, disabled_at, disabled_by, created_at ve last_login_at alanları eklendi."
+      - "Mevcut şemalar için idempotent Alembic user lifecycle migration'ı eklendi; is_active index'i oluşturuluyor."
+      - "Admin-only POST /api/admin/users/{user_id}/disable endpoint'i eklendi."
+      - "Disable işlemi kullanıcıyı silmeden pasifleştiriyor, tüm aktif UserSessions kayıtlarını aynı transaction içinde revoke ediyor ve user_disabled audit kaydı yazıyor."
+      - "Admin'in kendi hesabını kapatması ve bulunmayan kullanıcı hedeflemesi için güvenli hata sözleşmesi eklendi."
+      - "AuthMiddleware token/session kontrollerinden sonra User kaydını yükleyip is_active kontrol ediyor; kullanıcıyı request.state.authenticated_user içine aktarıyor."
+      - "get_current_user middleware state'ini yeniden kullanıyor; middleware dışı kullanım için kullanıcı sorgusu ve is_active fallback'i korunuyor."
+      - "Login ve middleware'den muaf refresh akışında pasif kullanıcı kontrolü korunuyor; başarılı login'de last_login_at güncelleniyor."
+      - "Spec, ADR, migration assertion testi ve kullanıcı lifecycle entegrasyon testleri eklendi."
+    excluded:
+      - "Mevcut /api/logout endpoint'i değiştirilmedi; zaten access token blacklist, mevcut session revoke, cookie temizleme ve audit davranışını sağlıyor."
+      - "Kullanıcıyı yeniden etkinleştirme endpoint'i eklenmedi."
+      - "Kullanıcı silme, anonimleştirme ve kullanıcı yönetimi UI'ı bu adımın dışında bırakıldı."
+      - "Production/staging veritabanında migration çalıştırılmadı."
+
+  changed_files:
+    created:
+      - "docs/specs/SPEC-0015-user-lifecycle-disable.md"
+      - "docs/adr/ADR-0012-user-disable-enforcement.md"
+      - "docs/handoffs/2026-08-25-adim12-user-disable.yaml"
+      - "web_api/migrations/versions/b4c6d8e0f1a2_add_user_lifecycle.py"
+      - "web_api/tests/integration/test_user_lifecycle.py"
+    modified:
+      - "web_api/app_database/models.py"
+      - "web_api/middlewares/auth_middleware.py"
+      - "web_api/authentication/services.py"
+      - "web_api/authentication/router.py"
+      - "web_api/admin/router.py"
+      - "web_api/admin/services.py"
+      - "web_api/admin/exceptions.py"
+      - "web_api/common/audit_details.py"
+      - "web_api/tests/unit/test_baseline_migration.py"
+    deleted: []
+
+  decisions:
+    - decision: "Hesap kapatma soft-disable olarak uygulanacak; kullanıcı satırı silinmeyecek."
+      rationale: "Foreign key/audit geçmişini korurken erişimi kesmek ve offboarding'i geri izlenebilir yapmak."
+      recorded_in: "docs/specs/SPEC-0015-user-lifecycle-disable.md"
+    - decision: "Aktiflik kontrolü AuthMiddleware'de yapılacak; yüklenen User request.state.authenticated_user ile dependency katmanına aktarılacak."
+      rationale: "Middleware user ID'yi zaten çıkarıyor; korumalı istek endpoint'e ulaşmadan durduruluyor ve aynı istek içinde ikinci User sorgusu yapılmıyor."
+      recorded_in: "docs/adr/ADR-0012-user-disable-enforcement.md"
+    - decision: "Login ve refresh akışlarında ayrı is_active kontrolleri korunacak."
+      rationale: "Bu iki endpoint AuthMiddleware tarafından bilinçli olarak muaf tutuluyor."
+      recorded_in: "docs/specs/SPEC-0015-user-lifecycle-disable.md; docs/adr/ADR-0012-user-disable-enforcement.md"
+    - decision: "User disable, session revoke ve audit kaydı tek transaction içinde yazılacak."
+      rationale: "Hesap pasif görünüp session'ların açık kalması veya audit kaydının eksik olması engelleniyor."
+      recorded_in: "docs/specs/SPEC-0015-user-lifecycle-disable.md"
+
+  validation:
+    commands_run:
+      - command: "cd web_api && ../.venv/bin/pytest -q"
+        result: "passed"
+        evidence: "103 test geçti; 1 mevcut Pydantic deprecation warning'i var."
+      - command: "cd web_api && ../.venv/bin/pytest -q tests/unit/test_baseline_migration.py tests/integration/test_user_lifecycle.py"
+        result: "passed"
+        evidence: "9 test geçti; lifecycle migration, endpoint, middleware, login/refresh, session revoke ve audit doğrulandı."
+      - command: "cd web_api && ../.venv/bin/ruff check migrations/versions/b4c6d8e0f1a2_add_user_lifecycle.py tests/integration/test_user_lifecycle.py tests/unit/test_baseline_migration.py admin/exceptions.py"
+        result: "passed"
+        evidence: "Yeni migration/test/exception kodu için Ruff kontrolü başarılı."
+      - command: "cd web_api && ../.venv/bin/ruff check --select I,SIM,DTZ admin/services.py app_database/models.py authentication/router.py authentication/services.py middlewares/auth_middleware.py"
+        result: "passed"
+        evidence: "Değişen kodda import, context-manager ve datetime lint kontrolleri başarılı."
+      - command: "git diff --check"
+        result: "passed"
+        evidence: "Whitespace/diff bütünlük hatası yok."
+
+  open_questions: []
+
+  known_risks:
+    - "Migration production/staging veritabanında henüz uygulanmadı; deploy öncesi alembic upgrade head çalıştırılmalı."
+    - "Her korumalı istekte aktif kullanıcı için merkezi DB okuması yapılıyor; request.state paylaşımı aynı istekteki ikinci User sorgusunu önlüyor."
+    - "Disable ile aynı anda middleware kontrolünü geçmiş in-flight bir istek tamamlanabilir; sonraki istekler engellenir."
+    - "Yeniden etkinleştirme akışı bulunmadığı için pasif kullanıcı yalnızca doğrudan veritabanı/gelecek admin özelliği ile geri açılabilir."
+
+  next_step: "Staging veritabanında `cd web_api && alembic upgrade head` çalıştırıp migration'ı doğrulayın; ardından disable endpoint'ini admin UI veya API istemcisine bağlayın."

@@ -6,10 +6,12 @@ import os
 
 from fastapi import Request
 from fastapi.exceptions import HTTPException
+from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import RedirectResponse
 from starlette.responses import Response as StarletteResponse
 
+from app_database.models import User
 from authentication.services import get_user_id_from_payload, verify_token
 from authentication.sessions import session_alive
 from common.logging_config import user_id_var
@@ -78,6 +80,24 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 app_db = request.app.state.context.app_db
                 if not await session_alive(app_db, int(session_id), int(user_id)):
                     raise HTTPException(status_code=401, detail="Session has been revoked")
+
+            # The middleware already has the user ID from the JWT. Load the
+            # complete user once so account disablement takes effect before
+            # any endpoint handler runs. The dependency reuses this object.
+            app_db = request.app.state.context.app_db
+            try:
+                user_id_int = int(user_id)
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(status_code=401, detail="Invalid token") from exc
+
+            async with app_db.get_app_db() as db:
+                result = await db.execute(select(User).where(User.id == user_id_int))
+                authenticated_user = result.scalars().first()
+
+            if authenticated_user is None or not authenticated_user.is_active:
+                raise HTTPException(status_code=401, detail="Invalid token")
+
+            request.state.authenticated_user = authenticated_user
         except Exception as e:
             print(f"Auth verification failed: {e}")
             if request.url.path.startswith("/api/"):

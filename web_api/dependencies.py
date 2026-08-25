@@ -9,6 +9,7 @@ from admin.services import AdminService
 from app_database.app_database import AppDatabase
 from app_database.models import User, UserDatabaseAssociation, Workspace
 from authentication.services import get_current_user
+from common.platform_access import is_platform_admin
 from common.roles import any_admin
 from database_provider import DatabaseProvider
 from notification import NotificationService
@@ -111,6 +112,18 @@ async def admin_required(
         if not any_admin(assocs):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
             
+    return current_user
+
+
+async def platform_admin_required(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Require platform scope; database ADMIN is deliberately insufficient."""
+    if not current_user or not is_platform_admin(current_user.username):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Platform yöneticisi erişimi gerekli.",
+        )
     return current_user
 
 

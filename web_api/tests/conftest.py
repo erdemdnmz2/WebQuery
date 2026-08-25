@@ -13,6 +13,8 @@ os.environ.setdefault(
 )
 os.environ.setdefault("CENTRAL_DB_USER", "test-central-user")
 os.environ.setdefault("CENTRAL_DB_PASSWORD", "test-central-password")
+os.environ.setdefault("ALLOWED_EMAIL_DOMAINS", "example.com")
+os.environ.setdefault("REGISTRATION_REQUIRES_ACTIVATION", "false")
 
 # slack_integration/config.py reads these at import time with no default;
 # `from app import app` below pulls that module in transitively. Without a

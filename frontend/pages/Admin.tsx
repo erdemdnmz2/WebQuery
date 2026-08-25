@@ -1,17 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowClockwiseIcon, LockKeyIcon, ShieldCheckIcon } from '@phosphor-icons/react';
+import { ArrowClockwiseIcon, LockKeyIcon, ShieldCheckIcon, UserCircleIcon } from '@phosphor-icons/react';
 import { api, errorMessage, UnauthorizedError } from '../services/api';
 import { cn } from '../lib/cn';
 import { usePersistentState } from '../lib/hooks';
 import { useSession } from '../lib/session';
 import { ApprovalsTab } from '../components/app/admin/ApprovalsTab';
 import { MaskingTab } from '../components/app/admin/MaskingTab';
+import { UsersTab } from '../components/app/admin/UsersTab';
 import { IconButton } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import type { PendingQuery } from '../types';
 
-type Tab = 'approvals' | 'masking';
+type Tab = 'approvals' | 'masking' | 'users';
 
 const Admin: React.FC = () => {
   const { user, status } = useSession();
@@ -19,6 +20,7 @@ const Admin: React.FC = () => {
   const [requests, setRequests] = useState<PendingQuery[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const visibleTab = tab === 'users' && !user?.is_platform_admin ? 'approvals' : tab;
 
   const loadRequests = useCallback(async () => {
     setLoading(true);
@@ -36,7 +38,7 @@ const Admin: React.FC = () => {
     void loadRequests();
   }, [loadRequests]);
 
-  if (status === 'authenticated' && user && !user.is_admin) {
+  if (status === 'authenticated' && user && !user.is_admin && !user.is_platform_admin) {
     return (
       <EmptyState
         className="my-auto"
@@ -63,7 +65,7 @@ const Admin: React.FC = () => {
           </IconButton>
           <SegmentedControl<Tab>
             label="Yönetim bölümü"
-            value={tab}
+            value={visibleTab}
             onChange={setTab}
             segments={[
               {
@@ -73,15 +75,20 @@ const Admin: React.FC = () => {
                 count: requests.length,
               },
               { value: 'masking', label: 'Veritabanı ve maskeleme', icon: <LockKeyIcon size={14} /> },
+              ...(user?.is_platform_admin
+                ? [{ value: 'users' as const, label: 'Kullanıcılar', icon: <UserCircleIcon size={14} /> }]
+                : []),
             ]}
           />
         </div>
       </header>
 
-      {tab === 'approvals' ? (
+      {visibleTab === 'approvals' ? (
         <ApprovalsTab requests={requests} loading={loading} error={error} reload={() => void loadRequests()} />
-      ) : (
+      ) : visibleTab === 'masking' ? (
         <MaskingTab />
+      ) : (
+        <UsersTab />
       )}
     </div>
   );
