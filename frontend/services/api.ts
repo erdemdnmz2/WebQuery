@@ -45,6 +45,20 @@ export class UnauthorizedError extends ApiError {
 /** The analyzer refused the query and sent it to an administrator instead. */
 export const QUERY_SENT_FOR_APPROVAL = 'QUERY_REJECTED_BY_ANALYZER';
 
+/**
+ * The statement did not parse, so no role decision was possible. Distinct from
+ * QUERY_REJECTED_BY_ANALYZER: this is the user's SQL to fix, not an approval
+ * to wait for.
+ */
+export const QUERY_SYNTAX_ERROR = 'QUERY_SYNTAX_ERROR';
+
+/**
+ * Someone decided this approval request first. The decision is atomic on the
+ * server, so the loser of the race gets this instead of overwriting a settled
+ * status; the only correct response is to reload the pending list.
+ */
+export const APPROVAL_CONFLICT = 'APPROVAL_CONFLICT';
+
 function redirectToLogin() {
   const hash = window.location.hash;
   if (!hash.includes('/login') && !hash.includes('/register')) {
@@ -85,11 +99,43 @@ async function readError(response: Response): Promise<ParsedError> {
 
 interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
-  /** Login and register handle 401 themselves instead of redirecting. */
+  /**
+   * Login, register and the refresh call itself handle 401 on their own: they
+   * neither redirect nor try to renew a session that is not established yet.
+   */
   skipAuthRedirect?: boolean;
 }
 
-async function request<T>(url: string, options: RequestOptions = {}): Promise<T> {
+/**
+ * The access cookie expires in ACCESS_TOKEN_EXPIRE_MINUTES (20 by default)
+ * while the rotating refresh cookie lives for hours. A 401 in the middle of a
+ * session therefore usually means "mint a new access token", not "sign in
+ * again", so one refresh round trip is spent before giving up on the session.
+ *
+ * Refresh tokens are single use. Concurrent 401s must not each post their own
+ * refresh, or every request but one would burn a token the next request still
+ * needs, so they share one in-flight attempt.
+ */
+let refreshInFlight: Promise<boolean> | null = null;
+
+function refreshSession(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight;
+
+  const attempt = request<{ ok?: boolean }>('/api/refresh', {
+    method: 'POST',
+    skipAuthRedirect: true,
+  })
+    .then(() => true)
+    .catch(() => false)
+    .finally(() => {
+      refreshInFlight = null;
+    });
+
+  refreshInFlight = attempt;
+  return attempt;
+}
+
+async function request<T>(url: string, options: RequestOptions = {}, retried = false): Promise<T> {
   const { body, skipAuthRedirect, headers, ...rest } = options;
 
   let response: Response;
@@ -105,6 +151,9 @@ async function request<T>(url: string, options: RequestOptions = {}): Promise<T>
   }
 
   if (response.status === 401) {
+    if (!retried && !skipAuthRedirect && (await refreshSession())) {
+      return request<T>(url, options, true);
+    }
     if (!skipAuthRedirect) redirectToLogin();
     throw new UnauthorizedError();
   }
@@ -191,8 +240,16 @@ export const api = {
       method: 'POST',
       body: { show_results: showResults },
     }),
-  rejectQuery: (workspaceId: number) =>
-    request<void>(`/api/admin/reject_query/${workspaceId}`, { method: 'POST' }),
+  /**
+   * The reviewer has to say why. The backend enforces 3-500 characters and
+   * stores the reason with the decision, where the requester and the audit log
+   * both read it, so an empty rejection is refused rather than defaulted.
+   */
+  rejectQuery: (workspaceId: number, reason: string) =>
+    request<void>(`/api/admin/reject_query/${workspaceId}`, {
+      method: 'POST',
+      body: { reason },
+    }),
 
   registeredDatabases: () =>
     request<{ databases?: RegisteredDatabase[] }>('/api/admin/databases').then((data) => data.databases ?? []),

@@ -1,4 +1,4 @@
-import { ApiError, QUERY_SENT_FOR_APPROVAL, errorMessage } from '../services/api';
+import { ApiError, QUERY_SENT_FOR_APPROVAL, QUERY_SYNTAX_ERROR, errorMessage } from '../services/api';
 import type { ResultRow, SqlResponse } from '../types';
 
 /**
@@ -74,6 +74,12 @@ export function outcomeFromError(error: unknown): ExecutionOutcome {
   if (error instanceof ApiError) {
     outcome.traceId = error.traceId;
     outcome.sentForApproval = error.code === QUERY_SENT_FOR_APPROVAL;
+    if (error.code === QUERY_SYNTAX_ERROR) {
+      // The analyzer could not parse the statement, so it never reached a role
+      // decision and no approval request was created. Saying so keeps the user
+      // on their own SQL instead of waiting on an administrator.
+      outcome.error = 'Sorgu çözümlenemedi. SQL sözdizimini kontrol edip tekrar deneyin.';
+    }
   }
   return outcome;
 }

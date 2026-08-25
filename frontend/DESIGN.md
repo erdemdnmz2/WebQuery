@@ -422,9 +422,46 @@ döndürür. `ApiError` bunlardan `code` ve `traceId` alanlarını taşır.
 - **`QUERY_REJECTED_BY_ANALYZER` bir hata değildir.** Risk analizi sorguyu
   çalışma alanı olarak kaydedip yöneticiye yönlendirmiştir. Arayüz bunu kırmızı
   başarısızlık değil, sarı bekleme durumu olarak gösterir.
+- **`QUERY_SYNTAX_ERROR` ile karıştırmayın.** Bu kod, ifadenin hiç
+  çözümlenemediğini ve bir rol kararına varılmadığını söyler; çalışma alanı da
+  oluşturulmaz. Kullanıcı bir yöneticiyi beklemez, kendi SQL'ine döner.
 - `trace_id` kullanıcıya gösterilir; destek talebinde tek bağlayıcı referans odur.
 
-### 14.5 Bilinen sözleşme sınırları
+### 14.5 Oturum kendini yeniler
+
+Erişim çerezi kısa ömürlüdür (`ACCESS_TOKEN_EXPIRE_MINUTES`, varsayılan 20
+dakika); dönen refresh çerezi saatlerce yaşar. Oturum ortasında gelen 401
+neredeyse her zaman "yeni erişim jetonu üret" demektir, "tekrar giriş yap"
+değil.
+
+`services/api.ts` içindeki `request`, yönlendirmeden önce bir kez
+`POST /api/refresh` dener ve başarılıysa özgün isteği aynı gövdeyle tekrarlar.
+Tekrarlanan istek ikinci kez yenileme denemez.
+
+- **Refresh jetonu tek kullanımlıktır.** Aynı anda 401 alan istekler kendi
+  yenilemelerini gönderirse biri hariç hepsi bir sonraki isteğin ihtiyaç duyduğu
+  jetonu yakar. Bu yüzden uçuştaki tek bir yenileme sözü paylaştırılır
+  (`refreshInFlight`).
+- **Giriş, kayıt ve yenilemenin kendisi bu yolun dışındadır.** Üçünde de 401
+  normal sonuçtur; henüz kurulmamış bir oturum yenilenemez. `skipAuthRedirect`
+  bu üçünü işaretler.
+- **Arayüz jetonu görmez.** Çerezler `httponly`'dir; yenileme yalnızca çerezle
+  çalışır. Jetonu okumaya, saklamaya veya bir gövdeye yazmaya çalışmayın.
+
+### 14.6 Onay kararı geri alınamaz ve gerekçelidir
+
+- **Reddetme gerekçe ister.** Backend 3-500 karakter zorunlu tutar. Arayüz aynı
+  kuralı önden uygular ki kullanıcı yazdığını 422 ile kaybetmesin. İstemci
+  doğrulaması sunucununkinin yerine geçmez, önüne geçer.
+- **Gerekçe talep sahibine gider.** Karar servisi çalışma alanının açıklamasını
+  `"Rejected by <yönetici>: <gerekçe>"` olarak yazar ve çalışma alanları listesi
+  bu açıklamayı gösterir. Gerekçe alanının yardım metni bunu vaat eder; vaadi
+  bozacak bir değişiklik yardım metnini de düzeltmelidir.
+- **`APPROVAL_CONFLICT` yeniden denenmez.** Karar sunucuda atomiktir; 409 alan
+  taraf yarışı kaybetmiştir. Bayat olan karar değil listedir: uyarı gösterilir,
+  diyalog kapanır, liste yenilenir.
+
+### 14.7 Bilinen sözleşme sınırları
 
 | Sınır | Sonuç |
 | --- | --- |
@@ -432,8 +469,9 @@ döndürür. `ApiError` bunlardan `code` ve `traceId` alanlarını taşır.
 | `GET /api/me` e-posta döndürmez | Hesap menüsü kullanıcı adı ve rol gösterir |
 | `POST /api/workspaces` `{success, workspace_id}` döndürür | Oluşturulan kayıt ayrıca okunur |
 | `POST /api/admin/associate_user` `user_id` ister, kullanıcı listeleyen endpoint yok | Yetkilendirme ekranı yapılamadı |
+| `GET /api/admin/audit_log` var, arayüzü yok | Denetim kayıtları yalnız API'den okunur |
 
-### 14.6 Otomatik denetim
+### 14.8 Otomatik denetim
 
 ```bash
 npm --prefix frontend run audit:api

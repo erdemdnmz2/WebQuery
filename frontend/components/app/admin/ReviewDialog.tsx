@@ -1,15 +1,21 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { CheckIcon, EyeIcon, ProhibitIcon, ShareNetworkIcon } from '@phosphor-icons/react';
-import { api, errorMessage } from '../../../services/api';
+import { APPROVAL_CONFLICT, ApiError, api, errorMessage } from '../../../services/api';
 import { formatCount } from '../../../lib/format';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
 import { DataGrid } from '../../ui/DataGrid';
 import { Dialog } from '../../ui/Dialog';
 import { EmptyState } from '../../ui/EmptyState';
+import { Field } from '../../ui/Field';
+import { Textarea } from '../../ui/Input';
 import { useToast } from '../../ui/Toast';
 import { CodeEditor } from '../CodeEditor';
 import type { PendingQuery, PreviewResponse } from '../../../types';
+
+/** Mirrors the RejectRequest Pydantic field so the server never has to refuse. */
+const REASON_MIN = 3;
+const REASON_MAX = 500;
 
 export interface ReviewDialogProps {
   request: PendingQuery | null;
@@ -34,6 +40,9 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [deciding, setDeciding] = useState(false);
+  const [reason, setReason] = useState('');
+  const [reasonError, setReasonError] = useState<string | null>(null);
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
 
   const previewRows = preview?.data ?? [];
   /* The service reports its row cap in the message, not as a flag. */
@@ -52,12 +61,29 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
     }
   };
 
+  const resetDecisionState = () => {
+    setPreview(null);
+    setPreviewError(null);
+    setReason('');
+    setReasonError(null);
+  };
+
   const decide = async (action: 'reject' | 'approve' | 'approve-share') => {
     if (!request) return;
+
+    const trimmedReason = reason.trim();
+    if (action === 'reject' && trimmedReason.length < REASON_MIN) {
+      // Caught here rather than at the server so the reviewer keeps what they
+      // typed and lands on the field that needs work.
+      setReasonError(`Red gerekçesi en az ${REASON_MIN} karakter olmalıdır.`);
+      reasonRef.current?.focus();
+      return;
+    }
+
     setDeciding(true);
     try {
       if (action === 'reject') {
-        await api.rejectQuery(request.workspace_id);
+        await api.rejectQuery(request.workspace_id, trimmedReason);
         toast.success('Talep reddedildi', request.username);
       } else {
         await api.approveQuery(request.workspace_id, action === 'approve-share');
@@ -68,10 +94,17 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
             : 'Sonuçlar kullanıcıyla paylaşılmadı.',
         );
       }
-      setPreview(null);
-      setPreviewError(null);
+      resetDecisionState();
       onDecided();
     } catch (caught) {
+      if (caught instanceof ApiError && caught.code === APPROVAL_CONFLICT) {
+        // Another reviewer got there first. The decision is already final on
+        // the server, so the list is what is stale here, not the request.
+        toast.warning('Bu talep başka bir yönetici tarafından sonuçlandırıldı', 'Liste yenilendi.');
+        resetDecisionState();
+        onDecided();
+        return;
+      }
       toast.error('İşlem tamamlanamadı', errorMessage(caught));
     } finally {
       setDeciding(false);
@@ -81,7 +114,11 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
   return (
     <Dialog
       open={request !== null}
-      onOpenChange={(open) => !open && onClose()}
+      onOpenChange={(open) => {
+        if (open) return;
+        resetDecisionState();
+        onClose();
+      }}
       title="Sorgu talebini incele"
       description="Karar verilene kadar kullanıcı bu sorguyu düzenleyemez veya çalıştıramaz."
       size="xl"
@@ -174,6 +211,29 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
               )}
             </div>
           </section>
+
+          <Field
+            label="Red gerekçesi"
+            hint="Yalnızca reddederken zorunludur. Talebi gönderen kullanıcı ve denetim kaydı bu metni görür."
+            error={reasonError ?? undefined}
+            aside={
+              <span className="font-mono text-[11.5px] text-subtle">
+                {reason.trim().length}/{REASON_MAX}
+              </span>
+            }
+          >
+            <Textarea
+              ref={reasonRef}
+              value={reason}
+              maxLength={REASON_MAX}
+              disabled={deciding}
+              placeholder="Örn. Tam tablo güncellemesi, WHERE koşulu olmadan çalıştırılamaz."
+              onChange={(event) => {
+                setReason(event.target.value);
+                if (reasonError) setReasonError(null);
+              }}
+            />
+          </Field>
         </div>
       )}
     </Dialog>
