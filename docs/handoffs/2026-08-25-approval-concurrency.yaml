@@ -24,7 +24,7 @@ handoff:
       - "web_api/approval/service.py"
       - "web_api/migrations/versions/f6d4a7b9c2e1_add_query_decision_metadata.py"
     modified:
-      - "docs/specs/SPEC-0012-approval-concurrency.md"
+      - "docs/specs/SPEC-0013-approval-concurrency.md"
       - "docs/adr/ADR-0011-conditional-approval-update.md"
       - "docs/handoffs/2026-08-25-approval-concurrency.yaml"
       - "frontend/pages/Admin.tsx"
@@ -46,7 +46,7 @@ handoff:
       recorded_in: "docs/adr/ADR-0011-conditional-approval-update.md"
     - decision: "Red gerekçesi her iki taşıyıcıda zorunludur."
       rationale: "Red kararının izlenebilirliği ve kullanıcının geri bildirim alabilmesi için gerekçe kalıcı olarak saklanır."
-      recorded_in: "docs/specs/SPEC-0012-approval-concurrency.md"
+      recorded_in: "docs/specs/SPEC-0013-approval-concurrency.md"
 
   validation:
     commands_run:

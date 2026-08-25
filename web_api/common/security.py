@@ -77,4 +77,4 @@ def masked_columns_in(data: list[dict[str, Any]], mask_columns: set[str]) -> lis
         return []
 
     lower_mask_cols = {col.lower() for col in mask_columns}
-    return [name for name in data[0].keys() if name.lower() in lower_mask_cols]
+    return [name for name in data[0] if name.lower() in lower_mask_cols]

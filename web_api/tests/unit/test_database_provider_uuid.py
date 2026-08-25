@@ -22,7 +22,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from database_provider.database import DatabaseProvider
 
-
 DB_UUID = uuid.UUID("00f3adc3-d10c-4a27-a5ab-00f63af73ec8")
 
 

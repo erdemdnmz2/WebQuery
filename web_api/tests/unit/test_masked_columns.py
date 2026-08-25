@@ -13,7 +13,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from common.security import mask_result_set, masked_columns_in
 
-
 ROWS = [
     {"CustomerID": 1, "FirstName": "Orlando", "LastName": "Gee", "CompanyName": "A Bike Store"},
     {"CustomerID": 2, "FirstName": "Keith", "LastName": "Harris", "CompanyName": "Progressive Sports"},

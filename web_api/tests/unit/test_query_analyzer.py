@@ -106,6 +106,7 @@ class TestParseFailureIsNotAPermissionDecision:
 
     def test_unparseable_query_raises_parse_error(self):
         import sqlglot.errors
+
         from query_execution.query_analyzer import QueryAnalyzer
 
         analyzer = QueryAnalyzer()

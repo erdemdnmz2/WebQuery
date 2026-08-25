@@ -75,6 +75,6 @@ güvenlik düzeltmesinin diğerinde unutulmasına yol açar.
 
 ## References
 
-- Spec: `docs/specs/SPEC-0012-approval-concurrency.md`
+- Spec: `docs/specs/SPEC-0013-approval-concurrency.md`
 - Kaynak plan: `webquery_implementasyon_sirasi.md`, Adım 10 (`1.2`)
 - Supersedes / Superseded by: yok
