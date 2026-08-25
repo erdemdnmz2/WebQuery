@@ -26,6 +26,7 @@ const Admin: React.FC = () => {
   // --- Query Approvals State ---
   const [queries, setQueries] = useState<PendingQuery[]>([]);
   const [selectedQuery, setSelectedQuery] = useState<PendingQuery | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [loadingPreview, setLoadingPreview] = useState(false);
 
@@ -100,11 +101,17 @@ const Admin: React.FC = () => {
   // Handle query approval or rejection
   const handleDecision = async (approved: boolean, executable: boolean = false) => {
     if (!selectedQuery) return;
+    if (!approved && rejectionReason.trim().length < 3) {
+      alert('Red gerekçesi en az 3 karakter olmalıdır.');
+      return;
+    }
     const url = approved 
       ? `/api/admin/approve_query/${selectedQuery.workspace_id}`
       : `/api/admin/reject_query/${selectedQuery.workspace_id}`;
     
-    const body = approved ? JSON.stringify({ show_results: executable }) : undefined;
+    const body = approved
+      ? JSON.stringify({ show_results: executable })
+      : JSON.stringify({ reason: rejectionReason.trim() });
     
     const res = await authenticatedFetch(url, {
       method: 'POST',
@@ -115,6 +122,7 @@ const Admin: React.FC = () => {
     if (res?.ok) {
       setSelectedQuery(null);
       setPreviewData([]);
+      setRejectionReason('');
       fetchPending();
     }
   };
@@ -678,7 +686,10 @@ const Admin: React.FC = () => {
       {selectedQuery && (
         <Modal 
           isOpen={true} 
-          onClose={() => setSelectedQuery(null)} 
+          onClose={() => {
+            setSelectedQuery(null);
+            setRejectionReason('');
+          }}
           title="Sorgu Talebi İncelemesi" 
           size="xl"
         >
@@ -770,6 +781,20 @@ const Admin: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">
+                Red gerekçesi
+              </label>
+              <textarea
+                value={rejectionReason}
+                onChange={(event) => setRejectionReason(event.target.value)}
+                minLength={3}
+                maxLength={500}
+                placeholder="Reddedilme nedenini yazın (en az 3 karakter)"
+                className="w-full min-h-20 rounded-xl border border-gray-800 bg-gray-900 p-3 text-sm text-gray-200 placeholder:text-gray-600 focus:border-indigo-500 focus:outline-none"
+              />
             </div>
 
             {/* Action Decision Buttons */}

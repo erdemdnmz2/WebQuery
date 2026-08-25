@@ -4,7 +4,7 @@ Pydantic models for admin approval endpoints
 """
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AdminApprovals(BaseModel):
@@ -63,6 +63,12 @@ class ApprovalRequest(BaseModel):
         show_results: bool - if true, workspace becomes executable
     """
     show_results: bool
+
+
+class RejectRequest(BaseModel):
+    """Required explanation for a rejected risky query."""
+
+    reason: str = Field(min_length=3, max_length=500)
 
 class DatabaseAddRequest(BaseModel):
     """

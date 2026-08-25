@@ -75,3 +75,20 @@ def test_audit_log_migration_creates_expected_schema(tmp_path: Path) -> None:
         }
     finally:
         engine.dispose()
+
+
+def test_query_decision_metadata_migration_creates_expected_columns(tmp_path: Path) -> None:
+    database_path = tmp_path / "query-decision.db"
+    result = _run_upgrade(database_path)
+
+    assert result.returncode == 0, result.stderr
+
+    engine = create_engine(f"sqlite:///{database_path}")
+    try:
+        inspector = inspect(engine)
+        query_data_columns = {
+            column["name"] for column in inspector.get_columns("QueryData")
+        }
+        assert {"decision_reason", "decided_by", "decided_at"} <= query_data_columns
+    finally:
+        engine.dispose()

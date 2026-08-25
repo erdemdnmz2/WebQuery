@@ -106,6 +106,7 @@ class QueryDecisionAuditDetails(BaseModel):
     database_id: int
     status: str
     show_results: bool | None = None
+    reason: str | None = None
 
 
 class QueryPreviewAuditDetails(BaseModel):

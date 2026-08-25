@@ -22,6 +22,7 @@ from .schemas import (
     DatabaseResponseSchema,
     MaskingRuleSchema,
     MaskingRulesSaveRequest,
+    RejectRequest,
     UserAssociationRequest,
 )
 from .services import AdminService
@@ -73,6 +74,7 @@ async def approve_query(
 @router.post("/reject_query/{workspace_id}")
 async def reject_query(
     workspace_id: int,
+    rejection: RejectRequest,
     request: Request,
     current_admin: User = Depends(admin_required),
     service: AdminService = Depends(get_admin_service)
@@ -81,7 +83,10 @@ async def reject_query(
     Rejects the query.
     """
     result = await service.reject_query_by_workspace_id(
-        workspace_id, current_admin, client_ip=_peer_ip(request)
+        workspace_id,
+        rejection.reason,
+        current_admin,
+        client_ip=_peer_ip(request),
     )
     
     if result.get("success"):

@@ -187,6 +187,9 @@ class QueryData(Base):
     uuid = Column(AppUUID, nullable=False, index=True)
     status = Column(String(50), nullable=False)
     risk_type = Column(String(50), nullable=True)
+    decision_reason = Column(String(500), nullable=True)
+    decided_by = Column(String(50), nullable=True)
+    decided_at = Column(AppDateTime, nullable=True)
     
 class Workspace(Base):
     """

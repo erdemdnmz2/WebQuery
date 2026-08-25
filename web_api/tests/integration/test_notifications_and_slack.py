@@ -197,7 +197,9 @@ async def test_slack_interactive_approval_flow(async_client: AsyncClient):
         result_ws = await db.execute(select(Workspace).where(Workspace.query_id == qdata.id))
         ws = result_ws.scalars().first()
         assert ws.show_results is True
-        assert "Approved by admin via Slack" in ws.description
+        assert "Approved by admin (executable)" == ws.description
+        assert qdata.decided_by == "admin"
+        assert qdata.decision_reason is None
 
         audit = (
             await db.execute(
@@ -216,7 +218,7 @@ async def test_slack_interactive_approval_flow(async_client: AsyncClient):
         await listener.handle_approve_with_results(
             ack=AsyncMock(), body=mock_body, respond=conflict_respond
         )
-    assert "conflict" in conflict_respond.call_args.kwargs["text"].lower()
+    assert "already been decided" in conflict_respond.call_args.kwargs["text"].lower()
 
 
 @pytest.mark.asyncio
@@ -236,33 +238,56 @@ async def test_slack_interactive_rejection_flow(async_client: AsyncClient):
     app_db = app.state.context.app_db
     listener = SlackListener(app_db=app_db)
 
-    # 3. Construct mock body and respond callbacks
+    # 3. The button opens a modal; submitting it supplies the required reason.
     mock_ack = AsyncMock()
     mock_respond = AsyncMock()
     mock_body = {
         "user": {"id": "U_ADMIN_999"},
-        "actions": [{"value": q_uuid}]
+        "actions": [{"value": q_uuid}],
+        "trigger_id": "trigger-999",
+        "channel": {"id": "C_APPROVALS"},
+        "container": {"message_ts": "123.456"},
     }
 
-    # 4. Trigger the handler directly
-    with patch.object(
-        listener.app.client, "users_info",
-        new=AsyncMock(return_value=_fake_users_info_response("admin@example.com")),
-    ):
+    with patch.object(listener.app.client, "views_open", new=AsyncMock()) as views_open:
         await listener.handle_reject_query(
             ack=mock_ack,
             body=mock_body,
             respond=mock_respond
         )
-    
-    # Verify ack was called
+
     mock_ack.assert_called_once()
-    
-    # Verify Slack response was sent
-    mock_respond.assert_called_once()
-    respond_args = mock_respond.call_args[1]
-    assert "Query rejected" in respond_args["text"]
-    assert "U_ADMIN_999" in respond_args["text"]
+    mock_respond.assert_not_called()
+    modal = views_open.call_args.kwargs["view"]
+    metadata = modal["private_metadata"]
+
+    submit_ack = AsyncMock()
+    mock_client = MagicMock()
+    mock_client.chat_update = AsyncMock()
+    modal_view = {
+        "private_metadata": metadata,
+        "state": {
+            "values": {
+                "reason_block": {
+                    "reason_input": {"value": "The change needs a maintenance window."}
+                }
+            }
+        },
+    }
+    with patch.object(
+        listener.app.client,
+        "users_info",
+        new=AsyncMock(return_value=_fake_users_info_response("admin@example.com")),
+    ):
+        await listener.handle_reject_reason_submission(
+            ack=submit_ack,
+            body={"user": {"id": "U_ADMIN_999"}},
+            view=modal_view,
+            client=mock_client,
+        )
+
+    submit_ack.assert_called_once_with()
+    mock_client.chat_update.assert_called_once()
     
     # Verify DB state was updated successfully
     async with app_db.get_app_db() as db:
@@ -273,7 +298,9 @@ async def test_slack_interactive_rejection_flow(async_client: AsyncClient):
         result_ws = await db.execute(select(Workspace).where(Workspace.query_id == qdata.id))
         ws = result_ws.scalars().first()
         assert ws.show_results is False
-        assert "Rejected by admin via Slack" in ws.description
+        assert "The change needs a maintenance window." in ws.description
+        assert qdata.decision_reason == "The change needs a maintenance window."
+        assert qdata.decided_by == "admin"
 
         audit = (
             await db.execute(
@@ -319,7 +346,7 @@ async def test_slack_approval_rolls_back_when_database_is_not_registered(
 
     mock_ack.assert_called_once()
     mock_respond.assert_called_once()
-    assert "failed" in mock_respond.call_args.kwargs["text"].lower()
+    assert "target database is not registered" in mock_respond.call_args.kwargs["text"].lower()
 
     async with app_db.get_app_db() as db:
         query = (

@@ -1,8 +1,8 @@
-# ADR-0011: Onay kararlarında koşullu UPDATE kullanılır
+# ADR-0011: Onay kararları tek bir ortak servis üzerinden verilir
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -17,8 +17,13 @@ raporlanması gerekir.
 
 ## Decision
 
-Onay ve red geçişleri `QueryData.id` ile mevcut durumunu birlikte filtreleyen
-koşullu bir SQLAlchemy `UPDATE` ifadesiyle yapılır:
+Yeni `approval.service.decide()` fonksiyonu web ve Slack kararlarının tek iş
+kuralı kaynağıdır. Yetki doğrulama, self-approval savunması, red gerekçesi,
+koşullu durum geçişi, workspace/action log/audit güncellemeleri burada tek bir
+transaction içinde yapılır.
+
+Durum geçişi `QueryData.id` ile mevcut durumunu birlikte filtreleyen koşullu bir
+SQLAlchemy `UPDATE` ifadesiyle yapılır:
 
 ```sql
 UPDATE QueryData
@@ -28,8 +33,8 @@ WHERE id = :query_id
 ```
 
 `rowcount == 1` başarı, başka bir sonuç ise çakışma olarak kabul edilir ve
-`APPROVAL_CONFLICT` / HTTP 409 döndürülür. Workspace ve ActionLogging yan
-etkileri aynı transaction içinde tutulur. Aynı kural Slack yolunda da uygulanır.
+`APPROVAL_CONFLICT` / HTTP 409 döndürülür. Web ve Slack yalnızca aktörü, karar
+türünü ve transport'a özgü kullanıcı yanıtını sağlar.
 
 ## Rejected Alternatives
 
@@ -44,11 +49,20 @@ Doğru transaction kapsamıyla çalışabilir; ancak kilit davranışı ve sözd
 desteklenen veritabanına göre değişir. Bu akışta tek koşullu `UPDATE` daha az
 round-trip ve daha küçük bir stale-nesne yüzeyi sağlar.
 
+### 3. Web ve Slack için ayrı karar implementasyonları
+
+İki yüzeyin kendi koşullu `UPDATE` ve audit mantığını tutması kısa vadede küçük
+bir diff üretir; ancak davranışların zamanla ayrışmasına ve bir yüzeydeki
+güvenlik düzeltmesinin diğerinde unutulmasına yol açar.
+
 ## Consequences
 
 - İlk kararın kazanması veritabanı tarafından garanti edilir.
+- Web ve Slack karar politikası tek bir fonksiyonda tutulur.
 - Kaybeden istek kullanıcıya açık bir çakışma döndürür; istemci yenileme mesajı
   gösterebilir.
+- Red gerekçesi ve karar metadatası `QueryData` üzerine Alembic migration'ıyla
+  eklenir.
 - `rowcount` davranışı SQL Server sürücüsü ve `NOCOUNT` ayarlarıyla üretimde
   doğrulanmalıdır.
 - Her iki transport yolu aynı davranışı korumak zorundadır.

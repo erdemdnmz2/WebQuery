@@ -109,6 +109,56 @@ async def test_admin_rbac_restrictions(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_admin_cannot_decide_own_query(async_client: AsyncClient):
+    """The common approval service rejects self-approval even for an ADMIN."""
+    app_db = app.state.context.app_db
+    async with app_db.get_app_db() as db:
+        db.add(
+            Databases(
+                servername="self-approval-server",
+                database_name="self-approval-db",
+                technology="sqlite",
+            )
+        )
+        await db.commit()
+
+    await create_user_and_login(
+        async_client, "self-admin@example.com", "self_admin", make_admin=True
+    )
+    async with app_db.get_app_db() as db:
+        user = (
+            await db.execute(select(User).where(User.email == "self-admin@example.com"))
+        ).scalar_one()
+        query = QueryData(
+            user_id=user.id,
+            servername="self-approval-server",
+            database_name="self-approval-db",
+            query="DELETE FROM protected_records",
+            status="waiting_for_approval",
+            uuid="self-approval-query",
+        )
+        db.add(query)
+        await db.flush()
+        workspace = Workspace(name="Self approval", user_id=user.id, query_id=query.id)
+        db.add(workspace)
+        await db.flush()
+        workspace_id = workspace.id
+        await db.commit()
+
+    response = await async_client.post(
+        f"/api/admin/approve_query/{workspace_id}", json={"show_results": True}
+    )
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "APPROVAL_FORBIDDEN"
+
+    async with app_db.get_app_db() as db:
+        query = (
+            await db.execute(select(QueryData).where(QueryData.uuid == "self-approval-query"))
+        ).scalar_one()
+        assert query.status == "waiting_for_approval"
+
+
+@pytest.mark.asyncio
 async def test_admin_database_registration(async_client: AsyncClient):
     """
     Tests registering databases by an admin, including duplicate checks.
@@ -336,7 +386,15 @@ async def test_admin_query_rejection(async_client: AsyncClient, mock_db_session)
     await create_user_and_login(admin_client, "admin3@example.com", "admin3", make_admin=True)
     
     # 3. Reject query
-    reject_response = await admin_client.post(f"/api/admin/reject_query/{workspace_id}")
+    invalid_rejection = await admin_client.post(
+        f"/api/admin/reject_query/{workspace_id}", json={"reason": "no"}
+    )
+    assert invalid_rejection.status_code == 422
+
+    reject_response = await admin_client.post(
+        f"/api/admin/reject_query/{workspace_id}",
+        json={"reason": "Production table change is not approved."},
+    )
     assert reject_response.status_code == 200
     
     # Verify status changed to "rejected"
@@ -344,7 +402,10 @@ async def test_admin_query_rejection(async_client: AsyncClient, mock_db_session)
         ws = await db.get(Workspace, workspace_id)
         qdata = await db.get(QueryData, ws.query_id)
         assert qdata.status == "rejected"
-        assert ws.description == "Rejected by admin"
+        assert "Production table change is not approved." in ws.description
+        assert qdata.decision_reason == "Production table change is not approved."
+        assert qdata.decided_by == "admin3"
+        assert qdata.decided_at is not None
         rejection_audit = (
             await db.execute(
                 select(AuditLog).where(AuditLog.action == AuditAction.REJECT_QUERY)
