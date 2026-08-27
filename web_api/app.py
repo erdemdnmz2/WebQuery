@@ -28,6 +28,7 @@ from sqlalchemy import text
 from starlette.middleware.cors import CORSMiddleware
 
 from app_database import AppDatabase
+from authentication.login_throttle import LoginThrottleUnavailable, RedisLoginThrottle
 from common.config_guard import verify_startup_config
 from common.errors import redact_passwords
 from common.exceptions import BaseServiceException
@@ -46,6 +47,16 @@ async def lifespan(app: FastAPI):
     # Startup
     verify_startup_config()
     print("🚀 Application starting...")
+
+    try:
+        app.state.login_throttle = RedisLoginThrottle.from_environment()
+        await app.state.login_throttle.ping()
+        print("✓ Redis login throttle connection successful")
+    except (LoginThrottleUnavailable, ValueError) as exc:
+        print("\n❌ FATAL: Redis login throttle connection error!")
+        print(f"   Error: {type(exc).__name__}: {exc}")
+        print("   Application cannot start without Redis login protection.\n")
+        raise SystemExit(1) from exc
     
     try:
         app.state.app_db = AppDatabase()
@@ -111,6 +122,9 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         print("\nApplication shutting down...")
+        if getattr(app.state, "login_throttle", None):
+            await app.state.login_throttle.close()
+            print("✓ Redis login throttle connection closed")
         try:
             if hasattr(app.state, 'db_provider') and app.state.db_provider:
                 await app.state.db_provider.close_engines()

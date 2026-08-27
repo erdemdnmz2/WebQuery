@@ -43,6 +43,26 @@ with status `Open` before doing task work; see `AGENTS.md`.
 - Answer: Log ve audit kayıtlarında bağlantı bilgileri korunabilir; olası parola değerleri kaydedilmeden önce maskelenmelidir. İstemciye dönen mesajda bağlantı bilgileri de temizlenmelidir.
 - Recorded in: `docs/specs/SPEC-0003-target-database-error-sanitization.md`, `docs/adr/ADR-0006-target-database-error-sanitization.md`
 
+### OQ-2026-005: Redis tabanlı giriş kısıtlayıcısı kullanılamazsa login nasıl davranmalı?
+
+- Status: Answered
+- Raised: 2026-08-26
+- Scope: Adım 14 Redis tabanlı kullanıcı ve IP giriş kısıtlaması; `/api/login` hata sözleşmesi ve operasyonel izleme
+- Question: Redis erişilemez veya zaman aşımına uğrarsa giriş isteği `503` ile reddedilerek fail-closed mu davranmalı, yoksa giriş Redis throttling'i atlanarak mevcut IP limiter ile devam mı etmeli?
+- Why it matters: Fail-closed parola saldırısı ve bcrypt kaynak tüketimine karşı korumayı sürdürür ancak Redis arızası login erişimini keser; fail-open erişilebilirliği korur ancak Redis arızasında kullanıcı bazlı dağıtık korumayı kaldırır.
+- Answer: Fail-closed. Redis tabanlı throttle aktifken Redis erişilemezse `/api/login` bcrypt veya veritabanı doğrulamasına geçmeden `503 Service Unavailable` dönecek.
+- Recorded in: `docs/specs/SPEC-0017-redis-login-throttle.md`, `docs/adr/ADR-0014-redis-login-throttle.md`
+
+### OQ-2026-006: Login throttle cache backend'i deployment topolojisine göre nasıl seçilmeli?
+
+- Status: Answered
+- Raised: 2026-08-26
+- Scope: Adım 14 Redis tabanlı giriş kısıtlaması; Docker Compose ve production deployment yapılandırması
+- Question: Cache backend'i açık bir `LOGIN_THROTTLE_BACKEND=memory|redis` ayarı ve startup doğrulamasıyla mı seçilmeli, yoksa uygulama yalnızca worker sayısını okuyup backend'i otomatik mi seçmeli?
+- Why it matters: Worker sayısı tek başına toplam process sayısını göstermez; birden fazla application replica'sı birer worker ile çalışabilir. Otomatik seçim bu topolojide yanlışlıkla process-local throttle'a düşebilir; açık ayar ise deployment konfigürasyonunun doğru yönetilmesini gerektirir.
+- Answer: Login throttle için Redis, worker sayısından bağımsız sabit runtime bağımlılığı olacak. Memory backend ve worker sayısına göre otomatik backend seçimi uygulanmayacak.
+- Recorded in: `docs/specs/SPEC-0017-redis-login-throttle.md`, `docs/adr/ADR-0014-redis-login-throttle.md`
+
 ## Entry Format
 
 Add new items in this format. Keep resolved entries for decision history, but

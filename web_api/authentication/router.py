@@ -15,6 +15,7 @@ from app_database.app_database import AppDatabase
 from app_database.models import User, UserDatabaseAssociation
 from authentication import config, schemas, sessions
 from authentication.exceptions import UserAlreadyExistsError
+from authentication.login_throttle import LoginThrottle, LoginThrottleUnavailable
 from authentication.services import get_current_user
 from common.audit import log_in, log_standalone
 from common.audit_actions import AuditAction, AuditTarget
@@ -30,13 +31,32 @@ router = APIRouter(prefix="/api")
 # Using centralized limiter
 
 
+def get_login_throttle(request: Request) -> LoginThrottle:
+    """Return the startup-initialised, mandatory login throttle backend."""
+    throttle = getattr(request.app.state, "login_throttle", None)
+    if throttle is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Giriş koruması geçici olarak kullanılamıyor.",
+        )
+    return throttle
+
+
+def _throttle_unavailable() -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail="Giriş koruması geçici olarak kullanılamıyor.",
+    )
+
+
 @router.post("/login", response_model=schemas.Token)
 @limiter.limit(config.RATE_LIMITER)
 async def login(
     user: schemas.UserLogin,
     response: Response,
     request: Request,
-    app_db: AppDatabase = Depends(get_app_db)
+    app_db: AppDatabase = Depends(get_app_db),
+    throttle: LoginThrottle = Depends(get_login_throttle),
 ) -> dict[str, str]:
     """
     User login endpoint.
@@ -51,11 +71,25 @@ async def login(
     Returns:
         dict[str, str]: The access token response.
     """
+    client_ip: str = request.client.host if request.client else "unknown"
+    try:
+        wait = await throttle.retry_after_seconds(user.email, client_ip)
+    except LoginThrottleUnavailable:
+        raise _throttle_unavailable() from None
+
+    if wait:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Çok fazla başarısız giriş denemesi. "
+                f"Yaklaşık {max(1, wait // 60)} dakika sonra tekrar deneyin."
+            ),
+        )
+
     async with app_db.get_app_db() as db:
         result = await db.execute(select(User).where(User.email == user.email))
         authenticated_user: User | None = result.scalars().first()
-        
-        client_ip: str = request.client.host if request.client else "unknown"
+
         if (
             not authenticated_user
             or not authenticated_user.is_active
@@ -64,7 +98,16 @@ async def login(
             await log_standalone(app_db, action=AuditAction.LOGIN_FAILED,
                 details=SessionAuditDetails(event="login_failed"), client_ip=client_ip,
                 trace_id=getattr(request.state, "request_id", None))
+            try:
+                await throttle.record_failure(user.email, client_ip)
+            except LoginThrottleUnavailable:
+                raise _throttle_unavailable() from None
             raise HTTPException(status_code=400, detail="Invalid email or password")
+
+        try:
+            await throttle.clear_account(user.email)
+        except LoginThrottleUnavailable:
+            raise _throttle_unavailable() from None
 
         authenticated_user.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
         

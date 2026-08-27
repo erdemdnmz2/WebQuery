@@ -15,6 +15,7 @@ os.environ.setdefault("CENTRAL_DB_USER", "test-central-user")
 os.environ.setdefault("CENTRAL_DB_PASSWORD", "test-central-password")
 os.environ.setdefault("ALLOWED_EMAIL_DOMAINS", "example.com")
 os.environ.setdefault("REGISTRATION_REQUIRES_ACTIVATION", "false")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
 # slack_integration/config.py reads these at import time with no default;
 # `from app import app` below pulls that module in transitively. Without a
@@ -41,6 +42,28 @@ from app_database import AppDatabase
 from database_provider import DatabaseProvider
 
 
+class FakeLoginThrottle:
+    """Test double; production always uses RedisLoginThrottle."""
+
+    def __init__(self, max_failures: int = 5):
+        self.max_failures = max_failures
+        self.account_failures: dict[str, int] = {}
+        self.ip_failures: dict[str, int] = {}
+
+    async def retry_after_seconds(self, email: str, client_ip: str) -> int:
+        account_count = self.account_failures.get(email.strip().lower(), 0)
+        ip_count = self.ip_failures.get(client_ip, 0)
+        return 60 if max(account_count, ip_count) >= self.max_failures else 0
+
+    async def record_failure(self, email: str, client_ip: str) -> None:
+        account = email.strip().lower()
+        self.account_failures[account] = self.account_failures.get(account, 0) + 1
+        self.ip_failures[client_ip] = self.ip_failures.get(client_ip, 0) + 1
+
+    async def clear_account(self, email: str) -> None:
+        self.account_failures.pop(email.strip().lower(), None)
+
+
 @pytest_asyncio.fixture
 async def async_client():
     """
@@ -53,6 +76,7 @@ async def async_client():
     
     app.state.db_provider = DatabaseProvider()
     await app.state.db_provider.start_cache_loop()
+    app.state.login_throttle = FakeLoginThrottle()
 
     from dependencies import AppContext
     app.state.context = AppContext(

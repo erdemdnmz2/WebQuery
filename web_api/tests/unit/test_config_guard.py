@@ -12,6 +12,7 @@ def _set_valid_config(monkeypatch):
     monkeypatch.setenv("APP_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
     monkeypatch.setenv("CENTRAL_DB_USER", "test-central-user")
     monkeypatch.setenv("CENTRAL_DB_PASSWORD", "test-central-password")
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/15")
 
 
 def test_bos_secret_key_acilmayi_engeller(monkeypatch):
@@ -50,6 +51,14 @@ def test_gecerli_config_kabul_edilir(monkeypatch):
     _set_valid_config(monkeypatch)
 
     verify_startup_config()
+
+
+def test_redis_url_yokken_acilmayi_engeller(monkeypatch):
+    _set_valid_config(monkeypatch)
+    monkeypatch.delenv("REDIS_URL", raising=False)
+
+    with pytest.raises(SystemExit):
+        verify_startup_config()
 
 
 def test_yuksek_yetkili_merkezi_hesap_uyarisi_loglanir(monkeypatch, caplog):

@@ -23,6 +23,7 @@ _REQUIRED = (
     "APP_DATABASE_URL",
     "CENTRAL_DB_USER",
     "CENTRAL_DB_PASSWORD",
+    "REDIS_URL",
 )
 
 

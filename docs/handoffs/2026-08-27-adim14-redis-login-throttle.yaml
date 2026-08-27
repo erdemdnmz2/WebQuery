@@ -1,0 +1,66 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "Codex"
+  to: "WebQuery maintainers"
+  created_at: "2026-08-27T14:52:00+03:00"
+  task: "Adım 14 Redis tabanlı kullanıcı ve IP login throttle"
+
+  scope:
+    completed:
+      - "Login öncesi Redis sorted-set kayan pencere kontrolü eklendi."
+      - "Kullanıcı hesabı ve IP sayaçları ayrı, hash'lenmiş Redis anahtarlarında tutuluyor."
+      - "Redis startup ve runtime arızalarında login fail-closed olarak 503 döndürüyor."
+      - "Docker Compose Redis health check ve zorunlu REDIS_URL yapılandırması eklendi."
+    excluded:
+      - "Genel workspace/metadata cache'i"
+      - "Process'ler arasında SQLAlchemy engine paylaşımı"
+
+  changed_files:
+    created:
+      - "docs/specs/SPEC-0017-redis-login-throttle.md"
+      - "docs/adr/ADR-0014-redis-login-throttle.md"
+      - "web_api/authentication/login_throttle.py"
+      - "web_api/tests/unit/test_login_throttle.py"
+      - "web_api/tests/integration/test_login_throttle_api.py"
+    modified:
+      - ".env.example"
+      - "docker-compose.yml"
+      - "docs/open-questions.md"
+      - "web_api/app.py"
+      - "web_api/authentication/router.py"
+      - "web_api/common/config_guard.py"
+      - "web_api/requirements.txt"
+      - "web_api/tests/conftest.py"
+      - "web_api/tests/unit/test_config_guard.py"
+    deleted: []
+
+  decisions:
+    - decision: "Redis login throttle için worker sayısından bağımsız zorunlu backend'tir."
+      rationale: "Tek bir güvenlik davranışı, process'ler arası ortak sayaç ve restart sonrası korunma sağlar."
+      recorded_in: "docs/adr/ADR-0014-redis-login-throttle.md"
+    - decision: "Redis runtime arızası login'i 503 ile fail-closed reddeder."
+      rationale: "Redis arızasının brute-force ve bcrypt kaynak korumasını sessizce devre dışı bırakmasını önler."
+      recorded_in: "docs/specs/SPEC-0017-redis-login-throttle.md"
+
+  validation:
+    commands_run:
+      - command: "cd web_api && ../.venv/bin/ruff check --select I001,UP035,UP037 authentication/router.py authentication/login_throttle.py common/config_guard.py app.py tests/unit/test_login_throttle.py tests/unit/test_config_guard.py tests/integration/test_login_throttle_api.py"
+        result: "passed"
+        evidence: "All checks passed."
+      - command: "cd web_api && ../.venv/bin/python -m pytest -q tests/unit/test_login_throttle.py tests/unit/test_config_guard.py tests/integration/test_login_throttle_api.py tests/integration/test_auth_api.py tests/integration/test_user_lifecycle.py tests/integration/test_domain_registration_activation.py"
+        result: "passed"
+        evidence: "33 passed, 1 pre-existing Pydantic deprecation warning."
+      - command: "docker compose config -q"
+        result: "passed"
+        evidence: "Compose configuration validated; Docker Compose emitted only its existing obsolete version-field warning."
+      - command: "docker compose ps redis"
+        result: "failed"
+        evidence: "Docker daemon was unavailable at unix:///Users/alierdemdonmez/.docker/run/docker.sock."
+
+  open_questions: []
+
+  known_risks:
+    - "Gerçek Redis container ve Lua script'leri bu hostta Docker daemon kapalı olduğu için uçtan uca çalıştırılamadı; unit testler Redis istemcisini test double ile kapsıyor."
+    - "Tek Redis instance login için tek hata noktasıdır; ADR-0014 fail-closed davranışın bu erişilebilirlik maliyetini kabul eder."
+
+  next_step: "Docker daemon erişilebilir bir ortamda docker compose up --build ile gerçek Redis startup ve çok-worker login throttle senaryosunu doğrula."
