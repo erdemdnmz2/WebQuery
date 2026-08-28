@@ -177,7 +177,3 @@ class EngineCache:
             count = len(database_entry.engines)
             self._stats["engine_count"] -= count
             return count
-
-    async def close_user_engines(self, db_uuid: str) -> None:
-        """Compatibility alias; pools are owned by target database, not user."""
-        await self.close_database_engines(db_uuid)

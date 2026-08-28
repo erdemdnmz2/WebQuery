@@ -1,10 +1,9 @@
 """
 Integration tests for User Authentication, Registration, and Session management.
 Includes rate limiting bypass, password policy validations, JWT cookie handling,
-and clean engine shutdowns upon logout.
+and session invalidation upon logout.
 """
 import hashlib
-from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -227,7 +226,7 @@ async def test_access_me_invalid_token(async_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_logout_flow(async_client: AsyncClient):
     """
-    Test complete logout flow: clears cookie, logs session update, and closes user DB engines.
+    Test complete logout flow: clears cookies and writes the logout audit record.
     """
     # 1. Register and login
     register_data = {
@@ -246,22 +245,14 @@ async def test_logout_flow(async_client: AsyncClient):
     # Verify cookies contain token
     assert "access_token" in async_client.cookies
 
-    # 2. Mock db_provider.close_user_engines
-    db_provider = app.state.context.db_provider
-    with patch.object(db_provider, "close_user_engines", new_callable=AsyncMock) as mock_close:
-        # 3. Perform logout
-        response = await async_client.post("/api/logout")
-        assert response.status_code == 200
-        assert "Successfully logged out" in response.json()["message"]
+    # 2. Perform logout
+    response = await async_client.post("/api/logout")
+    assert response.status_code == 200
+    assert "Successfully logged out" in response.json()["message"]
 
-        # 4. Verify cookie was deleted
-        # Note: In HTTP clients, deleting a cookie sets it to empty or expires it immediately
-        assert "access_token" not in async_client.cookies or async_client.cookies.get("access_token") == ""
-
-        # 5. Verify close_user_engines was called
-        mock_close.assert_called_once()
-        called_user_id = mock_close.call_args[0][0]
-        assert isinstance(called_user_id, int)
+    # 3. Verify cookie was deleted
+    # Note: In HTTP clients, deleting a cookie sets it to empty or expires it immediately
+    assert "access_token" not in async_client.cookies or async_client.cookies.get("access_token") == ""
 
     async with app.state.context.app_db.get_app_db() as db:
         logout_audit = (
@@ -297,10 +288,7 @@ async def test_refresh_rotates_tokens_and_logout_revokes_session(async_client: A
         for header in refreshed.headers.get_list("set-cookie")
     )
 
-    with patch.object(
-        app.state.context.db_provider, "close_user_engines", new_callable=AsyncMock
-    ):
-        logout = await async_client.post("/api/logout")
+    logout = await async_client.post("/api/logout")
     assert logout.status_code == 200
 
     protected = await async_client.get("/api/me")

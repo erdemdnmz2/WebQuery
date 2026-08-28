@@ -172,14 +172,6 @@ class DatabaseProvider:
         """
         return await self.engine_cache.close_database_engines(db_uuid)
 
-    async def close_user_engines(self, user_id: int) -> None:
-        """Compatibility no-op: connection pools are shared by target DB, not user.
-
-        A logout must not close another user's active pool merely because they
-        share a target database.
-        """
-        _ = user_id
-    
     def get_db_info_db(self) -> dict[str, dict[str, Any]]:
         """
         Returns database configuration information for all servers.

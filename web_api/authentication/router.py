@@ -23,8 +23,7 @@ from common.audit_details import SessionAuditDetails, UserLifecycleAuditDetails
 from common.limiter import limiter
 from common.platform_access import is_platform_admin
 from common.roles import any_admin
-from database_provider import DatabaseProvider
-from dependencies import get_app_db, get_db_provider
+from dependencies import get_app_db
 
 router = APIRouter(prefix="/api")
 
@@ -304,11 +303,10 @@ async def logout(
     request: Request,
     current_user: User = Depends(get_current_user),
     app_db: AppDatabase = Depends(get_app_db),
-    db_provider: DatabaseProvider = Depends(get_db_provider)
 ) -> dict[str, str]:
     """
     User logout endpoint.
-    Clears auth cookie, updates logout logs, and closes user target database engines.
+    Clears auth cookies, revokes the current session, and records the logout.
     
     Args:
         response: The FastAPI response object.
@@ -357,6 +355,5 @@ async def logout(
         details=SessionAuditDetails(event="logout"),
         client_ip=request.client.host if request.client else "unknown",
         trace_id=getattr(request.state, "request_id", None))
-    await db_provider.close_user_engines(current_user.id)
 
     return {"message": "Successfully logged out"}
