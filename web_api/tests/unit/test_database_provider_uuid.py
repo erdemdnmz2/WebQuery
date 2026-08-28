@@ -74,6 +74,30 @@ def test_set_db_info_replaces_previous_mapping():
     assert provider.db_by_uuid == {}
 
 
+def test_public_database_info_never_retains_credentials():
+    provider = DatabaseProvider()
+    provider.set_db_info(
+        {
+            "db": {
+                "databases": [
+                    {
+                        "name": "Satis",
+                        "uuid": str(DB_UUID),
+                        "connection_mode": "ro_rw",
+                        "credentials": {"ro": {"username": "satis_ro", "password": "not-for-api"}},
+                    }
+                ],
+                "technology": "mssql",
+            }
+        }
+    )
+
+    # The mode is publishable derived state; the accounts behind it are not.
+    assert provider.get_db_info_db()["db"]["databases"] == [
+        {"name": "Satis", "uuid": str(DB_UUID), "connection_mode": "ro_rw"}
+    ]
+
+
 @pytest.mark.asyncio
 async def test_get_session_rejects_unknown_uuid():
     provider = DatabaseProvider()

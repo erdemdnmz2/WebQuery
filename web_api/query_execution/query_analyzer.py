@@ -88,6 +88,32 @@ class QueryAnalyzer:
                 
         return result
 
+    def required_tier(self, query: str, technology: str = "mssql") -> str:
+        """Classify a query as ``ro``, ``rw`` or ``ddl``.
+
+        This is deliberately not an authorization decision. An unparsable
+        statement receives the highest tier so a caller can safely fail closed.
+        """
+        dialect_map = {"mssql": "tsql", "mysql": "mysql", "postgresql": "postgres", "postgres": "postgres"}
+        try:
+            statements = sqlglot.parse(query.strip(), read=dialect_map.get(technology.lower().strip(), "tsql"))
+        except sqlglot.errors.ParseError:
+            return "ddl"
+
+        ddl_types = (exp.Drop, exp.Create, exp.AlterTable, exp.TruncateTable)
+        dml_types = (exp.Insert, exp.Update, exp.Delete, exp.Merge)
+        tier = "ro"
+        for statement in statements:
+            if not statement:
+                continue
+            if isinstance(statement, ddl_types) or any(statement.find_all(ddl_types)):
+                return "ddl"
+            if isinstance(statement, exp.Select) and statement.args.get("into"):
+                return "ddl"
+            if isinstance(statement, dml_types) or any(statement.find_all(dml_types)):
+                tier = "rw"
+        return tier
+
     def _check_sql_injection(self, stmt: exp.Expression) -> bool:
         """Check for privilege escalation or dynamic execution."""
         for cmd in stmt.find_all(exp.Command):
@@ -169,28 +195,29 @@ class QueryAnalyzer:
             dml_types = (exp.Insert, exp.Update, exp.Delete)
             has_dml = isinstance(stmt, dml_types) or any(isinstance(node, dml_types) for node in stmt.find_all(dml_types))
 
-            # DDL statement requires ADMIN
+            # Existing ADMIN associations continue to allow DDL during the
+            # credential migration; the selected DB still needs a DDL account.
             if has_ddl:
-                if "ADMIN" not in roles_list:
+                if "DDL" not in roles_list and "ADMIN" not in roles_list:
                     return False
                 continue
 
-            # DML statement requires WRITER or ADMIN
+            # DML statement requires WRITER or ADMIN.
             if has_dml:
                 if "WRITER" not in roles_list and "ADMIN" not in roles_list:
                     return False
                 continue
 
-            # Read statement (SELECT) requires READER, WRITER, or ADMIN
+            # Read statement requires a read-capable role.
             allowed_roots = (exp.Select, exp.Union, exp.CTE, exp.Subquery)
             is_read = isinstance(stmt, allowed_roots) or any(isinstance(node, exp.Select) for node in stmt.find_all(exp.Select))
             if is_read:
-                if "READER" not in roles_list and "WRITER" not in roles_list and "ADMIN" not in roles_list:
+                if not {"READER", "WRITER", "DDL", "ADMIN"}.intersection(roles_list):
                     return False
                 continue
 
-            # For any other utility statement, require at least WRITER or ADMIN to be safe
-            if "WRITER" not in roles_list and "ADMIN" not in roles_list:
+            # Unknown utility statements require a high-capability role.
+            if "DDL" not in roles_list and "ADMIN" not in roles_list:
                 return False
 
         return True

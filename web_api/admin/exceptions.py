@@ -19,6 +19,18 @@ class AdminUserNotFoundError(BaseServiceException):
     code = "USER_NOT_FOUND"
 
 
+class RoleNotSupportedByDatabaseError(BaseServiceException):
+    """Raised when a granted role needs a credential tier the database lacks.
+
+    Granting WRITER on a read-only registration would produce an account that
+    fails at execution time instead of at grant time, which reads as a broken
+    database rather than an incomplete registration.
+    """
+
+    status_code = 400
+    code = "ROLE_NOT_SUPPORTED_BY_DATABASE"
+
+
 class CannotDisableSelfError(BaseServiceException):
     """Raised when an admin attempts to disable their own account."""
 
@@ -32,4 +44,5 @@ __all__ = [
     "ApprovalConflictError",
     "CannotDisableSelfError",
     "DatabaseAlreadyExistsError",
+    "RoleNotSupportedByDatabaseError",
 ]

@@ -63,6 +63,26 @@ with status `Open` before doing task work; see `AGENTS.md`.
 - Answer: Login throttle için Redis, worker sayısından bağımsız sabit runtime bağımlılığı olacak. Memory backend ve worker sayısına göre otomatik backend seçimi uygulanmayacak.
 - Recorded in: `docs/specs/SPEC-0017-redis-login-throttle.md`, `docs/adr/ADR-0014-redis-login-throttle.md`
 
+### OQ-2026-007: Hedef DB ekleme ekranı hangi credential kademesi kombinasyonlarını desteklemeli?
+
+- Status: Answered
+- Raised: 2026-08-28
+- Scope: Adım 16 (`3.1`), `Databases` credential alanları, admin "Veritabanı Ekle" API/UI sözleşmesi ve runtime fail-closed davranışı
+- Question: Admin, hedef veritabanını yalnızca `ro`; `ro` + `rw`; veya `ro` + `rw` + `ddl` olarak mı kaydedebilmeli? `rw` ya da `ddl` hesaplarının `ro` olmadan tek başına tanımlanmasına izin verilecek mi?
+- Why it matters: Seçim, formdaki zorunlu alanları, API doğrulamasını, hangi sorguların destekleneceğini ve eksik kademelerdeki fail-closed hata sözleşmesini kalıcı olarak belirler. `rw` tek başına izin verilirse salt-okuma sorgularının daha yüksek yetkili hesapla çalışması veya hiç çalışmaması için ayrıca net bir kural gerekir.
+- Answer: Admin yalnızca üç bağlantı modundan birini seçebilir: `ro` (salt-okuma), `ro + rw` (okuma ve yazma) veya `ro + rw + ddl` (gelişmiş/DDL). `rw` ve `ddl` tek başına tanımlanamaz.
+- Recorded in: `docs/specs/SPEC-0002-role-based-target-database-credentials.md`, `docs/adr/ADR-0005-role-based-target-database-credentials.md`
+
+### OQ-2026-008: Sorgu ekranında hedef DB credential'ları kullanıcıya nasıl gösterilmeli?
+
+- Status: Answered
+- Raised: 2026-08-28
+- Scope: `GET /api/database_information`, `DatabaseProvider.set_db_info`, Studio veritabanı seçici, SPEC-0002 §7
+- Question: Sorgu çalıştıran son kullanıcıya, seçtiği hedef veritabanı için yalnız bağlantı modu/yetki rozeti mi (`RO`, `RO + RW`, `RO + RW + DDL`) gösterilmeli; yoksa kademe kullanıcı adları da (`app_ro`, `app_rw`) gösterilmeli mi?
+- Why it matters: Bağlantı modu tek başına türetilmiş, hassas olmayan bir yetenek bilgisidir ve mevcut spec ile çelişmez. Kullanıcı adlarının response'a eklenmesi ise SPEC-0002 §7 ve ADR-0005'in "credential değerleri listeleme endpoint'lerine yazılmaz" kısıtını değiştirir; hedef DB hesap adları saldırgan için keşif bilgisi olduğundan spec ve ADR'nin güncellenmesi gerekir. Şifreler her iki durumda da response'a girmez.
+- Answer: SQL editöründe yalnız yetki rozeti gösterilecek; credential değeri gönderilmeyecek. Rozet, kaydın bağlantı modu değil, kullanıcının o veritabanındaki **etkin yetkisi** olacak (mod ∩ kullanıcı rolü), böylece çalıştırıldığında reddedilecek bir yetenek vaat edilmez. Admin ekranı ayrı bir yüzeydir: kaydın hangi kademeleri sağladığını ve yönetim işlemlerini gösterir. Ek karar: admin, veritabanında tanımlı olmayan bir kademeyi kullanıcıya yetki olarak veremez; istek `400` ile reddedilir.
+- Recorded in: `docs/specs/SPEC-0002-role-based-target-database-credentials.md`, `docs/adr/ADR-0005-role-based-target-database-credentials.md`
+
 ## Entry Format
 
 Add new items in this format. Keep resolved entries for decision history, but

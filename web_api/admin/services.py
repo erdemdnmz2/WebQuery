@@ -32,15 +32,16 @@ from common.audit_details import (
 )
 from common.constants import QUERY_STATUS_WAITING_FOR_APPROVAL
 from common.exceptions import BaseServiceException
-from common.roles import is_admin, parse
-from common.security import generate_secure_credentials
+from common.roles import exceeds_mode, is_admin, mode_from_credentials, parse
 from database_provider import DatabaseProvider
 from query_execution import config
+from query_execution.query_analyzer import QueryAnalyzer
 
 from .exceptions import (
     AdminUserNotFoundError,
     CannotDisableSelfError,
     DatabaseAlreadyExistsError,
+    RoleNotSupportedByDatabaseError,
 )
 from .schemas import AdminApprovals
 
@@ -431,7 +432,8 @@ class AdminApprovalService(BaseAdminService):
                 machine_name=servername
             )
             
-            async with self.db_provider.get_session(user, db_uuid) as session:
+            query_tier = QueryAnalyzer().required_tier(query_text, technology=db_entry.technology)
+            async with self.db_provider.get_session(user, db_uuid, tier=query_tier) as session:
                 sql_query = text(query_text)
                 result = await session.execute(sql_query)
                 
@@ -550,6 +552,13 @@ class AdminDBAdditionService(BaseAdminService):
         servername: str,
         database_name: str,
         tech_name: str,
+        connection_mode: str,
+        username_ro: str | None,
+        password_ro: str | None,
+        username_rw: str | None,
+        password_rw: str | None,
+        username_ddl: str | None,
+        password_ddl: str | None,
         admin_user: User,
         client_ip: str | None = None,
     ) -> dict[str, Any]:
@@ -567,15 +576,18 @@ class AdminDBAdditionService(BaseAdminService):
                 if existing_db:
                     raise DatabaseAlreadyExistsError("Database already exists")
 
-                db_username, db_password = generate_secure_credentials()
                 db_uuid = str(uuid.uuid4())
 
                 database: Databases = Databases(
                     servername=servername, 
                     database_name=database_name, 
                     technology=tech_name,
-                    db_username=db_username,
-                    db_password=db_password,
+                    username_ro=username_ro,
+                    password_ro=password_ro,
+                    username_rw=username_rw,
+                    password_rw=password_rw,
+                    username_ddl=username_ddl,
+                    password_ddl=password_ddl,
                     uuid=db_uuid
                 )
                 db.add(database)
@@ -593,13 +605,14 @@ class AdminDBAdditionService(BaseAdminService):
                 db_info = await self.app_db.get_db_info()
                 self.db_provider.set_db_info(db_info)
                 
-                logger.info(f"Database '{database_name}' on server '{servername}' (UUID: {db_uuid}) successfully added by admin {admin_user.id} with generated credentials")
+                logger.info(
+                    "Database '%s' on server '%s' (UUID: %s) added by admin %s with mode %s",
+                    database_name, servername, db_uuid, admin_user.id, connection_mode,
+                )
                 return {
                     "success": True, 
                     "message": "Database added successfully",
                     "db_uuid": db_uuid,
-                    "db_username": db_username,
-                    "db_password": db_password
                 }
             except BaseServiceException:
                 raise
@@ -710,10 +723,12 @@ class AdminUserAuthService(BaseAdminService):
         client_ip: str | None = None,
     ) -> dict[str, Any]:
         role_upper = role.upper()
-        # Clean roles list, allow comma-separated combination of READER, WRITER, ADMIN
+        # Clean roles list, allow comma-separated combination of the data
+        # access roles plus the ADMIN governance role. DDL is grantable because
+        # QueryAnalyzer.check_role_permission honours it for DDL statements.
         roles_list = parse(role)
-        if not roles_list or any(r not in ["READER", "WRITER", "ADMIN"] for r in roles_list):
-            raise BaseServiceException("Invalid role. Role must be READER, WRITER, or ADMIN.")
+        if not roles_list or any(r not in ["READER", "WRITER", "DDL", "ADMIN"] for r in roles_list):
+            raise BaseServiceException("Invalid role. Role must be READER, WRITER, DDL, or ADMIN.")
             
         async with self.app_db.get_app_db() as db:
             # Check admin permission
@@ -738,6 +753,22 @@ class AdminUserAuthService(BaseAdminService):
             db_entry = db_res.scalars().first()
             if not db_entry:
                 raise BaseServiceException("Database not found.")
+
+            # A grant may not exceed the tiers the DBA actually provisioned.
+            # Without this the grant succeeds and every query at that tier
+            # fails closed later, with nothing pointing back at the grant.
+            connection_mode = mode_from_credentials(
+                has_ro=bool(db_entry.username_ro and db_entry.password_ro),
+                has_rw=bool(db_entry.username_rw and db_entry.password_rw),
+                has_ddl=bool(db_entry.username_ddl and db_entry.password_ddl),
+            )
+            unsupported_tier = exceeds_mode(connection_mode, role_upper)
+            if unsupported_tier:
+                raise RoleNotSupportedByDatabaseError(
+                    f"Bu veritabanı '{connection_mode}' bağlantı moduyla kayıtlı; "
+                    f"'{unsupported_tier.upper()}' kademesi tanımlı değil. "
+                    "Önce veritabanı kaydına bu kademenin kimlik bilgilerini ekleyin."
+                )
                 
             # Check existing association
             assoc_res = await db.execute(

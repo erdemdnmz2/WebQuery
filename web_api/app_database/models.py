@@ -225,6 +225,17 @@ class Databases(Base):
     servername = Column(String(100), nullable=False)
     database_name = Column(String(100), nullable=False)
     technology = Column(String(100), nullable=False)
+    # Target-database credentials, stored encrypted in WebQuery's metadata DB.
+    # A database can be configured as ro, ro+rw, or ro+rw+ddl; absent tiers
+    # are intentionally unavailable and must fail closed at execution time.
+    username_ro = Column(String(100), nullable=True)
+    password_ro = Column(EncryptedText, nullable=True)
+    username_rw = Column(String(100), nullable=True)
+    password_rw = Column(EncryptedText, nullable=True)
+    username_ddl = Column(String(100), nullable=True)
+    password_ddl = Column(EncryptedText, nullable=True)
+    # Legacy generated credentials are kept only while existing deployments
+    # transition to per-tier credentials. New registrations never populate them.
     db_username = Column(String(100), nullable=True)
     db_password = Column(EncryptedText, nullable=True)
     uuid = Column(AppUUID, nullable=False, index=True, default=lambda: str(uuid.uuid4()))

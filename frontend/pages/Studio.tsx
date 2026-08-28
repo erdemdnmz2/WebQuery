@@ -17,6 +17,7 @@ import { useHotkey, useIsMac } from '../lib/hooks';
 import { useWorkspaces } from '../lib/workspaces';
 import { isEditable, statusMeta } from '../lib/workspace-status';
 import { outcomeFromError, outcomeFromResponse, type ExecutionOutcome } from '../lib/execution';
+import { capabilityMeta } from '../lib/capability';
 import { databasesOf, findTarget, listTargets, resolveUuid, serverNames, technologyOf } from '../lib/targets';
 import { CodeEditor } from '../components/app/CodeEditor';
 import { ResultPanel } from '../components/app/ResultPanel';
@@ -310,9 +311,22 @@ const Studio: React.FC = () => {
   );
 
   const databaseItems = useMemo<PickerItem[]>(
-    () => databasesOf(servers, server).map((entry) => ({ value: entry.uuid, label: entry.name })),
+    () =>
+      databasesOf(servers, server).map((entry) => {
+        const meta = capabilityMeta(entry.capability);
+        return {
+          value: entry.uuid,
+          label: entry.name,
+          trailing: <Badge tone={meta.tone}>{meta.label}</Badge>,
+        };
+      }),
     [server, servers],
   );
+
+  // One database is one row. The tier it connects with is chosen by the
+  // backend from the query itself, so this badge reports the ceiling rather
+  // than offering a choice.
+  const capability = capabilityMeta(target?.capability);
 
   const statusInfo = current ? statusMeta(current.status) : null;
 
@@ -371,6 +385,12 @@ const Studio: React.FC = () => {
           searchPlaceholder="Veritabanı ara"
           leading={<DatabaseIcon size={14} className="shrink-0 text-subtle" />}
         />
+
+        {target && (
+          <Tooltip content={<span>{capability.hint}</span>}>
+            <Badge tone={capability.tone}>{capability.label}</Badge>
+          </Tooltip>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
           <Button icon={<LockKeyIcon size={14} />} disabled={!dbUuid} onClick={() => setMaskingOpen(true)}>

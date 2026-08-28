@@ -23,7 +23,7 @@ def mock_db_session():
     mock_session.execute.return_value = mock_result
     
     @asynccontextmanager
-    async def fake_get_session(user, db_uuid):
+    async def fake_get_session(user, db_uuid, tier="ro"):
         yield mock_session
         
     with patch("database_provider.DatabaseProvider.get_session", side_effect=fake_get_session):

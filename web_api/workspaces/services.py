@@ -349,6 +349,8 @@ class WorkspaceService:
                 raise QueryAnalysisRejectedError(
                     f"Query blocked: Your role '{user_role}' is not authorized to execute this query."
                 )
+
+            required_tier = self.analyzer.required_tier(query_data.query, technology=technology)
             
             if db_id:
                 rules = await self.app_db.get_masking_rules(db_id)
@@ -359,7 +361,9 @@ class WorkspaceService:
                 for col in ad_hoc_mask_columns:
                     masking_cols.add(col.lower())
 
-            async with db_provider.get_session(user=current_user, db_uuid=db_uuid) as session:
+            async with db_provider.get_session(
+                user=current_user, db_uuid=db_uuid, tier=required_tier
+            ) as session:
                   sql_query = text(query_data.query)
                   result = await session.execute(sql_query)
                   

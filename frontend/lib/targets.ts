@@ -1,4 +1,4 @@
-import type { DatabaseInfo, TargetDatabase } from '../types';
+import type { ConnectionMode, DatabaseInfo, TargetDatabase } from '../types';
 
 /**
  * A single addressable database, flattened out of the nested
@@ -12,6 +12,8 @@ export interface Target {
   servername: string;
   databaseName: string;
   technology?: string;
+  /** What this user may execute here; see TargetDatabase.capability. */
+  capability?: ConnectionMode | null;
 }
 
 /** Servers the user has at least one granted database on, alphabetically. */
@@ -38,6 +40,7 @@ export function listTargets(info: DatabaseInfo): Target[] {
         servername,
         databaseName: database.name,
         technology: server.technology,
+        capability: database.capability,
       });
     }
   }

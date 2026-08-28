@@ -25,7 +25,7 @@ def mock_db_session():
     mock_session.execute.return_value = mock_result
     
     @asynccontextmanager
-    async def fake_get_session(user, db_uuid):
+    async def fake_get_session(user, db_uuid, tier="ro"):
         yield mock_session
         
     with patch("database_provider.DatabaseProvider.get_session", side_effect=fake_get_session):
@@ -181,7 +181,12 @@ async def test_admin_database_registration(async_client: AsyncClient):
     db_payload = {
         "servername": "prod-server",
         "database_name": "orders_db",
-        "tech_name": "postgresql"
+        "tech_name": "postgresql",
+        "connection_mode": "ro_rw",
+        "username_ro": "orders_ro",
+        "password_ro": "ro-secret",
+        "username_rw": "orders_rw",
+        "password_rw": "rw-secret",
     }
     response = await async_client.post("/api/admin/add_database", json=db_payload)
     assert response.status_code == 200
@@ -195,6 +200,10 @@ async def test_admin_database_registration(async_client: AsyncClient):
         assert db_entry is not None
         assert db_entry.servername == "prod-server"
         assert db_entry.technology == "postgresql"
+        assert db_entry.username_ro == "orders_ro"
+        assert db_entry.password_ro == "ro-secret"
+        assert db_entry.username_rw == "orders_rw"
+        assert db_entry.password_rw == "rw-secret"
         audit = (
             await db.execute(
                 select(AuditLog).where(AuditLog.action == AuditAction.ADD_DATABASE)

@@ -1,7 +1,8 @@
 import type {
   DatabaseInfo,
   DatabaseSchema,
-  GeneratedCredentials,
+  ConnectionMode,
+  CreatedDatabase,
   AdminUser,
   MaskingRule,
   PendingQuery,
@@ -254,8 +255,18 @@ export const api = {
 
   registeredDatabases: () =>
     request<{ databases?: RegisteredDatabase[] }>('/api/admin/databases').then((data) => data.databases ?? []),
-  addDatabase: (payload: { servername: string; database_name: string; tech_name: string }) =>
-    request<GeneratedCredentials>('/api/admin/add_database', { method: 'POST', body: payload }),
+  addDatabase: (payload: {
+    servername: string;
+    database_name: string;
+    tech_name: string;
+    connection_mode: ConnectionMode;
+    username_ro?: string;
+    password_ro?: string;
+    username_rw?: string;
+    password_rw?: string;
+    username_ddl?: string;
+    password_ddl?: string;
+  }) => request<CreatedDatabase>('/api/admin/add_database', { method: 'POST', body: payload }),
   discoverSchema: (databaseId: number) =>
     request<DatabaseSchema>(`/api/admin/databases/${databaseId}/discover_schema`),
   databaseMaskingRules: (databaseId: number) =>

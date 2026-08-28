@@ -29,13 +29,23 @@ export type WorkspaceStatus =
   | 'approved_with_results'
   | 'rejected';
 
+/** The credential tiers a registration provisions, always hierarchical. */
+export type ConnectionMode = 'ro' | 'ro_rw' | 'ro_rw_ddl';
+
 /**
  * One database a user may target. The uuid is what every execution endpoint
  * accepts; servername and database_name exist for display only.
+ *
+ * `capability` is the registration's connection mode already narrowed by this
+ * user's role, so it states what they can run here rather than what the
+ * database could serve someone else. It is null for a registration that
+ * predates per-tier credentials. Credential values never appear in this
+ * payload; see SPEC-0002 §7.
  */
 export interface TargetDatabase {
   name: string;
   uuid: string;
+  capability?: ConnectionMode | null;
 }
 
 export interface ServerInfo {
@@ -105,7 +115,7 @@ export interface RegisteredDatabase {
   servername: string;
   database_name: string;
   technology: string;
-  db_username?: string | null;
+  connection_mode?: ConnectionMode | null;
 }
 
 export interface MaskingRule {
@@ -115,10 +125,9 @@ export interface MaskingRule {
   is_active: boolean;
 }
 
-export interface GeneratedCredentials {
+export interface CreatedDatabase {
   message?: string;
-  db_username: string;
-  db_password: string;
+  db_uuid: string;
 }
 
 /** GET /api/admin/databases/{id}/discover_schema: table name to column names. */

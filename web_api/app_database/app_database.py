@@ -9,6 +9,8 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.sql import select
 
+from common.roles import mode_from_credentials
+
 from .config import DATABASE_URL
 from .models import (
     ActionLogging,
@@ -266,26 +268,23 @@ class AppDatabase:
         
     async def get_db_info(self) -> dict[str, dict[str, Any]]:
         """
-        Returns database information per server.
-        Includes database list and technology information for each server.
-        
+        Returns registered target databases grouped by server.
+
+        Each database carries its connection mode and its per-tier credentials.
+        The credentials are for runtime connection building only;
+        ``DatabaseProvider.set_db_info`` splits them off before anything that
+        reaches an API response.
+
         Returns:
             Dict[str, Dict[str, Any]]: {
                 servername: {
-                    "databases": [database_names],
-                    "technology": "mssql" | "mysql" | "postgresql"
-                }
-            }
-        
-        Example:
-            {
-                "localhost": {
-                    "databases": ["Northwind", "AdventureWorks"],
-                    "technology": "mssql"
-                },
-                "mysql-server-1": {
-                    "databases": ["ecommerce", "analytics"],
-                    "technology": "mysql"
+                    "technology": "mssql" | "mysql" | "postgresql",
+                    "databases": [{
+                        "name": str,
+                        "uuid": str,
+                        "connection_mode": "ro" | "ro_rw" | "ro_rw_ddl" | None,
+                        "credentials": {tier: {"username": str, "password": str}},
+                    }]
                 }
             }
         """
@@ -305,7 +304,17 @@ class AppDatabase:
                     }
                 db_info[servername]["databases"].append({
                     "name": database.database_name,
-                    "uuid": database.uuid
+                    "uuid": database.uuid,
+                    "connection_mode": mode_from_credentials(
+                        has_ro=bool(database.username_ro and database.password_ro),
+                        has_rw=bool(database.username_rw and database.password_rw),
+                        has_ddl=bool(database.username_ddl and database.password_ddl),
+                    ),
+                    "credentials": {
+                        "ro": {"username": database.username_ro, "password": database.password_ro},
+                        "rw": {"username": database.username_rw, "password": database.password_rw},
+                        "ddl": {"username": database.username_ddl, "password": database.password_ddl},
+                    },
                 })
             return db_info
 

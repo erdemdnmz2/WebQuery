@@ -11,6 +11,7 @@ from sqlalchemy import select
 from app_database.app_database import AppDatabase
 from app_database.models import AuditLog, User
 from common.audit_actions import AuditAction, AuditTarget
+from common.roles import mode_from_credentials
 from dependencies import (
     admin_required,
     get_admin_service,
@@ -138,6 +139,13 @@ async def add_database(
         servername=request.servername,
         database_name=request.database_name,
         tech_name=request.tech_name,
+        connection_mode=request.connection_mode,
+        username_ro=request.username_ro,
+        password_ro=request.password_ro,
+        username_rw=request.username_rw,
+        password_rw=request.password_rw,
+        username_ddl=request.username_ddl,
+        password_ddl=request.password_ddl,
         admin_user=current_admin,
         client_ip=_peer_ip(http_request),
     )
@@ -145,8 +153,7 @@ async def add_database(
     if result.get("success"):
         return {
             "message": result.get("message"),
-            "db_username": result.get("db_username"),
-            "db_password": result.get("db_password")
+            "db_uuid": result.get("db_uuid"),
         }
     else:
         raise HTTPException(
@@ -169,7 +176,11 @@ async def list_databases(
             servername=db.servername,
             database_name=db.database_name,
             technology=db.technology,
-            db_username=db.db_username
+            connection_mode=mode_from_credentials(
+                has_ro=bool(db.username_ro and db.password_ro),
+                has_rw=bool(db.username_rw and db.password_rw),
+                has_ddl=bool(db.username_ddl and db.password_ddl),
+            ),
         )
         for db in dbs
     ]}

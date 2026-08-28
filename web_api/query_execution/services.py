@@ -132,7 +132,8 @@ class QueryService:
                 raise QueryAnalysisRejectedError(
                     message=f"Query blocked: Your role '{user_role}' is not authorized to execute this query."
                 )
-            
+
+            required_tier = self.analyzer.required_tier(query, technology=technology)
             if db_id:
                 rules = await self.app_db.get_masking_rules(db_id)
                 for rule in rules:
@@ -222,7 +223,8 @@ class QueryService:
                 
             async with self.database_provider.get_session(
                 user=user,
-                db_uuid=db_uuid
+                db_uuid=db_uuid,
+                tier=required_tier,
             ) as session:
                 sql_query = text(query)
                 result = await session.execute(sql_query)

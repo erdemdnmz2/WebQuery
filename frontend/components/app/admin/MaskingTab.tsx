@@ -13,7 +13,7 @@ import {
 import { api, errorMessage } from '../../../services/api';
 import { cn } from '../../../lib/cn';
 import { formatCount } from '../../../lib/format';
-import { Badge } from '../../ui/Badge';
+import { Badge, Identifier } from '../../ui/Badge';
 import { Button, IconButton } from '../../ui/Button';
 import { Checkbox } from '../../ui/Checkbox';
 import { EmptyState } from '../../ui/EmptyState';
@@ -21,16 +21,21 @@ import { Field } from '../../ui/Field';
 import { Input } from '../../ui/Input';
 import { Panel, PanelHeader } from '../../ui/Panel';
 import { Select } from '../../ui/Select';
+import { SegmentedControl } from '../../ui/SegmentedControl';
 import { Skeleton } from '../../ui/Skeleton';
 import { useToast } from '../../ui/Toast';
-import { CredentialsDialog } from './CredentialsDialog';
-import type { DatabaseSchema, GeneratedCredentials, MaskingRule, RegisteredDatabase } from '../../../types';
+import { CONNECTION_MODE, TIER_LABEL, connectionModeMeta, tiersOf } from '../../../lib/capability';
+import type { ConnectionMode, DatabaseSchema, MaskingRule, RegisteredDatabase } from '../../../types';
 
 const TECHNOLOGIES = [
   { value: 'mssql', label: 'Microsoft SQL Server' },
   { value: 'postgresql', label: 'PostgreSQL' },
   { value: 'mysql', label: 'MySQL' },
 ];
+
+const CONNECTION_MODES: Array<{ value: ConnectionMode; label: string }> = (
+  ['ro', 'ro_rw', 'ro_rw_ddl'] as const
+).map((value) => ({ value, label: CONNECTION_MODE[value].label }));
 
 const key = (table: string, column: string) =>
   `${table.toLocaleLowerCase('tr')}.${column.toLocaleLowerCase('tr')}`;
@@ -42,9 +47,11 @@ export const MaskingTab: React.FC = () => {
   const [loadingDatabases, setLoadingDatabases] = useState(true);
   const [selected, setSelected] = useState<RegisteredDatabase | null>(null);
 
-  const [form, setForm] = useState({ servername: '', database_name: '', technology: 'mssql' });
+  const [form, setForm] = useState({
+    servername: '', database_name: '', technology: 'mssql', connection_mode: 'ro' as ConnectionMode,
+    username_ro: '', password_ro: '', username_rw: '', password_rw: '', username_ddl: '', password_ddl: '',
+  });
   const [adding, setAdding] = useState(false);
-  const [credentials, setCredentials] = useState<GeneratedCredentials | null>(null);
 
   const [schema, setSchema] = useState<DatabaseSchema>({});
   const [schemaError, setSchemaError] = useState<string | null>(null);
@@ -110,10 +117,22 @@ export const MaskingTab: React.FC = () => {
         servername: form.servername.trim(),
         database_name: form.database_name.trim(),
         tech_name: form.technology,
+        connection_mode: form.connection_mode,
+        username_ro: form.username_ro.trim(),
+        password_ro: form.password_ro,
+        ...(form.connection_mode !== 'ro' ? {
+          username_rw: form.username_rw.trim(), password_rw: form.password_rw,
+        } : {}),
+        ...(form.connection_mode === 'ro_rw_ddl' ? {
+          username_ddl: form.username_ddl.trim(), password_ddl: form.password_ddl,
+        } : {}),
       });
-      setCredentials(created);
-      setForm({ servername: '', database_name: '', technology: 'mssql' });
+      setForm({
+        servername: '', database_name: '', technology: 'mssql', connection_mode: 'ro',
+        username_ro: '', password_ro: '', username_rw: '', password_rw: '', username_ddl: '', password_ddl: '',
+      });
       void loadDatabases();
+      toast.success('Veritabanı kaydedildi', `Kayıt kimliği: ${created.db_uuid}`);
     } catch (caught) {
       toast.error('Veritabanı eklenemedi', errorMessage(caught));
     } finally {
@@ -187,7 +206,7 @@ export const MaskingTab: React.FC = () => {
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
       <div className="flex flex-col gap-4 lg:col-span-5">
         <Panel flush as="section">
-          <PanelHeader title="Veritabanı kaydet" description="Kayıt sırasında servis hesabı üretilir." />
+          <PanelHeader title="Veritabanı kaydet" description="DBA'in sağladığı erişim hesaplarını seçilen bağlantı moduyla kaydedin." />
           <form onSubmit={addDatabase} className="flex flex-col gap-3.5 p-4">
             <Field label="Sunucu adresi" required hint="Ağ üzerinden erişilebilen host adı veya IP.">
               <Input
@@ -218,15 +237,58 @@ export const MaskingTab: React.FC = () => {
               </Field>
             </div>
 
+            <Field
+              label="Bağlantı modu"
+              required
+              hint="Seçilmeyen kademedeki sorgular WebQuery tarafından reddedilir."
+            >
+              <SegmentedControl
+                value={form.connection_mode}
+                onChange={(connection_mode) => setForm({ ...form, connection_mode })}
+                segments={CONNECTION_MODES}
+                label="Bağlantı modu"
+                className="w-full overflow-x-auto"
+              />
+            </Field>
+
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field label="RO kullanıcı adı" required hint="Salt-okuma hesabı">
+                <Input value={form.username_ro} onChange={(event) => setForm({ ...form, username_ro: event.target.value })} required autoComplete="off" />
+              </Field>
+              <Field label="RO şifre" required>
+                <Input type="password" value={form.password_ro} onChange={(event) => setForm({ ...form, password_ro: event.target.value })} required autoComplete="new-password" />
+              </Field>
+              {form.connection_mode !== 'ro' && (
+                <>
+                  <Field label="RW kullanıcı adı" required hint="Okuma ve veri değiştirme hesabı">
+                    <Input value={form.username_rw} onChange={(event) => setForm({ ...form, username_rw: event.target.value })} required autoComplete="off" />
+                  </Field>
+                  <Field label="RW şifre" required>
+                    <Input type="password" value={form.password_rw} onChange={(event) => setForm({ ...form, password_rw: event.target.value })} required autoComplete="new-password" />
+                  </Field>
+                </>
+              )}
+              {form.connection_mode === 'ro_rw_ddl' && (
+                <>
+                  <Field label="DDL kullanıcı adı" required hint="Şema değişikliği hesabı; yalnız gerektiğinde ekleyin.">
+                    <Input value={form.username_ddl} onChange={(event) => setForm({ ...form, username_ddl: event.target.value })} required autoComplete="off" />
+                  </Field>
+                  <Field label="DDL şifre" required>
+                    <Input type="password" value={form.password_ddl} onChange={(event) => setForm({ ...form, password_ddl: event.target.value })} required autoComplete="new-password" />
+                  </Field>
+                </>
+              )}
+            </div>
+
             <Button
               type="submit"
               variant="primary"
               icon={<PlusIcon size={14} weight="bold" />}
               loading={adding}
-              disabled={!form.servername.trim() || !form.database_name.trim()}
+              disabled={!form.servername.trim() || !form.database_name.trim() || !form.username_ro.trim() || !form.password_ro || (form.connection_mode !== 'ro' && (!form.username_rw.trim() || !form.password_rw)) || (form.connection_mode === 'ro_rw_ddl' && (!form.username_ddl.trim() || !form.password_ddl))}
               className="self-start"
             >
-              Ekle ve hesap üret
+              Veritabanını kaydet
             </Button>
           </form>
         </Panel>
@@ -286,6 +348,9 @@ export const MaskingTab: React.FC = () => {
                       <Badge tone="neutral" mono>
                         {database.technology.toLocaleUpperCase('tr')}
                       </Badge>
+                      <Badge tone={connectionModeMeta(database.connection_mode).tone}>
+                        {connectionModeMeta(database.connection_mode).label}
+                      </Badge>
                       <CaretRightIcon
                         size={13}
                         className={cn('shrink-0', active ? 'text-accent' : 'text-faint')}
@@ -328,6 +393,32 @@ export const MaskingTab: React.FC = () => {
                 </IconButton>
               }
             />
+
+            {/*
+              Admin-only breakdown. The SQL editor shows one capability badge
+              and nothing else; here the person who registered the database
+              needs to see which tiers it actually provisions, because that is
+              what bounds every grant made against it.
+            */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-3 py-2.5">
+              <Badge tone={connectionModeMeta(selected.connection_mode).tone}>
+                {connectionModeMeta(selected.connection_mode).label}
+              </Badge>
+              {tiersOf(selected.connection_mode).length === 0 ? (
+                <span className="text-[12px] text-subtle">
+                  {connectionModeMeta(selected.connection_mode).hint}
+                </span>
+              ) : (
+                <ul className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {tiersOf(selected.connection_mode).map((tier) => (
+                    <li key={tier} className="flex items-center gap-1.5 text-[12px] text-subtle">
+                      <Identifier>{tier}</Identifier>
+                      {TIER_LABEL[tier]}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             <div className="border-b border-line px-3 py-2">
               <Field label="Tablo veya kolon ara" className="[&>div:first-child]:sr-only">
@@ -468,8 +559,6 @@ export const MaskingTab: React.FC = () => {
           </Panel>
         )}
       </div>
-
-      <CredentialsDialog credentials={credentials} onClose={() => setCredentials(null)} />
     </div>
   );
 };

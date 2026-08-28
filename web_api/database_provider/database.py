@@ -1,8 +1,4 @@
-"""
-Database Provider Module
-Manages database engines caching and session provisioning using centralized credentials.
-All functions and classes are strictly typed.
-"""
+"""Target database session provisioning with per-database role credentials."""
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -42,14 +38,15 @@ class DatabaseProvider:
         Args:
             info: Database configuration dictionary.
         """
-        print(f"[DEBUG set_db_info] Input info: {info}")
-        self.db_info = info
+        # Keep the public database catalogue separate from credential-bearing
+        # runtime entries. ``get_db_info_db`` feeds an API response.
+        self.db_info = {}
         self.db_by_uuid = {}
         for servername, server_data in info.items():
             tech = server_data.get("technology", "mssql")
+            public_databases = []
             for db_data in server_data.get("databases", []):
-                # db_data is {"name": "db_name", "uuid": "db_uuid"}
-                print(f"[DEBUG set_db_info] Processing db_data: {db_data}")
+                # db_data is {"name", "uuid", "connection_mode", "credentials"}
                 if isinstance(db_data, dict) and "uuid" in db_data:
                     # The ORM hands back uuid.UUID for MSSQL UNIQUEIDENTIFIER, while every
                     # lookup arrives as a string from the request body. Normalise to str
@@ -58,14 +55,45 @@ class DatabaseProvider:
                     self.db_by_uuid[db_uuid] = {
                         "servername": servername,
                         "database_name": db_data["name"],
-                        "technology": tech
+                        "technology": tech,
+                        "credentials": db_data.get("credentials", {}),
                     }
-        print(f"[DEBUG set_db_info] Built db_by_uuid: {self.db_by_uuid}")
+                    # The connection mode is derived state, not a secret: it
+                    # says which tiers exist, never who they authenticate as.
+                    public_databases.append({
+                        "name": db_data["name"],
+                        "uuid": db_uuid,
+                        "connection_mode": db_data.get("connection_mode"),
+                    })
+            self.db_info[servername] = {
+                "databases": public_databases,
+                "technology": tech,
+            }
+
+    def _credentials_for(self, db_uuid: str, tier: str) -> tuple[str, str] | None:
+        """Resolve one selected tier without exposing credentials to callers."""
+        credentials = self.db_by_uuid[db_uuid].get("credentials", {})
+        tier_credentials = credentials.get(tier, {})
+        username = tier_credentials.get("username")
+        password = tier_credentials.get("password")
+        if username and password:
+            return username, password
+
+        # Existing registered databases are migrated incrementally. They have
+        # no tier credentials at all and retain the old central connection only
+        # until an administrator re-registers them with a supported mode.
+        has_any_tier_credential = any(
+            values.get("username") or values.get("password")
+            for values in credentials.values()
+        )
+        if not has_any_tier_credential and tier in {"ro", "rw"}:
+            return CENTRAL_DB_USER, CENTRAL_DB_PASSWORD
+        return None
     
     @asynccontextmanager
-    async def get_session(self, user: models.User, db_uuid: str):
+    async def get_session(self, user: models.User, db_uuid: str, tier: str = "ro"):
         """
-        Provides user-specific async database session using centralized credentials.
+        Provides an async target database session for the requested tier.
         
         Args:
             user: User model.
@@ -81,24 +109,34 @@ class DatabaseProvider:
                 f"Database with UUID '{db_uuid}' not found in configuration."
             )
         
+        if tier not in {"ro", "rw", "ddl"}:
+            raise ValueError(f"Unsupported credential tier '{tier}'.")
+
         db_entry = self.db_by_uuid[db_uuid]
         servername = db_entry["servername"]
         database_name = db_entry["database_name"]
         tech = db_entry["technology"]
         driver = get_driver_for_technology(tech)
  
+        credentials = self._credentials_for(db_uuid, tier)
+        if credentials is None:
+            raise ValueError(
+                f"Bu veritabanı için {tier.upper()} kademesinde kimlik bilgisi tanımlı değil."
+            )
+        username, password = credentials
         conn_str = create_connection_string(
             tech=tech,
             driver=driver,
             servername=servername,
             database=database_name,
-            username=CENTRAL_DB_USER,
-            password=CENTRAL_DB_PASSWORD,
+            username=username,
+            password=password,
         )
         
         engine = await self.engine_cache.get_engine(
             conn_str,
             db_uuid=db_uuid,
+            tier=tier,
             connect_args=get_connect_args(tech, QUERY_TIMEOUT_SECONDS),
         )
 
@@ -128,15 +166,19 @@ class DatabaseProvider:
         """
         await self.engine_cache.stop_loop()
 
+    async def close_database_engines(self, db_uuid: str) -> int:
+        """
+        Closes all cached role-tier engines for one target database.
+        """
+        return await self.engine_cache.close_database_engines(db_uuid)
+
     async def close_user_engines(self, user_id: int) -> None:
+        """Compatibility no-op: connection pools are shared by target DB, not user.
+
+        A logout must not close another user's active pool merely because they
+        share a target database.
         """
-        Closes all database engines for a specific user.
-        Called when a user logs out.
-        
-        Args:
-            user_id: The ID of the user whose engines should be closed.
-        """
-        await self.engine_cache.close_user_engines(user_id) 
+        _ = user_id
     
     def get_db_info_db(self) -> dict[str, dict[str, Any]]:
         """

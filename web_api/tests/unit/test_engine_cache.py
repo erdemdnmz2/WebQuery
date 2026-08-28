@@ -98,7 +98,7 @@ async def test_ttl_cleanup(mock_create_engine):
     
     # Artificially age the entry to bypass wait time
     key = cache._hash_key(url)
-    cache._cache[key].last_accessed = datetime.now() - timedelta(seconds=10)
+    cache._cache[key].engines["ro"].last_accessed = datetime.now() - timedelta(seconds=10)
     
     # Start loop and wait for it to process
     await cache.start_loop()
@@ -132,3 +132,39 @@ async def test_close_user_engines(mock_create_engine):
     engine2.dispose.assert_not_awaited()
     
     assert cache._stats["engine_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_database_tiers_receive_distinct_engines(mock_create_engine):
+    cache = EngineCache(max_engines=5)
+
+    ro = await cache.get_engine("postgresql+asyncpg://ro:p@host/db", db_uuid="db-1", tier="ro")
+    rw = await cache.get_engine("postgresql+asyncpg://rw:p@host/db", db_uuid="db-1", tier="rw")
+
+    assert ro is not rw
+    assert set(cache._cache["db-1"].engines) == {"ro", "rw"}
+
+
+@pytest.mark.asyncio
+async def test_password_rotation_replaces_only_matching_tier_engine(mock_create_engine):
+    cache = EngineCache(max_engines=5)
+    old_ro = await cache.get_engine("postgresql+asyncpg://ro:old@host/db", db_uuid="db-1", tier="ro")
+    rw = await cache.get_engine("postgresql+asyncpg://rw:stable@host/db", db_uuid="db-1", tier="rw")
+
+    new_ro = await cache.get_engine("postgresql+asyncpg://ro:new@host/db", db_uuid="db-1", tier="ro")
+
+    assert old_ro is not new_ro
+    old_ro.dispose.assert_awaited_once()
+    assert cache._cache["db-1"].engines["rw"].engine is rw
+
+
+@pytest.mark.asyncio
+async def test_close_database_engines_disposes_all_tiers(mock_create_engine):
+    cache = EngineCache(max_engines=5)
+    ro = await cache.get_engine("postgresql+asyncpg://ro:p@host/db", db_uuid="db-1", tier="ro")
+    rw = await cache.get_engine("postgresql+asyncpg://rw:p@host/db", db_uuid="db-1", tier="rw")
+
+    assert await cache.close_database_engines("db-1") == 2
+    ro.dispose.assert_awaited_once()
+    rw.dispose.assert_awaited_once()
+    assert cache.get_cache_stats()["engine_count"] == 0

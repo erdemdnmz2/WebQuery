@@ -26,6 +26,21 @@ bilgileriyle kurulacak:
 - `ddl`: yalnızca açıkça ihtiyaç duyulan ve ayrıca provision edilen hedef DB'ler
   için; varsayılanı yoktur
 
+Admin kayıt ekranı yalnız üç hiyerarşik bağlantı modunu destekler: `ro`,
+`ro + rw` ve `ro + rw + ddl`. Böylece `rw` veya `ddl` hesabı daha düşük
+yetki kademeleri olmadan tek başına kaydedilemez.
+
+Kademe, kullanıcı tarafından seçilmez. Hedef veritabanı arayüzde tek kayıttır;
+çalıştırılacak kademe `QueryAnalyzer` tarafından sorgudan türetilir. Sorgu
+ekranı yalnız türetilmiş bir `capability` değeri görür: kaydın bağlantı modunun
+kullanıcının rolüyle kesişimi. Kaydın ham modu ve credential değerleri (şifre
+ve kullanıcı adı) bu response'a girmez. Kaydın hangi kademeleri sağladığı
+yalnız admin yüzeyinde gösterilir.
+
+Yetki verme kaydın sağladığını aşamaz: bir kullanıcıya, hedef veritabanında
+credential'ı tanımlı olmayan bir kademeyi gerektiren rol verilemez. `ADMIN`
+yönetişim rolü olduğu ve kaydı yöneten kişiye her modda verildiği için muaftır.
+
 Hedef DB hesaplarını DBA hedef sunucuda manuel oluşturur. DBA credential'ları
 admin'e güvenli kanal üzerinden verir. Admin bunları WebQuery'nin veritabanı
 ekleme akışına girer. WebQuery yalnızca credential'ları kendi veritabanında
@@ -54,6 +69,21 @@ eklenebilir ve her DB/role için ayrı değerler gerektiğinden env modeli yenid
 başlatma ve ölçekleme operasyonunu gereksiz şekilde zorlaştırır. Credential'lar
 WebQuery'nin kendi DB'sinde, Fernet ile şifreli veri olarak tutulacaktır.
 
+### 4. Sorgu ekranında kaydın ham bağlantı modunu göstermek
+
+Uygulaması daha ucuzdur; kullanıcı rolü hesaba katılmaz. Ancak `ro + rw`
+moduyla kayıtlı bir veritabanı `READER` rolündeki kullanıcıya da "yazma"
+yeteneği vaat eder ve sorgu çalıştırıldığında rol kontrolü reddeder. Rozetin
+niyetten değil gerçekleşecek davranıştan türetilmesi gerektiği için reddedildi
+(`frontend/DESIGN.md` §9, aynı ilke maskeleme rozeti için de geçerlidir).
+
+### 5. Kademeleri ayrı veritabanı kayıtları olarak listelemek
+
+Credential modelini doğrudan yansıtır. Ancak kullanıcı aynı veritabanını üç
+kez görür ve kendi kademesini seçmek zorunda kalır; bu, en düşük yetkili hesabı
+seçme kararını uygulamadan kullanıcıya taşır ve modelin güvenlik amacını
+ortadan kaldırır. Reddedildi.
+
 ## Consequences
 
 - Uygulama katmanı ve hedef DB yetkileri birlikte savunma sağlar.
@@ -62,6 +92,12 @@ WebQuery'nin kendi DB'sinde, Fernet ile şifreli veri olarak tutulacaktır.
   gerekir.
 - Engine cache anahtarları credential kademesini ayırt etmek zorunda kalır.
 - Credential rotasyonu için ileride ayrı bir operasyonel akış tasarlanmalıdır.
+- `GET /api/database_information` kullanıcı rolünü de okumak zorundadır. Bu
+  ek maliyet getirmez: rol, zaten okunan association satırının bir kolonudur ve
+  bağlantı modu provider'ın bellek içi kataloğundan gelir.
+- Bir hedef veritabanının bağlantı modu daraltılırsa, o kaydın önceden verilmiş
+  yüksek kademeli yetkileri geçersiz kalır. Kayıt güncelleme akışı eklendiğinde
+  mevcut association'ların da doğrulanması gerekir.
 
 ## Accepted Risks
 
@@ -76,5 +112,7 @@ WebQuery'nin kendi DB'sinde, Fernet ile şifreli veri olarak tutulacaktır.
 
 - Spec: `docs/specs/SPEC-0002-role-based-target-database-credentials.md`
 - Open question: `OQ-2026-002`
+- Open question: `OQ-2026-007`
+- Open question: `OQ-2026-008`
 - Kaynak plan: `webquery_implementasyon_sirasi.md`, Adım 16 (`3.1`)
 - Supersedes / Superseded by: yok

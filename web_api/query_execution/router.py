@@ -12,6 +12,7 @@ from app_database.app_database import AppDatabase
 from app_database.models import Databases, User, UserDatabaseAssociation
 from authentication.services import get_current_user
 from common.limiter import limiter
+from common.roles import effective_mode
 from database_provider import DatabaseProvider
 from dependencies import get_app_db, get_db_provider, get_query_service
 from query_execution import config
@@ -113,28 +114,43 @@ async def get_database_information(
     """
     all_db_info: dict[str, Any] = db_provider.get_db_info_db()
 
-    # Retrieve only databases authorized for the user
+    # Retrieve only databases authorized for the user. The role travels with
+    # the association row that is already being read, so resolving the
+    # capability below costs no extra query.
     async with app_db.get_app_db() as db:
         assoc_res = await db.execute(
-            select(UserDatabaseAssociation.database_id).where(UserDatabaseAssociation.user_id == current_user.id)
+            select(UserDatabaseAssociation.database_id, UserDatabaseAssociation.role)
+            .where(UserDatabaseAssociation.user_id == current_user.id)
         )
-        allowed_db_ids = set(assoc_res.scalars().all())
-        
-        if not allowed_db_ids:
+        role_by_db_id = {database_id: role for database_id, role in assoc_res.all()}
+
+        if not role_by_db_id:
             return {"db_info": {}}
             
         db_res = await db.execute(
-            select(Databases).where(Databases.id.in_(allowed_db_ids))
+            select(Databases).where(Databases.id.in_(role_by_db_id.keys()))
         )
         allowed_databases = db_res.scalars().all()
-        allowed_uuids = {d.uuid for d in allowed_databases}
+        role_by_uuid = {str(d.uuid): role_by_db_id[d.id] for d in allowed_databases}
 
     filtered_info = {}
     for server_name, server_data in all_db_info.items():
         tech = server_data.get("technology", "mssql")
         dbs = server_data.get("databases", [])
-        
-        filtered_dbs = [d for d in dbs if d.get("uuid") in allowed_uuids]
+
+        # `capability` is what this user can actually execute here: the
+        # registration's mode narrowed by their role. Publishing the raw mode
+        # would advertise a write tier that the role check then refuses.
+        filtered_dbs = [
+            {
+                **{key: value for key, value in database.items() if key != "connection_mode"},
+                "capability": effective_mode(
+                    database.get("connection_mode"), role_by_uuid[str(database.get("uuid"))]
+                ),
+            }
+            for database in dbs
+            if str(database.get("uuid")) in role_by_uuid
+        ]
         if filtered_dbs:
             filtered_info[server_name] = {
                 "databases": filtered_dbs,
