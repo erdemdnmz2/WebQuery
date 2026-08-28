@@ -33,6 +33,7 @@ from common.config_guard import verify_startup_config
 from common.errors import redact_passwords
 from common.exceptions import BaseServiceException
 from common.limiter import limiter
+from common.schema_guard import verify_schema
 from database_provider import DatabaseProvider
 from middlewares import AuthMiddleware
 from middlewares.trace_middleware import TraceMiddleware
@@ -63,7 +64,14 @@ async def lifespan(app: FastAPI):
         # Real connection test
         async with app.state.app_db.app_engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
-        print("✓ AppDatabase connection successful")
+            # Migrations have already run in entrypoint.sh by this point. An
+            # install bootstrapped by create_all() before Alembic existed never
+            # received the baseline's indexes and constraints, and no revision
+            # backfills them on its own — so the schema is verified here rather
+            # than trusted. verify_schema raises SystemExit, which is a
+            # BaseException and deliberately passes through the handler below.
+            await conn.run_sync(verify_schema)
+        print("✓ AppDatabase connection successful, schema verified")
         # Schema is managed by Alembic (`alembic upgrade head`, run in
         # entrypoint.sh before this process starts) — see
         # docs/adr/ADR-0001-schema-migrations-alembic.md. Two instances
