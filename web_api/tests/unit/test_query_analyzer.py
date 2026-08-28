@@ -39,6 +39,7 @@ def test_ddl_pattern_detection(analyzer: QueryAnalyzer):
     assert result["return"] is False
     assert result["risk_type"] == RiskLevel.DDL_PATTERN.value
 
+
     # Test Obfuscated DROP TABLE (Hacker bypass attempt with comments)
     query = "DROP /* hacker comment */ TABLE logs"
     result = analyzer.analyze(query)
@@ -50,6 +51,23 @@ def test_ddl_pattern_detection(analyzer: QueryAnalyzer):
     result = analyzer.analyze(query)
     assert result["return"] is False
     assert result["risk_type"] == RiskLevel.DDL_PATTERN.value
+
+
+@pytest.mark.parametrize("technology", ["mssql", "mysql", "postgresql"])
+def test_alter_table_remains_ddl_after_sqlglot_upgrade(
+    analyzer: QueryAnalyzer, technology: str
+):
+    """SQLGlot 30 represents ALTER TABLE with ``exp.Alter``, not AlterTable."""
+    query = "ALTER TABLE users ADD department VARCHAR(100)"
+
+    result = analyzer.analyze(query, technology=technology)
+
+    assert result["return"] is False
+    assert result["risk_type"] == RiskLevel.DDL_PATTERN.value
+    assert analyzer.required_tier(query, technology=technology) == "ddl"
+    assert analyzer.check_permissions_match_role(query, "READER", technology=technology) is False
+    assert analyzer.check_permissions_match_role(query, "DDL", technology=technology) is True
+
 
 def test_risky_pattern_detection(analyzer: QueryAnalyzer):
     # UPDATE without WHERE

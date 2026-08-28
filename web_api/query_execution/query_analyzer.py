@@ -100,7 +100,7 @@ class QueryAnalyzer:
         except sqlglot.errors.ParseError:
             return "ddl"
 
-        ddl_types = (exp.Drop, exp.Create, exp.AlterTable, exp.TruncateTable)
+        ddl_types = (exp.Drop, exp.Create, exp.Alter, exp.TruncateTable)
         dml_types = (exp.Insert, exp.Update, exp.Delete, exp.Merge)
         tier = "ro"
         for statement in statements:
@@ -124,7 +124,7 @@ class QueryAnalyzer:
 
     def _check_ddl(self, stmt: exp.Expression) -> bool:
         """Check for structural changes to the database."""
-        ddl_types = (exp.Drop, exp.Create, exp.AlterTable, exp.TruncateTable)
+        ddl_types = (exp.Drop, exp.Create, exp.Alter, exp.TruncateTable)
         if isinstance(stmt, ddl_types):
             return True
         # Also check nested nodes
@@ -189,7 +189,7 @@ class QueryAnalyzer:
             if not stmt:
                 continue
 
-            ddl_types = (exp.Drop, exp.Create, exp.AlterTable, exp.TruncateTable)
+            ddl_types = (exp.Drop, exp.Create, exp.Alter, exp.TruncateTable)
             has_ddl = isinstance(stmt, ddl_types) or any(isinstance(node, ddl_types) for node in stmt.find_all(ddl_types))
 
             dml_types = (exp.Insert, exp.Update, exp.Delete)

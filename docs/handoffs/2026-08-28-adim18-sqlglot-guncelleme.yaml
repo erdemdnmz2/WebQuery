@@ -1,0 +1,52 @@
+handoff:
+  status: COMPLETE
+  from: "Codex"
+  to: "WebQuery team"
+  created_at: "2026-08-28T18:40:08+0300"
+  task: "Adım 18 (`3.3`) — sqlglot güncellemesi"
+
+  scope:
+    completed:
+      - "sqlglot bağımlılığı 23.6.3'ten 30.14.0'a sabitlendi."
+      - "Kaldırılan exp.AlterTable referansları exp.Alter ile değiştirildi."
+      - "ALTER TABLE'nin MSSQL, MySQL ve PostgreSQL'de DDL olarak engellenmesi, ddl kademesine yönlenmesi ve rol kontrolüyle korunması test edildi."
+    excluded:
+      - "Adım 19 (`3.2`) analyzer sertleştirmesi ve Adım 20 (`3.4`) DML teyidi bu değişikliğin kapsamı dışındadır."
+      - "Mevcut docs/handoffs/2026-08-28-rol-bazli-credential-ve-sema-butunlugu.md kullanıcı değişikliği bu commit'e dahil edilmedi."
+
+  changed_files:
+    created:
+      - "docs/handoffs/2026-08-28-adim18-sqlglot-guncelleme.yaml"
+    modified:
+      - "web_api/requirements.txt"
+      - "web_api/query_execution/query_analyzer.py"
+      - "web_api/tests/unit/test_query_analyzer.py"
+    deleted: []
+
+  decisions:
+    - decision: "sqlglot 30.14.0'a sabitlendi ve AST uyarlaması exp.Alter ile yapıldı."
+      rationale: "Güncel parsera geçerken ALTER TABLE sınıflandırmasının fail-closed DDL davranışını korumak gerekir; sqlglot 30'da exp.AlterTable kaldırılmıştır."
+      recorded_in: "webquery_implementasyon_sirasi.md, Adım 18 (`3.3`)"
+
+  validation:
+    commands_run:
+      - command: "cd web_api && ../.venv/bin/python -m pytest -q tests/unit/test_query_analyzer.py"
+        result: "passed"
+        evidence: "11 passed, 1 mevcut Pydantic deprecation uyarısı."
+      - command: "cd web_api && ../.venv/bin/ruff check query_execution/query_analyzer.py tests/unit/test_query_analyzer.py"
+        result: "passed"
+        evidence: "All checks passed."
+      - command: "cd web_api && ../.venv/bin/python -m pip check"
+        result: "passed"
+        evidence: "No broken requirements found."
+      - command: "cd web_api && ../.venv/bin/python -m pytest -q"
+        result: "passed"
+        evidence: "150 passed, 1 mevcut Pydantic deprecation uyarısı, 95.40s."
+      - command: "git diff --check"
+        result: "passed"
+        evidence: "Boşluk veya patch biçim hatası yok."
+
+  open_questions: []
+  known_risks:
+    - "SQLGlot sürüm yükseltmesi büyük bir API değişimidir; mevcut test paketi geçse de desteklenen üretim SQL lehçelerinin gerçek sorguları staging'de gözlemlenmelidir."
+  next_step: "Adım 19 (`3.2`) analyzer sertleştirmesini sqlglot 30.14.0 üzerinde uygulayın."
