@@ -35,7 +35,7 @@ from common.exceptions import BaseServiceException
 from common.roles import exceeds_mode, is_admin, mode_from_credentials, parse
 from database_provider import DatabaseProvider
 from query_execution import config
-from query_execution.query_analyzer import QueryAnalyzer
+from query_execution.query_analyzer import QueryAnalyzer, hard_block_reason
 
 from .exceptions import (
     AdminUserNotFoundError,
@@ -432,7 +432,15 @@ class AdminApprovalService(BaseAdminService):
                 machine_name=servername
             )
             
-            query_tier = QueryAnalyzer().required_tier(query_text, technology=db_entry.technology)
+            analyzer = QueryAnalyzer()
+            # Previewing runs the statement on the target database, so the
+            # checks nobody may skip apply here as well.
+            blocked = hard_block_reason(analyzer, query_text, technology=db_entry.technology)
+            if blocked:
+                await self.app_db.update_log(log_id=log_id, successfull=False, error=blocked)
+                return {"success": False, "error": blocked}
+
+            query_tier = analyzer.required_tier(query_text, technology=db_entry.technology)
             async with self.db_provider.get_session(user, db_uuid, tier=query_tier) as session:
                 sql_query = text(query_text)
                 result = await session.execute(sql_query)

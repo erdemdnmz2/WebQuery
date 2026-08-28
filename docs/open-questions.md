@@ -83,6 +83,26 @@ with status `Open` before doing task work; see `AGENTS.md`.
 - Answer: SQL editöründe yalnız yetki rozeti gösterilecek; credential değeri gönderilmeyecek. Rozet, kaydın bağlantı modu değil, kullanıcının o veritabanındaki **etkin yetkisi** olacak (mod ∩ kullanıcı rolü), böylece çalıştırıldığında reddedilecek bir yetenek vaat edilmez. Admin ekranı ayrı bir yüzeydir: kaydın hangi kademeleri sağladığını ve yönetim işlemlerini gösterir. Ek karar: admin, veritabanında tanımlı olmayan bir kademeyi kullanıcıya yetki olarak veremez; istek `400` ile reddedilir.
 - Recorded in: `docs/specs/SPEC-0002-role-based-target-database-credentials.md`, `docs/adr/ADR-0005-role-based-target-database-credentials.md`
 
+### OQ-2026-009: Admin sorguları hangi engellere takılmalı?
+
+- Status: Open
+- Raised: 2026-08-28
+- Scope: Adım 19 (`3.2.5`) admin bypass daraltması, Adım 20 (`3.4`) yıkıcı DML
+  teyidi; `web_api/query_execution/services.py`, `HARD_BLOCKED_RISKS`
+- Question: Veritabanı admin'i şu an yalnız `sql_injection_risk` ve
+  `blocked_operation` risklerinde durduruluyor; `ddl_pattern`, `risky_pattern`
+  ve `performance_risk` için onay gerekliliğini atlayıp sorguyu çalıştırıyor
+  (atlama loglanıyor). Bu sınır doğru mu, yoksa admin'in de durdurulması
+  gereken başka risk sınıfları var mı?
+- Why it matters: Sınır iki yönde de bedelli. Genişletmek admin'i kendi hedef
+  veritabanı hesabına yönlendirir ve o an WebQuery'nin audit kaydında hiçbir iz
+  kalmaz. Daraltmak ise analizciyi bir rol için fiilen devre dışı bırakır.
+  ADR-0016 mevcut sınırı bilinçli bir **ara durum** olarak kaydetti; Adım 20'de
+  yıkıcı DML teyidi geldiğinde ölçüt kişiye bakmayacağı için bu istisnanın
+  tamamen kalkması planlanıyor. Karar, Adım 20'nin kapsamını belirler.
+- Answer: Leave blank while open; record the user's answer once received
+- Recorded in: `docs/adr/ADR-0016-analyzer-block-boundary.md` (mevcut ara durum)
+
 ## Entry Format
 
 Add new items in this format. Keep resolved entries for decision history, but

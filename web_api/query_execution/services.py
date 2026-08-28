@@ -35,7 +35,7 @@ from query_execution.exceptions import (
     QueryExecutionError,
     QuerySyntaxError,
 )
-from query_execution.query_analyzer import QueryAnalyzer
+from query_execution.query_analyzer import HARD_BLOCKED_RISKS, QueryAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +158,33 @@ class QueryService:
                 client_ip=client_ip,
                 risk_level=risk_level,
             )
+
+            # Some risks are nobody's to skip. Shell execution, filesystem
+            # access, remote SQL and EXPLAIN ANALYZE are not a question of
+            # authority - WebQuery has no supported path for them, so the
+            # administrator bypass below must not reach them.
+            if risk_level in HARD_BLOCKED_RISKS:
+                await self.app_db.update_log(
+                    log_id=log_id,
+                    successfull=False,
+                    error=f"Hard block: {risk_level}",
+                )
+                raise QueryAnalysisRejectedError(
+                    message=query_analysis.get("reason")
+                    or "Bu sorgu güvenlik politikası gereği engellendi."
+                )
+
+            # An administrator skips the approval requirement, not the security
+            # check. This is an interim state: step 3.4 replaces the bypass with
+            # a confirmation that applies to everyone, at which point the role
+            # stops being part of the decision. Until then the skip is logged.
+            if not query_analysis["return"] and is_db_admin:
+                logger.warning(
+                    "Admin riskli sorgu çalıştırıyor: user=%s risk=%s db=%s",
+                    getattr(user, "username", user.id),
+                    risk_level,
+                    database_name,
+                )
 
             if not query_analysis["return"] and not is_db_admin:
                 error_msg: str = f"Query rejected: {query_analysis['risk_type']}"

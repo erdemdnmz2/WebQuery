@@ -30,7 +30,7 @@ from query_execution.exceptions import (
     QueryExecutionError,
     QuerySyntaxError,
 )
-from query_execution.query_analyzer import QueryAnalyzer
+from query_execution.query_analyzer import QueryAnalyzer, hard_block_reason
 from workspaces.exceptions import WorkspaceAccessDeniedError, WorkspaceNotFoundError
 
 from .schemas import WorkspaceCreate, WorkspaceInfo
@@ -349,6 +349,13 @@ class WorkspaceService:
                 raise QueryAnalysisRejectedError(
                     f"Query blocked: Your role '{user_role}' is not authorized to execute this query."
                 )
+
+            # An approved workspace may re-run a query an administrator judged
+            # acceptable, but approval never covers the hard-blocked checks -
+            # otherwise this endpoint is a second door to them.
+            blocked = hard_block_reason(self.analyzer, query_data.query, technology=technology)
+            if blocked:
+                raise QueryAnalysisRejectedError(blocked)
 
             required_tier = self.analyzer.required_tier(query_data.query, technology=technology)
             
