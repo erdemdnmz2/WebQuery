@@ -180,7 +180,7 @@ export const api = {
 
   me: () => request<User>('/api/me'),
   login: (email: string, password: string) =>
-    request<{ access_token: string }>('/api/login', {
+    request<{ ok: boolean }>('/api/login', {
       method: 'POST',
       body: { email, password },
       skipAuthRedirect: true,

@@ -2,7 +2,7 @@
 
 ## Durum
 
-Accepted
+Implemented
 
 ## Amaç
 
@@ -21,6 +21,12 @@ JWT access token çalınırsa geçerlilik penceresini kısaltmak ve refresh toke
 5. Logout ilgili oturumu iptal eder, cookie'leri siler ve eski access token'lar
    için mevcut JTI blacklist kaydını geriye dönük uyumluluk amacıyla korur.
 6. Refresh sırasında kullanıcının hâlâ aktif olduğu yeniden doğrulanır.
+7. Token değerleri yalnızca `HttpOnly` cookie'lerde taşınır; login yanıt gövdesi
+   token içermez ve yalnızca `{"ok": true}` döner.
+8. Refresh cookie yalnızca `POST /api/refresh` isteğine gönderilir; normal API
+   istekleri refresh token taşımaz.
+9. Daha önce geniş `/api` path'iyle verilmiş refresh cookie'leri, login veya
+   refresh yanıtında silinerek dar path'e güvenli geçiş sağlanır.
 
 ## Kabul Kriterleri
 
@@ -31,6 +37,8 @@ JWT access token çalınırsa geçerlilik penceresini kısaltmak ve refresh toke
 - Geçersiz, süresi dolmuş veya iptal edilmiş refresh token 401 döner.
 - Refresh token tekrar kullanımı oturumu iptal eder.
 - Refresh token ham değeri veritabanında tutulmaz.
+- Login yanıt gövdesi access token veya refresh token içermez.
+- Refresh cookie'nin `Path` niteliği `/api/refresh` olur.
 
 ## Kapsam Dışı
 

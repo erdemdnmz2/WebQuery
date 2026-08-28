@@ -29,10 +29,10 @@ class User(BaseModel):
         from_attributes = True
 
 
-class Token(BaseModel):
-    """JWT token response schema"""
-    access_token: str
-    token_type: str = "bearer"
+class LoginResponse(BaseModel):
+    """Successful login acknowledgement; authentication material is cookie-only."""
+
+    ok: bool = True
 
 
 class TokenData(BaseModel):

@@ -3,6 +3,7 @@ Integration tests for User Authentication, Registration, and Session management.
 Includes rate limiting bypass, password policy validations, JWT cookie handling,
 and clean engine shutdowns upon logout.
 """
+import hashlib
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -10,7 +11,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from app import app
-from app_database.models import AuditLog
+from app_database.models import AuditLog, User, UserSession
 from common.audit_actions import AuditAction
 
 
@@ -41,16 +42,29 @@ async def test_register_and_login(async_client: AsyncClient):
     response = await async_client.post("/api/login", json=login_data)
     assert response.status_code == 200, f"Login failed: {response.text}"
     
-    data = response.json()
-    assert "access_token" in data
-    assert data["token_type"] == "bearer"
-    
-    # Verify cookie is set in response headers
+    assert response.json() == {"ok": True}
+
+    # Tokens are cookie-only: JavaScript must not receive an access JWT in JSON.
     assert "access_token" in response.cookies
-    cookie = response.cookies["access_token"]
-    assert cookie is not None
+    assert "refresh_token" in response.cookies
+    set_cookies = response.headers.get_list("set-cookie")
+    assert any(
+        header.startswith("refresh_token=") and "Path=/api/refresh" in header
+        for header in set_cookies
+    )
 
     async with app.state.context.app_db.get_app_db() as db:
+        session = (
+            await db.execute(
+                select(UserSession)
+                .join(User, UserSession.user_id == User.id)
+                .where(User.email == login_data["email"])
+            )
+        ).scalars().one()
+        refresh_token = response.cookies["refresh_token"]
+        assert session.refresh_hash == hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
+        assert session.refresh_hash != refresh_token
+
         audits = (
             await db.execute(
                 select(AuditLog).where(
@@ -278,6 +292,10 @@ async def test_refresh_rotates_tokens_and_logout_revokes_session(async_client: A
     assert refreshed.status_code == 200
     assert "refresh_token" in async_client.cookies
     assert async_client.cookies["refresh_token"] != old_refresh
+    assert any(
+        header.startswith("refresh_token=") and "Path=/api/refresh" in header
+        for header in refreshed.headers.get_list("set-cookie")
+    )
 
     with patch.object(
         app.state.context.db_provider, "close_user_engines", new_callable=AsyncMock

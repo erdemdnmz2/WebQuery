@@ -20,8 +20,12 @@ tutulması veritabanı sızıntısında token'ın doğrudan kullanılmasını en
 
 ## Güvenlik ve İşletim Notları
 
-- Refresh token yalnızca `HttpOnly`, `SameSite=Strict`, `/api` path'li cookie'de
-  taşınır.
+- Access ve refresh tokenlar yalnızca `HttpOnly`, `SameSite=Strict` cookie'lerde
+  taşınır; login yanıt gövdesi token içermez.
+- Refresh token cookie'si `/api/refresh` path'iyle sınırlandırılır; böylece
+  normal API çağrılarında tarayıcı refresh tokenı göndermez.
+- Daha önce `/api` path'iyle oluşturulmuş aynı adlı cookie, path değişimi cookie
+  kimliğini değiştirdiği için login ve refresh yanıtlarında ayrıca silinir.
 - Rotasyon, çalınmış eski refresh token'ın tekrar kullanımını tespit eder.
 - Mevcut `BlacklistedTokens` mekanizması geçiş ve geriye dönük uyumluluk için
   korunur; yeni session'lar ayrıca `revoked_at` ile iptal edilir.

@@ -54,7 +54,7 @@ Bu branch'in getirdiği ve arayüzün bağlandığı sözleşme:
 
 | Endpoint | İstek | Yanıt |
 | --- | --- | --- |
-| `POST /api/refresh` | gövdesiz, `refresh_token` çerezi (`path=/api`) | `{ok: true}`; oturum yoksa/yeniden kullanıldıysa 401 |
+| `POST /api/refresh` | gövdesiz, yalnız bu endpoint'e gönderilen `refresh_token` çerezi (`path=/api/refresh`) | `{ok: true}`; oturum yoksa/yeniden kullanıldıysa 401 |
 | `POST /api/admin/reject_query/{workspace_id}` | `{reason}`, 3-500 karakter | 200, gövdesiz |
 | `POST /api/admin/approve_query/{workspace_id}` | `{show_results}` | `{success, ...}` |
 | Karar çakışması | - | 409, `error_code = "APPROVAL_CONFLICT"` |
@@ -137,6 +137,8 @@ bunu "arayüzü olmayan rota" olarak listelemeye devam eder.
   `services/api.ts` içindeki `request` üzerinden geçer (DESIGN.md §15.6).
 - Yenileme yalnız çerezle çalışır; arayüz refresh jetonunu okumaz, saklamaz veya
   bir gövdeye yazmaz. Jetonlar `httponly` kalır.
+- Login yanıtı token değeri içermez; access ve refresh tokenlar yalnız cookie
+  üzerinden tarayıcıya ulaşır.
 - İstemci doğrulaması bir kolaylıktır; yetki ve gerekçe kuralının kaynağı
   `web_api/approval/service.py` içindeki `decide` fonksiyonudur.
 - Red gerekçesi talebi gönderen kullanıcıya çalışma alanı açıklaması üzerinden

@@ -29,6 +29,22 @@ from dependencies import get_app_db, get_db_provider
 router = APIRouter(prefix="/api")
 
 # Using centralized limiter
+ACCESS_COOKIE = "access_token"
+REFRESH_COOKIE = "refresh_token"
+ACCESS_COOKIE_PATH = "/"
+REFRESH_COOKIE_PATH = "/api/refresh"
+LEGACY_REFRESH_COOKIE_PATH = "/api"
+
+
+def _clear_legacy_refresh_cookie(response: Response) -> None:
+    """Remove the broader refresh cookie issued before the path hardening."""
+    response.delete_cookie(
+        key=REFRESH_COOKIE,
+        secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
+        samesite="strict",
+        httponly=True,
+        path=LEGACY_REFRESH_COOKIE_PATH,
+    )
 
 
 def get_login_throttle(request: Request) -> LoginThrottle:
@@ -49,7 +65,7 @@ def _throttle_unavailable() -> HTTPException:
     )
 
 
-@router.post("/login", response_model=schemas.Token)
+@router.post("/login", response_model=schemas.LoginResponse)
 @limiter.limit(config.RATE_LIMITER)
 async def login(
     user: schemas.UserLogin,
@@ -57,7 +73,7 @@ async def login(
     request: Request,
     app_db: AppDatabase = Depends(get_app_db),
     throttle: LoginThrottle = Depends(get_login_throttle),
-) -> dict[str, str]:
+) -> dict[str, bool]:
     """
     User login endpoint.
     Verifies credentials, creates JWT token, and writes login logs.
@@ -69,7 +85,7 @@ async def login(
         app_db: The application database manager instance.
         
     Returns:
-        dict[str, str]: The access token response.
+        dict[str, bool]: Cookie-based session creation acknowledgement.
     """
     client_ip: str = request.client.host if request.client else "unknown"
     try:
@@ -117,24 +133,27 @@ async def login(
             app_db, user_id, client_ip, request.headers.get("user-agent")
         )
         token = sessions.mint_access(user_id, session_id)
-        
+
+        # Cookie identity includes Path. Expire the old /api-scoped value so
+        # upgraded browsers do not continue sending it to every API endpoint.
+        _clear_legacy_refresh_cookie(response)
         response.set_cookie(
-            key="access_token",
+            key=ACCESS_COOKIE,
             value=token,
             secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
             samesite="strict",
             httponly=True,
-            max_age=config.COOKIE_TOKEN_EXPIRE_MINUTES * 60,
-            path="/",
+            max_age=sessions.ACCESS_TTL_MINUTES * 60,
+            path=ACCESS_COOKIE_PATH,
         )
         response.set_cookie(
-            key="refresh_token",
+            key=REFRESH_COOKIE,
             value=refresh_token,
             secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
             samesite="strict",
             httponly=True,
             max_age=sessions.REFRESH_TTL_HOURS * 3600,
-            path="/api",
+            path=REFRESH_COOKIE_PATH,
         )
         await app_db.create_login_log(user_id=user_id, client_ip=client_ip)
         await log_standalone(app_db, action=AuditAction.LOGIN, actor=authenticated_user,
@@ -143,7 +162,7 @@ async def login(
             trace_id=getattr(request.state, "request_id", None))
         await db.commit()
         
-        return {"access_token": token}
+        return {"ok": True}
 
 
 @router.post("/refresh")
@@ -152,7 +171,7 @@ async def refresh_session(
     response: Response,
     app_db: AppDatabase = Depends(get_app_db),
 ) -> dict[str, bool]:
-    token = request.cookies.get("refresh_token")
+    token = request.cookies.get(REFRESH_COOKIE)
     if not token:
         raise HTTPException(status_code=401, detail="Refresh token yok")
 
@@ -169,15 +188,16 @@ async def refresh_session(
         raise HTTPException(status_code=401, detail="Hesabınız devre dışı bırakılmış")
 
     access = sessions.mint_access(rotated["user_id"], rotated["session_id"])
+    _clear_legacy_refresh_cookie(response)
     response.set_cookie(
-        key="access_token", value=access, httponly=True, samesite="strict",
+        key=ACCESS_COOKIE, value=access, httponly=True, samesite="strict",
         secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
-        max_age=sessions.ACCESS_TTL_MINUTES * 60, path="/",
+        max_age=sessions.ACCESS_TTL_MINUTES * 60, path=ACCESS_COOKIE_PATH,
     )
     response.set_cookie(
-        key="refresh_token", value=rotated["refresh_token"], httponly=True,
+        key=REFRESH_COOKIE, value=rotated["refresh_token"], httponly=True,
         samesite="strict", secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
-        max_age=sessions.REFRESH_TTL_HOURS * 3600, path="/api",
+        max_age=sessions.REFRESH_TTL_HOURS * 3600, path=REFRESH_COOKIE_PATH,
     )
     return {"ok": True}
 
@@ -301,7 +321,7 @@ async def logout(
         dict[str, str]: A dictionary with success status.
     """
     # Extract and blacklist the token if present
-    token = request.cookies.get("access_token")
+    token = request.cookies.get(ACCESS_COOKIE)
     if token:
         try:
             payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
@@ -317,18 +337,19 @@ async def logout(
 
     # Clear token from cookie
     response.delete_cookie(
-        key="access_token",
+        key=ACCESS_COOKIE,
         secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
         samesite="strict",
         httponly=True
     )
     response.delete_cookie(
-        key="refresh_token",
+        key=REFRESH_COOKIE,
         secure=os.getenv("COOKIE_SECURE", "False").lower() == "true",
         samesite="strict",
         httponly=True,
-        path="/api",
+        path=REFRESH_COOKIE_PATH,
     )
+    _clear_legacy_refresh_cookie(response)
     
     await app_db.update_login_log(user_id=current_user.id)
     await log_standalone(app_db, action=AuditAction.LOGOUT, actor=current_user,
