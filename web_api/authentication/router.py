@@ -22,7 +22,6 @@ from common.audit import log_in, log_standalone
 from common.audit_actions import AuditAction, AuditTarget
 from common.audit_details import SessionAuditDetails, UserLifecycleAuditDetails
 from common.limiter import limiter
-from common.platform_access import is_platform_admin
 from common.roles import any_admin
 from dependencies import get_app_db
 
@@ -295,7 +294,7 @@ async def read_users_me(
     return schemas.User(
         username=current_user.username,
         is_admin=is_admin,
-        is_platform_admin=is_platform_admin(current_user.username),
+        is_platform_owner=bool(current_user.is_platform_owner),
     )
 
 

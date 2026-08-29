@@ -1,18 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowClockwiseIcon, LockKeyIcon, ShieldCheckIcon, UserCircleIcon } from '@phosphor-icons/react';
+import { ArrowClockwiseIcon, CrownIcon, LockKeyIcon, ShieldCheckIcon } from '@phosphor-icons/react';
 import { api, errorMessage, UnauthorizedError } from '../services/api';
 import { cn } from '../lib/cn';
 import { usePersistentState } from '../lib/hooks';
 import { useSession } from '../lib/session';
 import { ApprovalsTab } from '../components/app/admin/ApprovalsTab';
 import { MaskingTab } from '../components/app/admin/MaskingTab';
-import { UsersTab } from '../components/app/admin/UsersTab';
+import { OwnerTab } from '../components/app/owner/OwnerTab';
 import { IconButton } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import type { PendingQuery } from '../types';
 
-type Tab = 'approvals' | 'masking' | 'users';
+type Tab = 'approvals' | 'masking' | 'owner';
 
 const Admin: React.FC = () => {
   const { user, status } = useSession();
@@ -20,9 +20,17 @@ const Admin: React.FC = () => {
   const [requests, setRequests] = useState<PendingQuery[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const visibleTab = tab === 'users' && !user?.is_platform_admin ? 'approvals' : tab;
+  const visibleTab: Tab = user?.is_platform_owner && !user.is_admin
+    ? 'owner'
+    : tab === 'owner' && !user?.is_platform_owner
+      ? 'approvals'
+      : tab;
 
   const loadRequests = useCallback(async () => {
+    if (!user?.is_admin) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -32,13 +40,13 @@ const Admin: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.is_admin]);
 
   useEffect(() => {
     void loadRequests();
   }, [loadRequests]);
 
-  if (status === 'authenticated' && user && !user.is_admin && !user.is_platform_admin) {
+  if (status === 'authenticated' && user && !user.is_admin && !user.is_platform_owner) {
     return (
       <EmptyState
         className="my-auto"
@@ -55,28 +63,38 @@ const Admin: React.FC = () => {
         <div>
           <h1>Yönetim</h1>
           <p className="mt-1 max-w-[62ch] text-[13px] text-subtle">
-            Riskli sorgu talepleri, kayıtlı hedef veritabanları ve kolon bazlı maskeleme kuralları.
+            Veritabanı yönetişimi, riskli sorgu talepleri ve kolon bazlı maskeleme kuralları.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <IconButton label="Bekleyen talepleri yenile" onClick={() => void loadRequests()}>
-            <ArrowClockwiseIcon size={15} className={cn(loading && 'animate-spin-slow')} />
-          </IconButton>
+          {user?.is_admin && (
+            <IconButton label="Bekleyen talepleri yenile" onClick={() => void loadRequests()}>
+              <ArrowClockwiseIcon size={15} className={cn(loading && 'animate-spin-slow')} />
+            </IconButton>
+          )}
           <SegmentedControl<Tab>
             label="Yönetim bölümü"
             value={visibleTab}
             onChange={setTab}
             segments={[
-              {
-                value: 'approvals',
-                label: 'Onaylar',
-                icon: <ShieldCheckIcon size={14} />,
-                count: requests.length,
-              },
-              { value: 'masking', label: 'Veritabanı ve maskeleme', icon: <LockKeyIcon size={14} /> },
-              ...(user?.is_platform_admin
-                ? [{ value: 'users' as const, label: 'Kullanıcılar', icon: <UserCircleIcon size={14} /> }]
+              ...(user?.is_admin
+                ? [
+                    {
+                      value: 'approvals' as const,
+                      label: 'Onaylar',
+                      icon: <ShieldCheckIcon size={14} />,
+                      count: requests.length,
+                    },
+                    {
+                      value: 'masking' as const,
+                      label: 'Maskeleme',
+                      icon: <LockKeyIcon size={14} />,
+                    },
+                  ]
+                : []),
+              ...(user?.is_platform_owner
+                ? [{ value: 'owner' as const, label: 'Platform OWNER', icon: <CrownIcon size={14} /> }]
                 : []),
             ]}
           />
@@ -88,7 +106,7 @@ const Admin: React.FC = () => {
       ) : visibleTab === 'masking' ? (
         <MaskingTab />
       ) : (
-        <UsersTab />
+        <OwnerTab />
       )}
     </div>
   );

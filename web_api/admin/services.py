@@ -3,11 +3,9 @@ Admin Service Layer
 Admin approval and management operations for risky queries
 """
 import logging
-import uuid
-from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, inspect, update
+from sqlalchemy import delete, inspect
 from sqlalchemy.sql import select, text
 
 from app_database.app_database import AppDatabase
@@ -17,7 +15,6 @@ from app_database.models import (
     QueryData,
     User,
     UserDatabaseAssociation,
-    UserSession,
     Workspace,
 )
 from approval.service import decide
@@ -25,32 +22,24 @@ from common.audit import log_in, log_standalone
 from common.audit_actions import AuditAction, AuditTarget
 from common.audit_details import (
     DatabaseAccessAuditDetails,
-    DatabaseConfigurationAuditDetails,
     MaskingRulesAuditDetails,
     QueryPreviewAuditDetails,
-    UserLifecycleAuditDetails,
 )
 from common.constants import QUERY_STATUS_WAITING_FOR_APPROVAL
 from common.exceptions import BaseServiceException
-from common.roles import exceeds_mode, is_admin, mode_from_credentials, parse
+from common.roles import ADMIN, exceeds_mode, format_roles, is_admin, mode_from_credentials, parse
 from database_provider import DatabaseProvider
 from query_execution import config
 from query_execution.query_analyzer import QueryAnalyzer, hard_block_reason
 
 from .exceptions import (
-    AdminUserNotFoundError,
-    CannotDisableSelfError,
-    DatabaseAlreadyExistsError,
+    DatabaseAdminOwnerRequiredError,
     RoleNotSupportedByDatabaseError,
 )
 from .schemas import AdminApprovals
 
 logger = logging.getLogger(__name__)
 
-
-def _db_now() -> datetime:
-    """Return naive UTC for the cross-database AppDateTime columns."""
-    return datetime.now(UTC).replace(tzinfo=None)
 
 class BaseAdminService:
     """
@@ -65,7 +54,7 @@ class AdminService(BaseAdminService):
     """
     Main Admin Service.
     
-    Combines sub-services (Approval, DB Addition) to provide a unified interface.
+    Combines database-scoped approval and access services.
     """
     
     def __init__(self, app_db: AppDatabase, db_provider: DatabaseProvider):
@@ -74,7 +63,6 @@ class AdminService(BaseAdminService):
         
         # Initialize sub-services
         self.approval_service = AdminApprovalService(app_db, db_provider)
-        self.db_addition_service = AdminDBAdditionService(app_db, db_provider)
         self.auth_service = AdminUserAuthService(app_db, db_provider)
         
         # Other services to be added in the future can go here
@@ -126,31 +114,6 @@ class AdminService(BaseAdminService):
     ) -> dict[str, Any]:
         return await self.auth_service.associate_user_to_database(
             user_id, database_id, role, admin_user, client_ip
-        )
-
-    async def disable_user(
-        self,
-        user_id: int,
-        admin_user: User,
-        client_ip: str | None = None,
-        trace_id: str | None = None,
-    ) -> dict[str, Any]:
-        return await self.auth_service.disable_user(
-            user_id, admin_user, client_ip, trace_id
-        )
-
-    async def list_users(self) -> list[User]:
-        return await self.auth_service.list_users()
-
-    async def enable_user(
-        self,
-        user_id: int,
-        admin_user: User,
-        client_ip: str | None = None,
-        trace_id: str | None = None,
-    ) -> dict[str, Any]:
-        return await self.auth_service.enable_user(
-            user_id, admin_user, client_ip, trace_id
         )
 
     async def list_databases(self, admin_user: User) -> list[Databases]:
@@ -551,176 +514,10 @@ class AdminApprovalService(BaseAdminService):
             ),
         }
 
-class AdminDBAdditionService(BaseAdminService):
-    """
-    Service for adding new databases to the platform configuration.
-    """
-    async def add_database(
-        self,
-        servername: str,
-        database_name: str,
-        tech_name: str,
-        connection_mode: str,
-        username_ro: str | None,
-        password_ro: str | None,
-        username_rw: str | None,
-        password_rw: str | None,
-        username_ddl: str | None,
-        password_ddl: str | None,
-        admin_user: User,
-        client_ip: str | None = None,
-    ) -> dict[str, Any]:
-        """
-        Adds a new database server and database configuration to the application databases.
-        """
-        async with self.app_db.get_app_db() as db:
-            try:
-                # Check if it already exists
-                existing = await db.execute(select(Databases).where(
-                    Databases.servername == servername, 
-                    Databases.database_name == database_name
-                ))
-                existing_db: Databases | None = existing.scalars().first()
-                if existing_db:
-                    raise DatabaseAlreadyExistsError("Database already exists")
-
-                db_uuid = str(uuid.uuid4())
-
-                database: Databases = Databases(
-                    servername=servername, 
-                    database_name=database_name, 
-                    technology=tech_name,
-                    username_ro=username_ro,
-                    password_ro=password_ro,
-                    username_rw=username_rw,
-                    password_rw=password_rw,
-                    username_ddl=username_ddl,
-                    password_ddl=password_ddl,
-                    uuid=db_uuid
-                )
-                db.add(database)
-                await db.flush()
-                db.add(UserDatabaseAssociation(user_id=admin_user.id, database_id=database.id,
-                    role="ADMIN", is_admin=True))
-                await log_in(db, actor=admin_user, action=AuditAction.ADD_DATABASE,
-                    target_type=AuditTarget.DATABASE, target_id=database.id,
-                    details=DatabaseConfigurationAuditDetails(operation="add", servername=servername,
-                        database_name=database_name, technology=tech_name),
-                    client_ip=client_ip)
-                await db.commit()
-                
-                # Refresh db_provider db_info dynamically
-                db_info = await self.app_db.get_db_info()
-                self.db_provider.set_db_info(db_info)
-                
-                logger.info(
-                    "Database '%s' on server '%s' (UUID: %s) added by admin %s with mode %s",
-                    database_name, servername, db_uuid, admin_user.id, connection_mode,
-                )
-                return {
-                    "success": True, 
-                    "message": "Database added successfully",
-                    "db_uuid": db_uuid,
-                }
-            except BaseServiceException:
-                raise
-            except Exception as e:
-                logger.error(f"Error adding database: {e}")
-                raise BaseServiceException(f"Error adding database: {e!s}", original_exception=e)
-
-
 class AdminUserAuthService(BaseAdminService):
     """
     Sub-service for admin to manage user database associations and roles.
     """
-
-    async def list_users(self) -> list[User]:
-        async with self.app_db.get_app_db() as db:
-            result = await db.execute(select(User).order_by(User.username.asc()))
-            return list(result.scalars().all())
-
-    async def enable_user(
-        self,
-        user_id: int,
-        admin_user: User,
-        client_ip: str | None = None,
-        trace_id: str | None = None,
-    ) -> dict[str, Any]:
-        """Activate a pending/disabled account and record the transition."""
-        async with self.app_db.get_app_db() as db, db.begin():
-            target = await db.get(User, user_id)
-            if target is None:
-                raise AdminUserNotFoundError("Kullanıcı bulunamadı.")
-
-            if target.is_active:
-                return {"success": True, "message": "User is already active"}
-
-            target.is_active = True
-            target.disabled_at = None
-            target.disabled_by = None
-            await log_in(
-                db,
-                actor=admin_user,
-                action=AuditAction.USER_ENABLED,
-                target_type=AuditTarget.USER,
-                target_id=user_id,
-                details=UserLifecycleAuditDetails(event="enabled", source="admin"),
-                client_ip=client_ip,
-                trace_id=trace_id,
-            )
-
-        return {"success": True, "message": "User enabled successfully"}
-
-    async def disable_user(
-        self,
-        user_id: int,
-        admin_user: User,
-        client_ip: str | None = None,
-        trace_id: str | None = None,
-    ) -> dict[str, Any]:
-        """Disable a user and revoke all of the user's active sessions."""
-        if user_id == admin_user.id:
-            raise CannotDisableSelfError("Kendi hesabınızı devre dışı bırakamazsınız.")
-
-        async with self.app_db.get_app_db() as db, db.begin():
-            target = await db.get(User, user_id)
-            if target is None:
-                raise AdminUserNotFoundError("Kullanıcı bulunamadı.")
-
-            if target.is_active:
-                target.is_active = False
-                target.disabled_at = _db_now()
-                target.disabled_by = admin_user.username
-            elif target.disabled_at is None:
-                # Preserve the original disable actor/time when present,
-                # while making legacy/incomplete rows safe to finish.
-                target.disabled_at = _db_now()
-                target.disabled_by = admin_user.username
-
-            await db.execute(
-                update(UserSession)
-                .where(
-                    UserSession.user_id == user_id,
-                    UserSession.revoked_at.is_(None),
-                )
-                .values(
-                    revoked_at=_db_now(),
-                    revoked_reason="user disabled",
-                )
-            )
-
-            await log_in(
-                db,
-                actor=admin_user,
-                action=AuditAction.USER_DISABLED,
-                target_type=AuditTarget.USER,
-                target_id=user_id,
-                details=UserLifecycleAuditDetails(event="disabled", source="admin"),
-                client_ip=client_ip,
-                trace_id=trace_id,
-            )
-
-        return {"success": True, "message": "User disabled successfully"}
 
     async def associate_user_to_database(
         self,
@@ -730,13 +527,17 @@ class AdminUserAuthService(BaseAdminService):
         admin_user: User,
         client_ip: str | None = None,
     ) -> dict[str, Any]:
-        role_upper = role.upper()
-        # Clean roles list, allow comma-separated combination of the data
-        # access roles plus the ADMIN governance role. DDL is grantable because
-        # QueryAnalyzer.check_role_permission honours it for DDL statements.
+        # DB ADMIN is a governance root managed only by OWNER. This endpoint
+        # may replace data roles, but it must neither grant nor accidentally
+        # erase an existing ADMIN role.
         roles_list = parse(role)
-        if not roles_list or any(r not in ["READER", "WRITER", "DDL", "ADMIN"] for r in roles_list):
-            raise BaseServiceException("Invalid role. Role must be READER, WRITER, DDL, or ADMIN.")
+        if ADMIN in roles_list:
+            raise DatabaseAdminOwnerRequiredError(
+                "DB ADMIN atamalarını yalnızca platform OWNER yönetebilir."
+            )
+        if not roles_list or any(r not in ["READER", "WRITER", "DDL"] for r in roles_list):
+            raise BaseServiceException("Invalid role. Role must be READER, WRITER, or DDL.")
+        requested_role = format_roles(roles_list)
             
         async with self.app_db.get_app_db() as db:
             # Check admin permission
@@ -770,7 +571,7 @@ class AdminUserAuthService(BaseAdminService):
                 has_rw=bool(db_entry.username_rw and db_entry.password_rw),
                 has_ddl=bool(db_entry.username_ddl and db_entry.password_ddl),
             )
-            unsupported_tier = exceeds_mode(connection_mode, role_upper)
+            unsupported_tier = exceeds_mode(connection_mode, requested_role)
             if unsupported_tier:
                 raise RoleNotSupportedByDatabaseError(
                     f"Bu veritabanı '{connection_mode}' bağlantı moduyla kayıtlı; "
@@ -787,28 +588,32 @@ class AdminUserAuthService(BaseAdminService):
             )
             assoc = assoc_res.scalars().first()
             
-            is_admin_val = (role_upper == "ADMIN")
-            
             previous_role = assoc.role if assoc else None
+            next_roles = set(roles_list)
+            if assoc and is_admin(previous_role):
+                next_roles.add(ADMIN)
+            new_role = format_roles(next_roles)
+            is_admin_val = is_admin(new_role)
+
             if assoc:
-                assoc.role = role_upper
+                assoc.role = new_role
                 assoc.is_admin = is_admin_val
             else:
                 assoc = UserDatabaseAssociation(
                     user_id=user_id,
                     database_id=database_id,
-                    role=role_upper,
+                    role=new_role,
                     is_admin=is_admin_val
                 )
                 db.add(assoc)
                 
-            if previous_role != role_upper:
+            if previous_role != new_role:
                 action = (AuditAction.CHANGE_DATABASE_ROLE if assoc and previous_role
                           else AuditAction.GRANT_DATABASE_ACCESS)
                 await log_in(db, actor=admin_user, action=action, target_type=AuditTarget.USER,
                     target_id=user_id, details=DatabaseAccessAuditDetails(
                         operation="change_role" if previous_role else "grant", database_id=database_id,
-                        previous_role=previous_role, new_role=role_upper), client_ip=client_ip)
+                        previous_role=previous_role, new_role=new_role), client_ip=client_ip)
             await db.commit()
             
-        return {"success": True, "message": f"Successfully associated user {user_id} with database {database_id} as {role_upper}."}
+        return {"success": True, "message": f"Successfully associated user {user_id} with database {database_id} as {new_role}."}

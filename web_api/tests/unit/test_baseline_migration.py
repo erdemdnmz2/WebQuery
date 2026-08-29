@@ -111,10 +111,13 @@ def test_user_lifecycle_migration_creates_expected_columns(tmp_path: Path) -> No
             "disabled_by",
             "created_at",
             "last_login_at",
+            "is_platform_owner",
         } <= user_columns
-        assert "ix_Users_is_active" in {
+        user_indexes = {
             index["name"] for index in inspect(engine).get_indexes("Users")
         }
+        assert "ix_Users_is_active" in user_indexes
+        assert "ix_Users_is_platform_owner" in user_indexes
     finally:
         engine.dispose()
 

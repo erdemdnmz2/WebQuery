@@ -21,6 +21,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy import false as sql_false
 from sqlalchemy import true as sql_true
 from sqlalchemy.dialects.mssql import DATETIME2, NVARCHAR, UNIQUEIDENTIFIER, VARCHAR
 from sqlalchemy.dialects.mssql import TEXT as MSSQL_TEXT
@@ -94,6 +95,13 @@ class User(Base):
     password = Column(String)
     email = Column(String(50), unique=True)
     is_active = Column(Boolean, nullable=False, default=True, server_default=sql_true(), index=True)
+    is_platform_owner = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=sql_false(),
+        index=True,
+    )
     disabled_at = Column(AppDateTime, nullable=True)
     disabled_by = Column(String(50), nullable=True)
     created_at = Column(AppDateTime, nullable=False, default=datetime.now)

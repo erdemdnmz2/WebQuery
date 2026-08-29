@@ -1,4 +1,4 @@
-"""Integration tests for admin user disablement and request-time enforcement."""
+"""Integration tests for OWNER user disablement and request-time enforcement."""
 
 from contextlib import asynccontextmanager
 
@@ -9,9 +9,7 @@ from sqlalchemy import select
 from app import app
 from app_database.models import (
     AuditLog,
-    Databases,
     User,
-    UserDatabaseAssociation,
     UserSession,
 )
 from common.audit_actions import AuditAction
@@ -43,40 +41,26 @@ async def _client_from_transport(transport: ASGITransport):
         yield client
 
 
-async def _make_admin(client: AsyncClient, *, suffix: str) -> int:
+async def _make_owner(client: AsyncClient, *, suffix: str) -> int:
     await _register_and_login(
         client,
-        username=f"admin_{suffix}",
-        email=f"admin_{suffix}@example.com",
+        username=f"owner_{suffix}",
+        email=f"owner_{suffix}@example.com",
     )
     async with app.state.context.app_db.get_app_db() as db:
-        admin = (
+        owner = (
             await db.execute(
-                select(User).where(User.email == f"admin_{suffix}@example.com")
+                select(User).where(User.email == f"owner_{suffix}@example.com")
             )
         ).scalars().one()
-        database = Databases(
-            servername=f"server_{suffix}",
-            database_name=f"database_{suffix}",
-            technology="sqlite",
-        )
-        db.add(database)
-        await db.flush()
-        db.add(
-            UserDatabaseAssociation(
-                user_id=admin.id,
-                database_id=database.id,
-                role="ADMIN",
-                is_admin=True,
-            )
-        )
-        admin_id = admin.id
+        owner.is_platform_owner = True
+        owner_id = owner.id
         await db.commit()
-        return admin_id
+        return owner_id
 
 
 @pytest.mark.asyncio
-async def test_admin_disable_revokes_sessions_and_blocks_existing_tokens(async_client):
+async def test_owner_disable_revokes_sessions_and_blocks_existing_tokens(async_client):
     transport = async_client._transport
     async with (
         _client_from_transport(transport) as target_client,
@@ -87,7 +71,7 @@ async def test_admin_disable_revokes_sessions_and_blocks_existing_tokens(async_c
             username="disable_target",
             email="disable_target@example.com",
         )
-        admin_id = await _make_admin(admin_client, suffix="disable")
+        owner_id = await _make_owner(admin_client, suffix="disable")
 
         async with app.state.context.app_db.get_app_db() as db:
             target = (
@@ -106,11 +90,11 @@ async def test_admin_disable_revokes_sessions_and_blocks_existing_tokens(async_c
             ).scalars().all()
             assert len(session_count) == 1
 
-        response = await admin_client.post(f"/api/admin/users/{target_id}/disable")
+        response = await admin_client.post(f"/api/owner/users/{target_id}/disable")
         assert response.status_code == 200, response.text
         assert response.json() == {
             "success": True,
-            "message": "User disabled successfully",
+            "message": "Kullanıcı devre dışı bırakıldı.",
         }
 
         # The middleware blocks the already-issued access token before the
@@ -146,7 +130,7 @@ async def test_admin_disable_revokes_sessions_and_blocks_existing_tokens(async_c
             )
         ).scalars().one()
         assert target.is_active is False
-        assert target.disabled_by == "admin_disable"
+        assert target.disabled_by == "owner_disable"
         sessions = (
             await db.execute(select(UserSession).where(UserSession.user_id == target.id))
         ).scalars().all()
@@ -159,26 +143,26 @@ async def test_admin_disable_revokes_sessions_and_blocks_existing_tokens(async_c
                 )
             )
         ).scalars().one()
-        assert audit.actor_user_id == admin_id
-        assert audit.actor_username == "admin_disable"
+        assert audit.actor_user_id == owner_id
+        assert audit.actor_username == "owner_disable"
         assert audit.client_ip == "127.0.0.1"
 
 
 @pytest.mark.asyncio
-async def test_disable_rejects_self_and_non_admin(async_client):
+async def test_disable_rejects_self_and_non_owner(async_client):
     transport = async_client._transport
     async with (
         _client_from_transport(transport) as admin_client,
         _client_from_transport(transport) as regular_client,
     ):
-        admin_id = await _make_admin(admin_client, suffix="rules")
+        owner_id = await _make_owner(admin_client, suffix="rules")
         await _register_and_login(
             regular_client,
             username="regular_rules",
             email="regular_rules@example.com",
         )
 
-        self_disable = await admin_client.post(f"/api/admin/users/{admin_id}/disable")
+        self_disable = await admin_client.post(f"/api/owner/users/{owner_id}/disable")
         assert self_disable.status_code == 400
         assert self_disable.json()["error_code"] == "CANNOT_DISABLE_SELF"
 
@@ -190,8 +174,8 @@ async def test_disable_rejects_self_and_non_admin(async_client):
             ).scalars().one()
             regular_id = regular.id
 
-        forbidden = await regular_client.post(f"/api/admin/users/{regular_id}/disable")
+        forbidden = await regular_client.post(f"/api/owner/users/{regular_id}/disable")
         assert forbidden.status_code == 403
 
-        missing = await admin_client.post("/api/admin/users/999999/disable")
+        missing = await admin_client.post("/api/owner/users/999999/disable")
         assert missing.status_code == 404

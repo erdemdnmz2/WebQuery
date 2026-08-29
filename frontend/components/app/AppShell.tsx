@@ -102,7 +102,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, fullBleed }) => {
                 )}
               </NavLink>
             ))}
-            {user?.is_admin && (
+            {(user?.is_admin || user?.is_platform_owner) && (
               <NavLink to="/admin" className={navLinkClasses}>
                 {({ isActive }) => (
                   <>
@@ -186,7 +186,9 @@ export const AppShell: React.FC<AppShellProps> = ({ children, fullBleed }) => {
               <MenuContent>
                 <div className="px-2 py-1.5">
                   <p className="truncate text-[13px] font-medium text-fg">{user?.username ?? 'Misafir'}</p>
-                  <p className="truncate text-[12px] text-subtle">{user?.is_admin ? 'Yönetici' : 'Kullanıcı'}</p>
+                  <p className="truncate text-[12px] text-subtle">
+                    {user?.is_platform_owner ? 'Platform OWNER' : user?.is_admin ? 'Veritabanı yöneticisi' : 'Kullanıcı'}
+                  </p>
                 </div>
                 <MenuSeparator />
                 <div className="md:hidden">
@@ -196,7 +198,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, fullBleed }) => {
                   <MenuItem icon={<TerminalWindowIcon size={15} />} onSelect={() => navigate('/editor')}>
                     SQL Studio
                   </MenuItem>
-                  {user?.is_admin && (
+                  {(user?.is_admin || user?.is_platform_owner) && (
                     <MenuItem icon={<GearSixIcon size={15} />} onSelect={() => navigate('/admin')}>
                       Yönetim
                     </MenuItem>

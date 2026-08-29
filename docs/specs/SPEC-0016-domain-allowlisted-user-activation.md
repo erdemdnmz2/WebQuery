@@ -2,9 +2,9 @@
 
 ## 1. Spec Kartı
 
-- Özellik: Domain allowlist ile kayıt ve platform yöneticisi aktivasyonu
+- Özellik: Domain allowlist ile kayıt ve platform OWNER aktivasyonu
 - Durum: Implemented
-- Versiyon: 1.0.0
+- Versiyon: 1.1.0
 - Tarih: 2026-08-25
 - Sahip: WebQuery
 
@@ -32,16 +32,16 @@ erişiminin platform yöneticisi tarafından etkinleştirilmesini sağlamak.
 
 - `ALLOWED_EMAIL_DOMAINS` ile tam domain eşleşmesi.
 - `POST /api/register` ile pasif kullanıcı oluşturulması.
-- `PLATFORM_ADMINS` allowlist'i ile platform yöneticisi kontrolü.
-- Platform yöneticisinin kullanıcıları listelemesi ve etkinleştirmesi.
-- `/api/me` yanıtında `is_platform_admin` bilgisi.
+- Kalıcı `Users.is_platform_owner` ile platform yöneticisi kontrolü.
+- OWNER'ın kullanıcıları listelemesi, etkinleştirmesi ve devre dışı bırakması.
+- `/api/me` yanıtında `is_platform_owner` bilgisi.
 - Kayıt, aktivasyon ve mevcut disable akışlarının audit edilmesi.
 - Admin ekranında kullanıcıların bekleyen/aktif/devre dışı durumlarının
   gösterilmesi ve aktivasyon eylemi.
 
 ### Kapsam Dışı
 
-- Bu değişiklikte kalıcı `OWNER` rolünün eklenmesi.
+- API veya arayüz üzerinden OWNER verme/geri alma.
 - E-posta doğrulama veya davet bağlantısı gönderimi.
 - Kullanıcı-veritabanı rol ilişkilendirme modelinin değiştirilmesi.
 - Yeni kullanıcıya otomatik veritabanı erişimi verilmesi.
@@ -53,7 +53,6 @@ erişiminin platform yöneticisi tarafından etkinleştirilmesini sağlamak.
 
 ```text
 ALLOWED_EMAIL_DOMAINS=company.com,subsidiary.company.com
-PLATFORM_ADMINS=platform-admin-username
 REGISTRATION_REQUIRES_ACTIVATION=true
 ```
 
@@ -73,9 +72,10 @@ varsayılanı pasif aktivasyondur.
 
 ### Platform kullanıcı yönetimi
 
-- `GET /api/admin/users`: yalnızca `PLATFORM_ADMINS` üyeleri çağırabilir.
-- `POST /api/admin/users/{user_id}/enable`: yalnızca `PLATFORM_ADMINS`
-  üyeleri çağırabilir; pasif hesabı etkinleştirir.
+- `GET /api/owner/users`: yalnızca aktif OWNER çağırabilir.
+- `POST /api/owner/users/{user_id}/enable`: pasif hesabı etkinleştirir.
+- `POST /api/owner/users/{user_id}/disable`: hesabı devre dışı bırakır
+  ve aktif oturumlarını iptal eder.
 
 Kullanıcı aktivasyonu, hedef veritabanı erişimi vermez. Erişim ayrıca mevcut
 `POST /api/admin/associate_user` akışıyla, ilgili veritabanındaki `ADMIN`
@@ -100,7 +100,8 @@ hesap login, refresh ve mevcut oturum doğrulama kontrollerinden geçemez.
 ### BR-04: Platform ve veritabanı kapsamları ayrıdır
 
 `ADMIN`, veritabanı kapsamlı yönetişim rolüdür. Kullanıcı aktivasyonu platform
-kapsamlı olduğu için bu değişiklikte `PLATFORM_ADMINS` allowlist'i ile korunur.
+kapsamlı olduğu için kalıcı OWNER yetkisiyle korunur. Ayrıntılı sınır
+SPEC-0021'de tanımlıdır.
 
 ### BR-05: Aktivasyon idempotent ve audit edilebilir olmalıdır
 
@@ -131,15 +132,13 @@ gerçek durum değişiklikleri `USER_ENABLED` audit kaydı üretir.
 - Domain kontrolü yalnız frontend'de değil backend'de zorunlu olarak yapılır.
 - Parolalar mevcut `User.set_password` hash mekanizmasıyla saklanır.
 - Aktivasyon ve kayıt audit log'a yazılır; parola audit detayına yazılmaz.
-- `is_active` mevcut kullanıcı yaşam döngüsü alanı olarak korunur; bu değişiklik
-  yeni bir OWNER rolü eklemez.
-- `PLATFORM_ADMINS` boşsa platform kullanıcı yönetimi kapalı kalır; uygulama
-  başlatılamaz hâle getirilmez ancak uyarı loglanır.
+- `is_active` mevcut kullanıcı yaşam döngüsü alanı olarak korunur.
+- Aktif OWNER yoksa uygulama fail-closed başlamaz; kurtarma sunucu tarafı
+  bootstrap komutuyla yapılır.
 
 ## 8. Open Questions
 
-- Yok. Kalıcı `OWNER` rolü bu özelliğin kapsamı dışında bırakılmış ve Adım 20
-  için ertelenmiştir.
+- Yok. Kalıcı OWNER kararı SPEC-0021 ve ADR-0017'de kaydedildi.
 
 ## 9. Done Kontrolü
 

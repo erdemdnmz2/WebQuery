@@ -94,11 +94,12 @@ kapalıdır ve tek bir sınıflandırmayla incelenmesi gerçekten güçtür.
 
 ### 2. Admin bypass'ını tamamen kaldırmak
 
-En savunulabilir uç nokta. Şimdilik reddedildi çünkü yerine konacak mekanizma —
-yıkıcı DML'de etki alanını commit'ten önce gösteren teyit (`3.4.2`) — henüz
-yazılmadı. Bypass'ı önce kaldırmak, admin'leri kendi hedef veritabanı
-hesaplarına yönlendirir ve o an WebQuery'nin audit kaydında hiçbir şey kalmaz.
-Bu ADR bilinçli olarak bir ara durumu kaydeder.
+Reddedildi. DB ADMIN yalnız `sql_injection_risk` ve `blocked_operation` sert
+bloklarında durdurulur; `ddl_pattern`, `risky_pattern` ve `performance_risk`
+için bypass kalıcı mevcut politikadır. Bypass'ı kaldırmak admin'i kendi hedef
+veritabanı hesabına yönlendirir ve WebQuery audit izini kaybettirir. Gelecekteki
+isteğe bağlı yıkıcı DML politikası bu kararı ancak ayrı bir spec/ADR ile
+değiştirebilir.
 
 ### 3. Fonksiyon blocklist'i yerine allowlist
 
@@ -129,9 +130,9 @@ gerçekçi değil; eksik bir allowlist meşru sorguları sessizce kırar.
   bir kontrol eklenmedi.
 - `EXPLAIN ANALYZE` kontrolü metin üzerinde çalışır; içinde bu ifadeyi geçiren
   bir string literal yanlış pozitif üretebilir. Fail-closed tercih edildi.
-- Admin bypass'ı, değerlendirilebilir riskler için hâlâ açık. Kabul edilme
-  gerekçesi ve kaldırılma koşulu yukarıda; `3.4.2` uygulandığında bu ADR
-  güncellenmelidir.
+- Admin bypass'ı, değerlendirilebilir riskler için bilinçli olarak açıktır.
+  Atlamalar log ve audit kaydında görünmeye devam eder; sert bloklar hiçbir
+  rol tarafından atlanamaz.
 
 ## References
 

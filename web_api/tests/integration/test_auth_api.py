@@ -210,6 +210,7 @@ async def test_access_me_protected_route(async_client: AsyncClient):
     data = response.json()
     assert data["username"] == "profile_user"
     assert data["is_admin"] is False
+    assert data["is_platform_owner"] is False
 
 
 @pytest.mark.asyncio

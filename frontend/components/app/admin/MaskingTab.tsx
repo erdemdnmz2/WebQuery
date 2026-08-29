@@ -6,7 +6,6 @@ import {
   FloppyDiskIcon,
   LockKeyIcon,
   MagnifyingGlassIcon,
-  PlusIcon,
   TableIcon,
   WarningCircleIcon,
 } from '@phosphor-icons/react';
@@ -20,22 +19,10 @@ import { EmptyState } from '../../ui/EmptyState';
 import { Field } from '../../ui/Field';
 import { Input } from '../../ui/Input';
 import { Panel, PanelHeader } from '../../ui/Panel';
-import { Select } from '../../ui/Select';
-import { SegmentedControl } from '../../ui/SegmentedControl';
 import { Skeleton } from '../../ui/Skeleton';
 import { useToast } from '../../ui/Toast';
-import { CONNECTION_MODE, TIER_LABEL, connectionModeMeta, tiersOf } from '../../../lib/capability';
-import type { ConnectionMode, DatabaseSchema, MaskingRule, RegisteredDatabase } from '../../../types';
-
-const TECHNOLOGIES = [
-  { value: 'mssql', label: 'Microsoft SQL Server' },
-  { value: 'postgresql', label: 'PostgreSQL' },
-  { value: 'mysql', label: 'MySQL' },
-];
-
-const CONNECTION_MODES: Array<{ value: ConnectionMode; label: string }> = (
-  ['ro', 'ro_rw', 'ro_rw_ddl'] as const
-).map((value) => ({ value, label: CONNECTION_MODE[value].label }));
+import { TIER_LABEL, connectionModeMeta, tiersOf } from '../../../lib/capability';
+import type { DatabaseSchema, MaskingRule, RegisteredDatabase } from '../../../types';
 
 const key = (table: string, column: string) =>
   `${table.toLocaleLowerCase('tr')}.${column.toLocaleLowerCase('tr')}`;
@@ -46,12 +33,6 @@ export const MaskingTab: React.FC = () => {
   const [databases, setDatabases] = useState<RegisteredDatabase[]>([]);
   const [loadingDatabases, setLoadingDatabases] = useState(true);
   const [selected, setSelected] = useState<RegisteredDatabase | null>(null);
-
-  const [form, setForm] = useState({
-    servername: '', database_name: '', technology: 'mssql', connection_mode: 'ro' as ConnectionMode,
-    username_ro: '', password_ro: '', username_rw: '', password_rw: '', username_ddl: '', password_ddl: '',
-  });
-  const [adding, setAdding] = useState(false);
 
   const [schema, setSchema] = useState<DatabaseSchema>({});
   const [schemaError, setSchemaError] = useState<string | null>(null);
@@ -106,38 +87,6 @@ export const MaskingTab: React.FC = () => {
     setSelected(database);
     setFilter('');
     void loadSchemaAndRules(database);
-  };
-
-  const addDatabase = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!form.servername.trim() || !form.database_name.trim()) return;
-    setAdding(true);
-    try {
-      const created = await api.addDatabase({
-        servername: form.servername.trim(),
-        database_name: form.database_name.trim(),
-        tech_name: form.technology,
-        connection_mode: form.connection_mode,
-        username_ro: form.username_ro.trim(),
-        password_ro: form.password_ro,
-        ...(form.connection_mode !== 'ro' ? {
-          username_rw: form.username_rw.trim(), password_rw: form.password_rw,
-        } : {}),
-        ...(form.connection_mode === 'ro_rw_ddl' ? {
-          username_ddl: form.username_ddl.trim(), password_ddl: form.password_ddl,
-        } : {}),
-      });
-      setForm({
-        servername: '', database_name: '', technology: 'mssql', connection_mode: 'ro',
-        username_ro: '', password_ro: '', username_rw: '', password_rw: '', username_ddl: '', password_ddl: '',
-      });
-      void loadDatabases();
-      toast.success('Veritabanı kaydedildi', `Kayıt kimliği: ${created.db_uuid}`);
-    } catch (caught) {
-      toast.error('Veritabanı eklenemedi', errorMessage(caught));
-    } finally {
-      setAdding(false);
-    }
   };
 
   const saveRules = async () => {
@@ -205,94 +154,6 @@ export const MaskingTab: React.FC = () => {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
       <div className="flex flex-col gap-4 lg:col-span-5">
-        <Panel flush as="section">
-          <PanelHeader title="Veritabanı kaydet" description="DBA'in sağladığı erişim hesaplarını seçilen bağlantı moduyla kaydedin." />
-          <form onSubmit={addDatabase} className="flex flex-col gap-3.5 p-4">
-            <Field label="Sunucu adresi" required hint="Ağ üzerinden erişilebilen host adı veya IP.">
-              <Input
-                value={form.servername}
-                onChange={(event) => setForm({ ...form, servername: event.target.value })}
-                required
-                placeholder="sql-prod-01.sirket.local"
-                className="font-mono"
-              />
-            </Field>
-
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-              <Field label="Veritabanı adı" required>
-                <Input
-                  value={form.database_name}
-                  onChange={(event) => setForm({ ...form, database_name: event.target.value })}
-                  required
-                  placeholder="Satis"
-                  className="font-mono"
-                />
-              </Field>
-              <Field label="Teknoloji">
-                <Select
-                  value={form.technology}
-                  onValueChange={(value) => setForm({ ...form, technology: value })}
-                  options={TECHNOLOGIES}
-                />
-              </Field>
-            </div>
-
-            <Field
-              label="Bağlantı modu"
-              required
-              hint="Seçilmeyen kademedeki sorgular WebQuery tarafından reddedilir."
-            >
-              <SegmentedControl
-                value={form.connection_mode}
-                onChange={(connection_mode) => setForm({ ...form, connection_mode })}
-                segments={CONNECTION_MODES}
-                label="Bağlantı modu"
-                className="w-full overflow-x-auto"
-              />
-            </Field>
-
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-              <Field label="RO kullanıcı adı" required hint="Salt-okuma hesabı">
-                <Input value={form.username_ro} onChange={(event) => setForm({ ...form, username_ro: event.target.value })} required autoComplete="off" />
-              </Field>
-              <Field label="RO şifre" required>
-                <Input type="password" value={form.password_ro} onChange={(event) => setForm({ ...form, password_ro: event.target.value })} required autoComplete="new-password" />
-              </Field>
-              {form.connection_mode !== 'ro' && (
-                <>
-                  <Field label="RW kullanıcı adı" required hint="Okuma ve veri değiştirme hesabı">
-                    <Input value={form.username_rw} onChange={(event) => setForm({ ...form, username_rw: event.target.value })} required autoComplete="off" />
-                  </Field>
-                  <Field label="RW şifre" required>
-                    <Input type="password" value={form.password_rw} onChange={(event) => setForm({ ...form, password_rw: event.target.value })} required autoComplete="new-password" />
-                  </Field>
-                </>
-              )}
-              {form.connection_mode === 'ro_rw_ddl' && (
-                <>
-                  <Field label="DDL kullanıcı adı" required hint="Şema değişikliği hesabı; yalnız gerektiğinde ekleyin.">
-                    <Input value={form.username_ddl} onChange={(event) => setForm({ ...form, username_ddl: event.target.value })} required autoComplete="off" />
-                  </Field>
-                  <Field label="DDL şifre" required>
-                    <Input type="password" value={form.password_ddl} onChange={(event) => setForm({ ...form, password_ddl: event.target.value })} required autoComplete="new-password" />
-                  </Field>
-                </>
-              )}
-            </div>
-
-            <Button
-              type="submit"
-              variant="primary"
-              icon={<PlusIcon size={14} weight="bold" />}
-              loading={adding}
-              disabled={!form.servername.trim() || !form.database_name.trim() || !form.username_ro.trim() || !form.password_ro || (form.connection_mode !== 'ro' && (!form.username_rw.trim() || !form.password_rw)) || (form.connection_mode === 'ro_rw_ddl' && (!form.username_ddl.trim() || !form.password_ddl))}
-              className="self-start"
-            >
-              Veritabanını kaydet
-            </Button>
-          </form>
-        </Panel>
-
         <Panel flush as="section" className="flex min-h-0 flex-col">
           <PanelHeader
             title="Kayıtlı veritabanları"
@@ -315,7 +176,7 @@ export const MaskingTab: React.FC = () => {
               size="sm"
               icon={<DatabaseIcon size={18} />}
               title="Kayıtlı veritabanı yok"
-              description="Yukarıdaki formla ilk hedef veritabanını kaydedin."
+              description="Hedef veritabanı kaydı platform OWNER tarafından yapılır."
             />
           ) : (
             <ul className="max-h-[380px] overflow-y-auto p-1.5">

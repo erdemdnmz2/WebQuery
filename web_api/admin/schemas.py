@@ -2,10 +2,9 @@
 Admin Schemas
 Pydantic models for admin approval endpoints
 """
-from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 class AdminApprovals(BaseModel):
@@ -71,48 +70,6 @@ class RejectRequest(BaseModel):
 
     reason: str = Field(min_length=3, max_length=500)
 
-class DatabaseAddRequest(BaseModel):
-    """
-    Schema for adding a new database.
-    
-    Attributes:
-        servername: Server instance name
-        database_name: Database name
-        tech_name: Technology name (e.g., mssql)
-    """
-    servername: str
-    database_name: str
-    tech_name: str
-    connection_mode: Literal["ro", "ro_rw", "ro_rw_ddl"]
-    username_ro: str | None = None
-    password_ro: str | None = None
-    username_rw: str | None = None
-    password_rw: str | None = None
-    username_ddl: str | None = None
-    password_ddl: str | None = None
-
-    @model_validator(mode="after")
-    def validate_credentials_for_mode(self) -> "DatabaseAddRequest":
-        required_by_mode = {
-            "ro": ("ro",),
-            "ro_rw": ("ro", "rw"),
-            "ro_rw_ddl": ("ro", "rw", "ddl"),
-        }
-        supplied = {
-            "ro": (self.username_ro, self.password_ro),
-            "rw": (self.username_rw, self.password_rw),
-            "ddl": (self.username_ddl, self.password_ddl),
-        }
-        required = required_by_mode[self.connection_mode]
-        for tier in required:
-            if not all(value and value.strip() for value in supplied[tier]):
-                raise ValueError(f"{tier.upper()} kullanıcı adı ve şifresi zorunludur.")
-        for tier, values in supplied.items():
-            if tier not in required and any(value and value.strip() for value in values):
-                raise ValueError(f"{tier.upper()} bilgileri seçilen bağlantı modunda gönderilemez.")
-        return self
-
-
 class MaskingRuleSchema(BaseModel):
     table_name: str
     column_name: str
@@ -139,13 +96,4 @@ class DatabaseListResponse(BaseModel):
 class UserAssociationRequest(BaseModel):
     user_id: int
     database_id: int
-    role: str # "READER", "WRITER", "ADMIN"
-
-
-class AdminUserSummary(BaseModel):
-    id: int
-    username: str
-    email: str
-    is_active: bool
-    status: str
-    created_at: datetime | None = None
+    role: str # "READER", "WRITER", "DDL"; DB ADMIN is OWNER-managed.

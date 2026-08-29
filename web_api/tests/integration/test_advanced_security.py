@@ -30,7 +30,13 @@ def mock_db_session():
     with patch("database_provider.DatabaseProvider.get_session", side_effect=fake_get_session):
         yield mock_session, mock_result
 
-async def create_user_and_login(async_client: AsyncClient, email: str, username: str, make_admin: bool = False) -> int:
+async def create_user_and_login(
+    async_client: AsyncClient,
+    email: str,
+    username: str,
+    make_admin: bool = False,
+    make_owner: bool = False,
+) -> int:
     """
     Helper function to register, login, and optionally promote a user to admin.
     """
@@ -43,16 +49,17 @@ async def create_user_and_login(async_client: AsyncClient, email: str, username:
     
     app_db = app.state.context.app_db
     user_id = 0
-    if make_admin:
+    if make_admin or make_owner:
         async with app_db.get_app_db() as db:
             result = await db.execute(select(User).where(User.email == email))
             user = result.scalars().first()
             user_id = user.id
+            user.is_platform_owner = make_owner
             
             from app_database.models import Databases, UserDatabaseAssociation
             db_res = await db.execute(select(Databases))
             all_dbs = db_res.scalars().all()
-            for db_entry in all_dbs:
+            for db_entry in all_dbs if make_admin else []:
                 assoc = UserDatabaseAssociation(
                     user_id=user.id,
                     database_id=db_entry.id,
@@ -68,7 +75,7 @@ async def create_user_and_login(async_client: AsyncClient, email: str, username:
     }
     await async_client.post("/api/login", json=login_data)
     
-    if not make_admin:
+    if not make_admin and not make_owner:
         async with app_db.get_app_db() as db:
             result = await db.execute(select(User).where(User.email == email))
             user = result.scalars().first()
@@ -113,20 +120,26 @@ async def test_encryption_at_rest(async_client: AsyncClient):
         db.add(bootstrap_db)
         await db.commit()
     
-    # 1. Add database as admin with a DBA-provided read-only credential.
+    # 1. Add database as OWNER with an explicit first DB ADMIN.
     admin_client = AsyncClient(transport=async_client._transport, base_url="http://test")
-    await create_user_and_login(admin_client, "enc_admin@example.com", "enc_admin", make_admin=True)
+    await create_user_and_login(admin_client, "enc_owner@example.com", "enc_owner", make_owner=True)
+    async with app_db.get_app_db() as db:
+        first_admin = (
+            await db.execute(select(User).where(User.email == "enc_owner@example.com"))
+        ).scalars().one()
+        first_admin_id = first_admin.id
     
     db_payload = {
         "servername": "secure-server",
         "database_name": "secure_db",
         "tech_name": "postgresql",
         "connection_mode": "ro",
+        "initial_admin_user_id": first_admin_id,
         "username_ro": "secure_ro",
         "password_ro": "secret-for-encryption-test",
     }
-    resp = await admin_client.post("/api/admin/add_database", json=db_payload)
-    assert resp.status_code == 200
+    resp = await admin_client.post("/api/owner/databases", json=db_payload)
+    assert resp.status_code == 201
     
     # 2. Query the raw SQLite database directly to verify password_ro is encrypted (not plaintext)
     async with app_db.app_engine.connect() as conn:

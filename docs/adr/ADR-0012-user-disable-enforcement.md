@@ -15,8 +15,9 @@ session’larını açık bırakmak güvenlik açığı oluşturur.
 
 ## Decision
 
-`Users` tablosuna kullanıcı yaşam döngüsü alanları eklenir ve admin-only
-`POST /api/admin/users/{user_id}/disable` endpoint’i sağlanır.
+`Users` tablosuna kullanıcı yaşam döngüsü alanları eklenir. Platform yetki
+sınırı ADR-0017 ile kalıcılaştırıldıktan sonra disable işlemi OWNER-only
+`POST /api/owner/users/{user_id}/disable` endpoint’inden sunulur.
 
 Kimlik doğrulama akışı şu şekilde uygulanır:
 
@@ -71,3 +72,4 @@ oluşturur. Middleware state’i bu tekrarın önüne geçer.
 
 - Spec: `docs/specs/SPEC-0015-user-lifecycle-disable.md`
 - Related ADR: `docs/adr/ADR-0008-access-refresh-session-auth.md`
+- Authorization boundary: `docs/adr/ADR-0017-persisted-platform-owner-boundary.md`

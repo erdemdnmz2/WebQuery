@@ -12,6 +12,7 @@ class AuditAction(StrEnum):
     USER_DISABLED = "user_disabled"
     USER_ENABLED = "user_enabled"
     PASSWORD_CHANGED = "password_changed"
+    OWNER_GRANTED = "owner_granted"
 
     APPROVE_QUERY = "approve_query"
     REJECT_QUERY = "reject_query"
@@ -19,6 +20,8 @@ class AuditAction(StrEnum):
 
     ADD_DATABASE = "add_database"
     REMOVE_DATABASE = "remove_database"
+    GRANT_DATABASE_ADMIN = "grant_database_admin"
+    REVOKE_DATABASE_ADMIN = "revoke_database_admin"
     UPDATE_MASKING_RULES = "update_masking_rules"
 
     LOGIN = "login"
@@ -46,10 +49,13 @@ STATE_CHANGING: frozenset[AuditAction] = frozenset(
         AuditAction.USER_DISABLED,
         AuditAction.USER_ENABLED,
         AuditAction.PASSWORD_CHANGED,
+        AuditAction.OWNER_GRANTED,
         AuditAction.APPROVE_QUERY,
         AuditAction.REJECT_QUERY,
         AuditAction.ADD_DATABASE,
         AuditAction.REMOVE_DATABASE,
+        AuditAction.GRANT_DATABASE_ADMIN,
+        AuditAction.REVOKE_DATABASE_ADMIN,
         AuditAction.UPDATE_MASKING_RULES,
         AuditAction.SESSION_REVOKED,
     }

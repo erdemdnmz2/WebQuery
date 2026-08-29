@@ -6,6 +6,9 @@ Accepted
 
 ## Context
 
+> Bu kararın domain allowlist ve pasif kayıt bölümleri geçerliliğini korur;
+> geçici `PLATFORM_ADMINS` yetki sınırı ADR-0017 tarafından değiştirildi.
+
 WebQuery şirket içi bir SQL gateway olarak kullanılacak. Self-registration'ın
 tamamen açık bırakılması istenmiyor; ancak çalışanların şirket e-posta alan
 adıyla kayıt başvurusu yapabilmesi isteniyor. Mevcut `ADMIN` rolü bir hedef
@@ -76,3 +79,4 @@ endpoint'inde ikinci bir kapsam kontrolü gerektirir. Mevcut ihtiyaç için
 
 - Spec: `docs/specs/SPEC-0016-domain-allowlisted-user-activation.md`
 - Plan: `webquery_implementasyon_sirasi.md`, Adım 13 ve Adım 20
+- Superseded by: `docs/adr/ADR-0017-persisted-platform-owner-boundary.md`

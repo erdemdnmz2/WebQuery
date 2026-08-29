@@ -11,13 +11,13 @@ from common.audit_actions import AuditAction
 pytestmark = pytest.mark.asyncio
 
 
-async def _create_active_user(username: str, email: str) -> User:
+async def _create_active_user(username: str, email: str) -> int:
     async with app.state.context.app_db.get_app_db() as db, db.begin():
         user = User(username=username, email=email, is_active=True)
         user.set_password("StrongPassword123!")
         db.add(user)
         await db.flush()
-        return user
+        return user.id
 
 
 async def _user_by_email(email: str) -> User:
@@ -65,15 +65,16 @@ async def test_registration_is_domain_scoped_and_pending(async_client, monkeypat
     assert login.status_code == 400
 
 
-async def test_platform_admin_lists_and_enables_pending_user(async_client, monkeypatch):
+async def test_platform_owner_lists_and_enables_pending_user(async_client, monkeypatch):
     monkeypatch.setattr(auth_config, "ALLOWED_EMAIL_DOMAINS", ("company.com",))
     monkeypatch.setattr(auth_config, "REGISTRATION_REQUIRES_ACTIVATION", True)
-    monkeypatch.setenv("PLATFORM_ADMINS", "platform_admin")
-
-    await _create_active_user("platform_admin", "platform_admin@company.com")
+    owner = await _create_active_user("platform_owner", "platform_owner@company.com")
+    async with app.state.context.app_db.get_app_db() as db, db.begin():
+        persisted = await db.get(User, owner)
+        persisted.is_platform_owner = True
     admin_login = await async_client.post(
         "/api/login",
-        json={"email": "platform_admin@company.com", "password": "StrongPassword123!"},
+        json={"email": "platform_owner@company.com", "password": "StrongPassword123!"},
     )
     assert admin_login.status_code == 200
 
@@ -88,12 +89,12 @@ async def test_platform_admin_lists_and_enables_pending_user(async_client, monke
     assert registered.status_code == 200
     pending = await _user_by_email("employee@company.com")
 
-    users = await async_client.get("/api/admin/users")
+    users = await async_client.get("/api/owner/users")
     assert users.status_code == 200, users.text
     listed = next(item for item in users.json() if item["id"] == pending.id)
     assert listed["status"] == "pending"
 
-    enabled = await async_client.post(f"/api/admin/users/{pending.id}/enable")
+    enabled = await async_client.post(f"/api/owner/users/{pending.id}/enable")
     assert enabled.status_code == 200, enabled.text
 
     active = await _user_by_email("employee@company.com")
@@ -107,11 +108,10 @@ async def test_platform_admin_lists_and_enables_pending_user(async_client, monke
                 )
             )
         ).scalars().one()
-        assert audit.actor_username == "platform_admin"
+        assert audit.actor_username == "platform_owner"
 
 
-async def test_database_admin_is_not_platform_admin(async_client, monkeypatch):
-    monkeypatch.setenv("PLATFORM_ADMINS", "someone_else")
+async def test_database_admin_is_not_platform_owner(async_client):
     await _create_active_user("database_admin", "database_admin@company.com")
     async with app.state.context.app_db.get_app_db() as db, db.begin():
         user_id = (
@@ -139,5 +139,5 @@ async def test_database_admin_is_not_platform_admin(async_client, monkeypatch):
         "/api/login",
         json={"email": "database_admin@company.com", "password": "StrongPassword123!"},
     )
-    response = await async_client.get("/api/admin/users")
+    response = await async_client.get("/api/owner/users")
     assert response.status_code == 403

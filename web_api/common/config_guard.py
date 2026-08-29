@@ -70,10 +70,4 @@ def verify_startup_config() -> None:
     }
     if not allowed_domains:
         logger.warning("ALLOWED_EMAIL_DOMAINS boş — self-registration kapalı.")
-    elif not os.getenv("PLATFORM_ADMINS", "").strip():
-        logger.warning(
-            "ALLOWED_EMAIL_DOMAINS tanımlı ancak PLATFORM_ADMINS boş — "
-            "kullanıcılar kayıt olabilir fakat etkinleştirilemez."
-        )
-
     logger.info("Konfigürasyon doğrulandı: %d kritik ayar mevcut", len(_REQUIRED))

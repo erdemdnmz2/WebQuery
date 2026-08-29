@@ -77,11 +77,11 @@ Hiçbir şeye bağlı olmayanlar (istediğiniz yerde, paralel): `0.2`, `0.3`, `2
 | **1** — Kanama durdurma | `0.2` `0.3` `0.5` | ~6 saat | Hayır (üçü de 🔴) |
 | **2** — Denetlenebilirlik | `4.4` `1.1` `1.2` `1.3` | ~2,5 gün | Hayır (`1.3` 🔴) |
 | **3** — Kimlik | `2.1` `2.2` `2.4` `2.3` | ~3 gün | **Evet** — ertelenebilir |
-| **4** — Savunma derinliği | `3.1` `4.5` `3.3` `3.2` `3.4` | ~4,5 gün | Hayır — asıl getiri |
+| **4** — Savunma derinliği | `3.1` `4.5` `3.3` `3.2` | ~2,5 gün | Hayır — asıl getiri |
 | **5** — Cila | `4.3` `4.6` | ~1 gün | Evet |
 
-**Toplam ≈ 13 iş günü kod**, gözden geçirme ve dağıtım payıyla ~16 gün.
-Blok 3 ertelenirse Blok 4'ün sonuna kadar ≈ 10 iş günü.
+**Toplam ≈ 11 iş günü kod**, gözden geçirme ve dağıtım payıyla ~14 gün.
+Blok 3 ertelenirse Blok 4'ün sonuna kadar ≈ 8 iş günü.
 
 ---
 
@@ -4041,7 +4041,26 @@ DB admin'i için SQL injection, DDL, WHERE'siz DELETE — **hepsi** atlanıyor.
 
 **Efor (3.2 tümü):** ~1 gün + test.
 
-## Adım 20 · `3.4` — Kontrol hiyerarşisi, yıkıcı DML teyidi ve platform rolü ⭐
+## Adım 20 · `3.4` — Kontrol hiyerarşisi, yıkıcı DML teyidi ve platform rolü ◐ Kısmen tamamlandı
+
+> **2026-08-29 kararı:** Bu adımın yıkıcı DML teyidi kısmı (`3.4.2`) çekirdek
+> uygulama sırasından çıkarıldı. Teyit, tüm hedef veritabanları için zorunlu değildir; ihtiyaç
+> duyulan hedef veritabanı eklenirken etkinleştirilebilecek isteğe bağlı bir
+> politika olarak daha sonra uygulanacaktır. Ayrıntı ve iş kalemleri:
+> [`docs/inbox/OPTIONAL-DESTRUCTIVE-DML-CONFIRMATION.md`](docs/inbox/OPTIONAL-DESTRUCTIVE-DML-CONFIRMATION.md).
+>
+> **Uygulama durumu:** `3.4.1`, `3.4.3`teki admin sert-blok sınırı ve
+> `3.4.4`teki kalıcı OWNER modülü tamamlandı. `Users.is_platform_owner`,
+> CLI bootstrap, startup guard, `/api/owner/*`, ilk DB ADMIN'in atomik atanması
+> ve OWNER arayüzü SPEC-0021 / ADR-0017 uyarınca uygulanmıştır. OWNER olmak
+> otomatik sorgu veya DB ADMIN yetkisi vermez.
+>
+> `3.1`deki `ro`/`rw` kademe ayrımı ve `3.2`deki sert analiz blokları bu
+> karardan etkilenmez. `CONFIRMATION_SECRET` yalnız inbox özelliği planlanıp
+> etkinleştirildiğinde zorunludur. Bu bölümdeki önceki tasarım notları tarihsel
+> bağlam olarak korunmuştur. `3.4.4`teki platform kapsamlı veritabanı kaydı
+> yetkisi, DML teyidinden bağımsızdır; sonraki adımların önkoşulu değildir ve
+> ayrı planlanmalıdır.
 
 **Önkoşulları:** `3.3` (sqlglot builder API'si sürüme duyarlı), `3.1` (sayım sorgusu
 `ro` kademesinde çalışıyor — o kademe olmadan yapılamaz), `0.1`
@@ -4342,7 +4361,7 @@ kontrolü **olamaz** — kayıt anında veritabanı henüz yoktur. Yani bu eksik
 aktörün *o* veritabanındaki ADMIN'liğini arıyor. Sorun genel değil, yalnızca
 platform seviyesi işlerde.)
 
-**Çözüm — `PLATFORM_ADMINS` allowlist (tavsiye edilen, şimdi):**
+**Tarihsel çözüm — `PLATFORM_ADMINS` allowlist (ADR-0017 ile superseded):**
 
 Bu açık için yeni bir rol modeli gerekmiyor. Eksik olan tek şey, veritabanına
 ait olmayan işleri koruyan ayrı bir kapı:
@@ -4390,7 +4409,7 @@ Buna karşılık yeni bir rolün sürekli maliyeti var: her yetki kontrolü iki
 eksenli olur, UI'da yeni bir kavram, bootstrap scripti, göç, ve ince bir yerde
 yanlış yapma riski. Allowlist bu işin %90'ını %5 maliyetle yapıyor.
 
-**Ne zaman gerçek `OWNER` rolüne geçilmeli:**
+**Gerçek `OWNER` rolüne geçiş durumu: tamamlandı (2026-08-29).**
 
 Üçünden biri doğru olduğunda — hiçbiri olmadan erken:
 
@@ -4413,10 +4432,13 @@ is_platform_owner = Column(Boolean, nullable=False, default=False)
 
 | `OWNER` ne yapabilir | |
 |---|---|
-| Veritabanı kaydetme / silme | ✅ |
+| Veritabanı kaydetme | ✅ |
+| Veritabanı silme | ❌ Bu sürümün kapsamı dışında |
 | Yeni veritabanına ilk ADMIN'i atama | ✅ |
-| Kademe kimlik bilgilerini girme / döndürme | ✅ |
-| **Herhangi bir** veritabanında onaylayabilme | ✅ |
+| Ek DB ADMIN atama / geri alma | ✅ Son ADMIN korunur |
+| Yeni kayıtta kademe kimlik bilgilerini girme | ✅ |
+| Mevcut kimlik bilgilerini döndürme | ❌ Bu sürümün kapsamı dışında |
+| **Herhangi bir** veritabanında onaylayabilme | ❌ Ayrı DB ADMIN ilişkisi gerekir |
 | Kullanıcı devre dışı bırakma (2.1) | ✅ |
 | Sorgu kademesi (`ro`/`rw`/`ddl`) | ❌ Hâlâ READER/WRITER/DDL'den gelir |
 
@@ -4426,7 +4448,7 @@ is_platform_owner = Column(Boolean, nullable=False, default=False)
 > yeni bir isimle geri getirmek olurdu. `OWNER` *hangi veritabanlarında*
 > yönetişim yapabileceğinizi genişletir, *ne yapabileceğinizi* değil.
 
-İlk `OWNER` yalnızca komut satırından atanmalıdır (`scripts/grant_owner.py`) —
+İlk `OWNER` yalnızca komut satırından atanmalıdır (`scripts/bootstrap_owner.py`) —
 UI'dan atanabilmesi, "OWNER olmayan biri OWNER atayabilir" demek olurdu.
 
 **Break-glass — bu da `OWNER` değildir, ayrıdır:**
@@ -4464,7 +4486,8 @@ en yüksek kaldıraçlı madde odur ve 3.4.1'deki varsayımı ortadan kaldırır
 > düşsün. Kontrolü teknik gerekçeyle savunmanız gerekmez, uyum gerekçesiyle
 > zaten kalır.
 
-**Efor:** ~2 gün (3.4.2 kod + test ~1 gün, OWNER + göç ~1 gün).
+**Efor:** Çekirdek plan dışında. Uygulanacağı zaman kapsamı inbox kaydındaki
+spec/ADR ile netleştirilecek.
 
 ### ✅ Blok 4 geçiş kontrolü
 
@@ -4472,9 +4495,9 @@ Bu kontrol geçmeden sonraki bloğa başlamayın.
 
 Bir `SELECT` çalıştırın — hedef veritabanının oturum görünümünde bağlantının
 `webquery_ro` ile açıldığını doğrulayın. Bir `UPDATE` çalıştırın, `webquery_rw` görün.
-`ro` hesabıyla elle `UPDATE` deneyin — veritabanı reddetmeli. `DELETE FROM <tablo>`
-yazın (WHERE'siz) — çalışmadan önce etkilenecek satır sayısını gösteren teyit ekranı
-gelmeli; sorguyu değiştirip aynı jetonla gönderin, reddedilmeli.
+`ro` hesabıyla elle `UPDATE` deneyin — veritabanı reddetmeli. Yıkıcı DML teyidi
+bu geçiş kontrolünün parçası değildir; etkinleştirilecek hedef veritabanları
+için inbox kaydına göre ayrıca doğrulanacaktır.
 
 ---
 
@@ -4606,14 +4629,14 @@ BLOK 3 — KİMLİK (ertelenebilir)                           ~3 gün
 □ 15. 2.3  Refresh token + oturum iptali            2 gün   🟠
    └─ geçiş: devre dışı kullanıcının oturumu reddediliyor
 
-BLOK 4 — SAVUNMA DERİNLİĞİ                                ~4,5 gün
+BLOK 4 — SAVUNMA DERİNLİĞİ                                ~2,5 gün
 □ 16. 3.1  Kademe kimlik + engine cache (4b dahil)  2 gün   ⭐ EN YÜKSEK GETİRİ
 □ 17. 4.5  Ölü kod                                 15 dk
 □ 18. 3.3  sqlglot güncelle                         2 sa    ← 3.2'den ÖNCE
 □ 19. 3.2  Analyzer sertleştirme                    1 gün   🟡
-□ 20. 3.4  DML teyidi + PLATFORM_ADMINS             1 gün   🔴
+↷ 20. 3.4  Hedef DB bazlı isteğe bağlı DML teyidi          INBOX
    └─ geçiş: SELECT ro ile, UPDATE rw ile bağlanıyor;
-             WHERE'siz DELETE teyit ekranı getiriyor
+             DML teyidi etkinse ayrı inbox kabul kriterleri uygulanır
 
 BLOK 5 — CİLA                                             ~1 gün
 □ 21. 4.3  print() → logging                        3 sa    🟡

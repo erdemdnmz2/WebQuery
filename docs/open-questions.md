@@ -85,7 +85,7 @@ with status `Open` before doing task work; see `AGENTS.md`.
 
 ### OQ-2026-009: Admin sorguları hangi engellere takılmalı?
 
-- Status: Open
+- Status: Answered
 - Raised: 2026-08-28
 - Scope: Adım 19 (`3.2.5`) admin bypass daraltması, Adım 20 (`3.4`) yıkıcı DML
   teyidi; `web_api/query_execution/services.py`, `HARD_BLOCKED_RISKS`
@@ -100,8 +100,52 @@ with status `Open` before doing task work; see `AGENTS.md`.
   ADR-0016 mevcut sınırı bilinçli bir **ara durum** olarak kaydetti; Adım 20'de
   yıkıcı DML teyidi geldiğinde ölçüt kişiye bakmayacağı için bu istisnanın
   tamamen kalkması planlanıyor. Karar, Adım 20'nin kapsamını belirler.
-- Answer: Leave blank while open; record the user's answer once received
-- Recorded in: `docs/adr/ADR-0016-analyzer-block-boundary.md` (mevcut ara durum)
+- Answer: Admin yalnız `sql_injection_risk` ve `blocked_operation` sert
+  bloklarında durdurulacak. `ddl_pattern`, `risky_pattern` ve
+  `performance_risk` için mevcut admin bypass'ı korunacak; atlama log ve audit
+  kaydında görünmeye devam edecek.
+- Recorded in: `docs/adr/ADR-0016-analyzer-block-boundary.md`,
+  `docs/specs/SPEC-0021-platform-owner-governance.md`
+
+### OQ-2026-010: Satır sayımı ertelenirken yıkıcı DML teyidi nasıl davranmalı?
+
+- Status: Answered
+- Raised: 2026-08-29
+- Scope: Adım 20 (`3.4`), `UPDATE`/`DELETE` sorgu akışı, backend API ve Studio
+  teyit arayüzü
+- Question: Etkilenecek satır sayısını önceden hesaplama ertelenirken
+  `UPDATE`/`DELETE` için sorguya bağlı kısa ömürlü genel bir kullanıcı teyidi
+  yine de uygulanmalı mı, yoksa yıkıcı DML teyidinin tamamı mı ertelenmeli?
+- Why it matters: Genel teyit yanlışlıkla çalıştırmayı azaltır ancak kullanıcıya
+  gerçek etki alanını göstermez ve kolayca alışkanlıkla onaylanan bir kapıya
+  dönüşebilir. Teyidin tamamını ertelemek mevcut davranışı korur; buna karşılık
+  satır sayımı gelene kadar ek insan-hatası bariyeri sağlamaz.
+- Answer: Yıkıcı DML teyidinin tamamı ertelenecek. Satır sayımı olmadan genel
+  bir `UPDATE`/`DELETE` teyidi uygulanmayacak; mevcut yetki, sert blok, audit ve
+  admin bypass davranışı korunacak.
+- Recorded in: `docs/specs/SPEC-0021-platform-owner-governance.md`
+
+### OQ-2026-011: Platform yetkisi allowlist mi kalmalı, gerçek OWNER rolü mü olmalı?
+
+- Status: Answered
+- Raised: 2026-08-29
+- Scope: Adım 20 (`3.4.4`), kullanıcı modeli, migration, platform yönetimi API
+  ve arayüzü
+- Question: Mevcut `PLATFORM_ADMINS` ortam değişkeni allowlist'i korunarak
+  yalnız eksik platform yetki kontrolleri mi tamamlanmalı, yoksa şimdi kalıcı
+  `is_platform_owner` veri modeli, ilk OWNER bootstrap komutu ve OWNER yönetim
+  sözleşmesi mi uygulanmalı?
+- Why it matters: Allowlist basit ve mevcut deployment sözleşmesiyle uyumludur
+  ancak yetki değişiklikleri deploy gerektirir. Kalıcı OWNER rolü denetlenebilir
+  ve uygulama içinden yönetilebilir; buna karşılık migration, bootstrap,
+  self-escalation koruması ve daha geniş API/UI sözleşmesi gerektirir.
+- Answer: Kalıcı `is_platform_owner` veri modeli ve ayrı OWNER modülü şimdi
+  uygulanacak. İlk OWNER mevcut bir kullanıcıya yalnız sunucu tarafı bootstrap
+  komutuyla verilecek; OWNER kullanıcı aktivasyonu, hedef veritabanı kaydı ve
+  veritabanı ADMIN atamalarını yönetecek. OWNER olmak kendiliğinden sorgu
+  çalıştırma (`ro`/`rw`/`ddl`) yetkisi vermeyecek.
+- Recorded in: `docs/specs/SPEC-0021-platform-owner-governance.md`,
+  `docs/adr/ADR-0017-persisted-platform-owner-boundary.md`
 
 ## Entry Format
 

@@ -32,7 +32,13 @@ def mock_db_session():
         yield mock_session, mock_result
 
 
-async def create_user_and_login(async_client: AsyncClient, email: str, username: str, make_admin: bool = False) -> int:
+async def create_user_and_login(
+    async_client: AsyncClient,
+    email: str,
+    username: str,
+    make_admin: bool = False,
+    make_owner: bool = False,
+) -> int:
     """
     Helper function to register, login, and optionally promote a user to admin.
     """
@@ -45,16 +51,17 @@ async def create_user_and_login(async_client: AsyncClient, email: str, username:
     
     app_db = app.state.context.app_db
     user_id = 0
-    if make_admin:
+    if make_admin or make_owner:
         async with app_db.get_app_db() as db:
             result = await db.execute(select(User).where(User.email == email))
             user = result.scalars().first()
             user_id = user.id
+            user.is_platform_owner = make_owner
             
             from app_database.models import Databases, UserDatabaseAssociation
             db_res = await db.execute(select(Databases))
             all_dbs = db_res.scalars().all()
-            for db_entry in all_dbs:
+            for db_entry in all_dbs if make_admin else []:
                 assoc = UserDatabaseAssociation(
                     user_id=user.id,
                     database_id=db_entry.id,
@@ -70,7 +77,7 @@ async def create_user_and_login(async_client: AsyncClient, email: str, username:
     }
     await async_client.post("/api/login", json=login_data)
     
-    if not make_admin:
+    if not make_admin and not make_owner:
         async with app_db.get_app_db() as db:
             result = await db.execute(select(User).where(User.email == email))
             user = result.scalars().first()
@@ -85,7 +92,7 @@ async def test_admin_rbac_restrictions(async_client: AsyncClient):
     Tests that non-admin users are blocked from accessing administrative routes.
     """
     # 1. Login as regular user
-    await create_user_and_login(async_client, "regular@example.com", "regular")
+    regular_id = await create_user_and_login(async_client, "regular@example.com", "regular")
     
     # 2. Attempt to list queries waiting for approval -> should fail with 403 Forbidden
     resp_list = await async_client.get("/api/admin/queries_to_approve")
@@ -97,15 +104,19 @@ async def test_admin_rbac_restrictions(async_client: AsyncClient):
     assert resp_approve.status_code == 403
     assert "Admin access required" in resp_approve.json()["detail"]
     
-    # 4. Attempt to add a database -> should fail with 403 Forbidden
+    # 4. Attempt to add a database at OWNER scope -> should fail with 403 Forbidden
     db_payload = {
         "servername": "new-server",
         "database_name": "new-db",
-        "tech_name": "mssql"
+        "tech_name": "mssql",
+        "connection_mode": "ro",
+        "initial_admin_user_id": regular_id,
+        "username_ro": "new_ro",
+        "password_ro": "not-a-real-secret",
     }
-    resp_add = await async_client.post("/api/admin/add_database", json=db_payload)
+    resp_add = await async_client.post("/api/owner/databases", json=db_payload)
     assert resp_add.status_code == 403
-    assert "Admin access required" in resp_add.json()["detail"]
+    assert "OWNER" in resp_add.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -159,7 +170,7 @@ async def test_admin_cannot_decide_own_query(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_admin_database_registration(async_client: AsyncClient):
+async def test_owner_database_registration_requires_explicit_initial_admin(async_client: AsyncClient):
     """
     Tests registering databases by an admin, including duplicate checks.
     """
@@ -174,8 +185,16 @@ async def test_admin_database_registration(async_client: AsyncClient):
         db.add(bootstrap_db)
         await db.commit()
 
-    # 1. Login as admin
-    await create_user_and_login(async_client, "admin1@example.com", "admin1", make_admin=True)
+    # 1. Login as OWNER; OWNER is intentionally not a DB ADMIN.
+    owner_id = await create_user_and_login(
+        async_client, "owner1@example.com", "owner1", make_owner=True
+    )
+    async with app_db.get_app_db() as db, db.begin():
+        first_admin = User(username="first_admin", email="first_admin@example.com", is_active=True)
+        first_admin.set_password("StrongPassword123!")
+        db.add(first_admin)
+        await db.flush()
+        first_admin_id = first_admin.id
     
     # 2. Add database
     db_payload = {
@@ -183,14 +202,15 @@ async def test_admin_database_registration(async_client: AsyncClient):
         "database_name": "orders_db",
         "tech_name": "postgresql",
         "connection_mode": "ro_rw",
+        "initial_admin_user_id": first_admin_id,
         "username_ro": "orders_ro",
         "password_ro": "ro-secret",
         "username_rw": "orders_rw",
         "password_rw": "rw-secret",
     }
-    response = await async_client.post("/api/admin/add_database", json=db_payload)
-    assert response.status_code == 200
-    assert "added successfully" in response.json()["message"]
+    response = await async_client.post("/api/owner/databases", json=db_payload)
+    assert response.status_code == 201
+    assert response.json()["message"] == "Veritabanı kaydedildi."
     
     # Verify database entry in metadata DB
     app_db = app.state.context.app_db
@@ -204,6 +224,16 @@ async def test_admin_database_registration(async_client: AsyncClient):
         assert db_entry.password_ro == "ro-secret"
         assert db_entry.username_rw == "orders_rw"
         assert db_entry.password_rw == "rw-secret"
+        from app_database.models import UserDatabaseAssociation
+        associations = (
+            await db.execute(
+                select(UserDatabaseAssociation).where(
+                    UserDatabaseAssociation.database_id == db_entry.id
+                )
+            )
+        ).scalars().all()
+        assert [(item.user_id, item.role) for item in associations] == [(first_admin_id, "ADMIN")]
+        assert all(item.user_id != owner_id for item in associations)
         audit = (
             await db.execute(
                 select(AuditLog).where(AuditLog.action == AuditAction.ADD_DATABASE)
@@ -212,10 +242,10 @@ async def test_admin_database_registration(async_client: AsyncClient):
         assert audit.client_ip == "127.0.0.1"
         
     # 3. Attempt to add duplicate database -> should fail with 400 Bad Request
-    response_dup = await async_client.post("/api/admin/add_database", json=db_payload)
+    response_dup = await async_client.post("/api/owner/databases", json=db_payload)
     assert response_dup.status_code == 400
     assert response_dup.json()["error_code"] == "DATABASE_ALREADY_EXISTS"
-    assert "already exists" in response_dup.json()["message"]
+    assert response_dup.json()["message"] == "Veritabanı zaten kayıtlı."
 
 
 @pytest.mark.asyncio

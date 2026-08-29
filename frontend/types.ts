@@ -10,16 +10,25 @@
 export interface User {
   username: string;
   is_admin: boolean;
-  is_platform_admin: boolean;
+  is_platform_owner: boolean;
 }
 
-export interface AdminUser {
+export interface OwnerUser {
   id: number;
   username: string;
   email: string;
   is_active: boolean;
+  is_platform_owner: boolean;
   status: 'pending' | 'active' | 'disabled';
   created_at?: string | null;
+}
+
+export interface DatabaseAdmin {
+  database_id: number;
+  database_name: string;
+  user_id: number;
+  username: string;
+  role: string;
 }
 
 export type WorkspaceStatus =

@@ -164,6 +164,14 @@ def upgrade() -> None:
     for spec in REQUIRED_INDEXES:
         if spec.table not in tables:
             continue
+        available_columns = {
+            column["name"] for column in sa_inspect(bind).get_columns(spec.table)
+        }
+        # The contract describes the current head, while this repair revision
+        # can sit before a later revision that introduces a new indexed
+        # column. That later revision owns both the column and its index.
+        if not set(spec.columns).issubset(available_columns):
+            continue
         existing = {index["name"] for index in sa_inspect(bind).get_indexes(spec.table)}
         if spec.name not in existing:
             op.create_index(

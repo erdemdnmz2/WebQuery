@@ -1,9 +1,10 @@
 import type {
   DatabaseInfo,
+  DatabaseAdmin,
   DatabaseSchema,
   ConnectionMode,
   CreatedDatabase,
-  AdminUser,
+  OwnerUser,
   MaskingRule,
   PendingQuery,
   PreviewResponse,
@@ -255,18 +256,6 @@ export const api = {
 
   registeredDatabases: () =>
     request<{ databases?: RegisteredDatabase[] }>('/api/admin/databases').then((data) => data.databases ?? []),
-  addDatabase: (payload: {
-    servername: string;
-    database_name: string;
-    tech_name: string;
-    connection_mode: ConnectionMode;
-    username_ro?: string;
-    password_ro?: string;
-    username_rw?: string;
-    password_rw?: string;
-    username_ddl?: string;
-    password_ddl?: string;
-  }) => request<CreatedDatabase>('/api/admin/add_database', { method: 'POST', body: payload }),
   discoverSchema: (databaseId: number) =>
     request<DatabaseSchema>(`/api/admin/databases/${databaseId}/discover_schema`),
   databaseMaskingRules: (databaseId: number) =>
@@ -276,15 +265,45 @@ export const api = {
       method: 'POST',
       body: { rules },
     }),
-  associateUser: (payload: { user_id: number; database_id: number; role: string }) =>
+  associateUser: (payload: { user_id: number; database_id: number; role: 'READER' | 'WRITER' | 'DDL' }) =>
     request<{ success?: boolean; message?: string }>('/api/admin/associate_user', {
       method: 'POST',
       body: payload,
     }),
-  platformUsers: () => request<AdminUser[]>('/api/admin/users'),
-  enableUser: (userId: number) =>
-    request<{ success?: boolean; message?: string }>(`/api/admin/users/${userId}/enable`, {
+
+  /* --------------------------------------------------------------- owner */
+
+  ownerUsers: () => request<OwnerUser[]>('/api/owner/users'),
+  enableOwnerUser: (userId: number) =>
+    request<{ success?: boolean; message?: string }>(`/api/owner/users/${userId}/enable`, {
       method: 'POST',
+    }),
+  disableOwnerUser: (userId: number) =>
+    request<{ success?: boolean; message?: string }>(`/api/owner/users/${userId}/disable`, {
+      method: 'POST',
+    }),
+  ownerDatabases: () => request<RegisteredDatabase[]>('/api/owner/databases'),
+  createOwnerDatabase: (payload: {
+    servername: string;
+    database_name: string;
+    tech_name: string;
+    connection_mode: ConnectionMode;
+    initial_admin_user_id: number;
+    username_ro?: string;
+    password_ro?: string;
+    username_rw?: string;
+    password_rw?: string;
+    username_ddl?: string;
+    password_ddl?: string;
+  }) => request<CreatedDatabase>('/api/owner/databases', { method: 'POST', body: payload }),
+  databaseAdmins: () => request<DatabaseAdmin[]>('/api/owner/database-admins'),
+  grantDatabaseAdmin: (databaseId: number, userId: number) =>
+    request<{ success?: boolean; message?: string }>(`/api/owner/databases/${databaseId}/admins/${userId}`, {
+      method: 'POST',
+    }),
+  revokeDatabaseAdmin: (databaseId: number, userId: number) =>
+    request<{ success?: boolean; message?: string }>(`/api/owner/databases/${databaseId}/admins/${userId}`, {
+      method: 'DELETE',
     }),
 };
 

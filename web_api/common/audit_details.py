@@ -90,6 +90,21 @@ class DatabaseAccessAuditDetails(BaseModel):
     new_role: str
 
 
+class DatabaseAdminAuditDetails(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation: Literal["grant_admin", "revoke_admin"]
+    database_id: int
+    previous_role: str | None = None
+    new_role: str | None = None
+
+
+class OwnerBootstrapAuditDetails(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source: Literal["server_cli"] = "server_cli"
+    created_user: bool
+    activated_user: bool
+
+
 class DatabaseConfigurationAuditDetails(BaseModel):
     model_config = ConfigDict(extra="forbid")
     operation: Literal["add"]
@@ -120,7 +135,7 @@ class QueryPreviewAuditDetails(BaseModel):
 class UserLifecycleAuditDetails(BaseModel):
     model_config = ConfigDict(extra="forbid")
     event: Literal["registered", "disabled", "enabled"]
-    source: Literal["web", "admin"]
+    source: Literal["web", "admin", "owner"]
 
 
 class SessionAuditDetails(BaseModel):

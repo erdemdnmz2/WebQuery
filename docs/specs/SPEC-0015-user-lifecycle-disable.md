@@ -4,7 +4,7 @@
 
 - Özellik: Kullanıcı devre dışı bırakma
 - Durum: Implemented
-- Versiyon: 1.0.0
+- Versiyon: 1.1.0
 - Tarih: 2026-08-25
 - Sahip: WebQuery
 
@@ -12,7 +12,7 @@
 
 ### Amaç
 
-Bir admin, kullanıcı satırını silmeden hesabı devre dışı bırakabilmeli ve
+Bir platform OWNER, kullanıcı satırını silmeden hesabı devre dışı bırakabilmeli ve
 devre dışı bırakılan kullanıcının mevcut access/refresh oturumları hemen
 geçersizleşmelidir.
 
@@ -27,7 +27,7 @@ geçersizleşmelidir.
 ### Kapsam
 
 - `Users` yaşam döngüsü kolonları.
-- Admin-only kullanıcı disable endpoint’i.
+- OWNER-only kullanıcı disable endpoint’i.
 - Middleware ve authentication dependency katmanlarında aktiflik kontrolü.
 - Mevcut kullanıcı oturumlarının iptali.
 - Login, refresh ve korumalı isteklerde pasif kullanıcı reddi.
@@ -44,18 +44,18 @@ geçersizleşmelidir.
 
 ### Endpoint
 
-`POST /api/admin/users/{user_id}/disable`
+`POST /api/owner/users/{user_id}/disable`
 
 Başarılı yanıt:
 
 ```json
-{"success": true, "message": "User disabled successfully"}
+{"success": true, "message": "Kullanıcı devre dışı bırakıldı."}
 ```
 
 Hata davranışı:
 
 - Hedef kullanıcı yoksa `404`.
-- Admin kendi hesabını kapatmaya çalışırsa `400`.
+- OWNER kendi hesabını kapatmaya çalışırsa `400`.
 - Pasif kullanıcı için işlem idempotent olarak başarılı kabul edilir.
 
 ## 5. İş Kuralları

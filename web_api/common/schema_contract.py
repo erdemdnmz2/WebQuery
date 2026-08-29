@@ -76,6 +76,7 @@ REQUIRED_INDEXES: tuple[IndexSpec, ...] = (
     IndexSpec("ix_UserSessions_user_id", "UserSessions", ("user_id",)),
     IndexSpec("ix_Users_id", "Users", ("id",)),
     IndexSpec("ix_Users_is_active", "Users", ("is_active",)),
+    IndexSpec("ix_Users_is_platform_owner", "Users", ("is_platform_owner",)),
     IndexSpec("ix_Users_username", "Users", ("username",), unique=True),
     IndexSpec("ix_Workspaces_id", "Workspaces", ("id",)),
 )
@@ -119,6 +120,7 @@ REQUIRED_NOT_NULL: tuple[tuple[str, str], ...] = (
     ("UserSessions", "user_id"),
     ("Users", "created_at"),
     ("Users", "is_active"),
+    ("Users", "is_platform_owner"),
     ("Workspaces", "name"),
     ("Workspaces", "query_id"),
     ("Workspaces", "user_id"),

@@ -12,6 +12,7 @@ ADMIN = "ADMIN"
 
 _TIER_BY_ROLE = {READER: "ro", WRITER: "rw", DDL: "ddl"}
 _TIER_RANK = {"ro": 0, "rw": 1, "ddl": 2}
+_ROLE_ORDER = {READER: 0, WRITER: 1, DDL: 2, ADMIN: 3}
 
 
 def parse(role_string: str | None) -> set[str]:
@@ -24,6 +25,12 @@ def parse(role_string: str | None) -> set[str]:
 def is_admin(role_string: str | None) -> bool:
     """Return whether a role value grants database administration capability."""
     return ADMIN in parse(role_string)
+
+
+def format_roles(roles: Iterable[str]) -> str:
+    """Serialize normalized roles in one stable, human-readable order."""
+    normalized = {role.strip().upper() for role in roles if role.strip()}
+    return ",".join(sorted(normalized, key=lambda role: _ROLE_ORDER.get(role, 99)))
 
 
 def max_tier(role_string: str | None) -> str | None:

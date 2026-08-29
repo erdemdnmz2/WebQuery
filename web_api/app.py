@@ -37,6 +37,7 @@ from common.schema_guard import verify_schema
 from database_provider import DatabaseProvider
 from middlewares import AuthMiddleware
 from middlewares.trace_middleware import TraceMiddleware
+from owner.bootstrap import ensure_active_owner
 from slack_integration import SlackListener
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,8 @@ async def lifespan(app: FastAPI):
             # BaseException and deliberately passes through the handler below.
             await conn.run_sync(verify_schema)
         logger.info("Uygulama veritabanı bağlantısı ve şema doğrulandı")
+        await ensure_active_owner(app.state.app_db)
+        logger.info("Aktif platform OWNER doğrulandı")
         # Schema is managed by Alembic (`alembic upgrade head`, run in
         # entrypoint.sh before this process starts) — see
         # docs/adr/ADR-0001-schema-migrations-alembic.md. Two instances
@@ -216,6 +219,10 @@ app.include_router(query_router, tags=["Query Execution"])
 from admin.router import router as admin_router
 
 app.include_router(admin_router, tags=["Admin"])
+
+from owner.router import router as owner_router
+
+app.include_router(owner_router, tags=["Owner"])
 
 from workspaces.router import router as workspace_router
 
