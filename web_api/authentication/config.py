@@ -17,6 +17,11 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "20")
 SESSION_TIMEOUT = int(os.getenv("SESSION_TIMEOUT_MINUTES", "60"))
 RATE_LIMITER = os.getenv("RATE_LIMITER", "3/minute")
 
+# Refresh is a normal part of an active session, so its budget is looser than
+# login's; it is bounded all the same because the route is unauthenticated by
+# design and every rejected token still costs database work.
+REFRESH_RATE_LIMITER = os.getenv("REFRESH_RATE_LIMITER", "30/minute")
+
 
 def _email_domains() -> tuple[str, ...]:
     """Return normalized exact-match domains allowed to self-register."""

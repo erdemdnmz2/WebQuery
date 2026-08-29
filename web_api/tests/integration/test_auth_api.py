@@ -123,30 +123,40 @@ async def test_login_invalid_credentials(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_register_duplicate_email(async_client: AsyncClient):
-    """
-    Test that registering an email already in use yields a 400 bad request.
+async def test_register_duplicate_email_is_indistinguishable(async_client: AsyncClient):
+    """A taken address must answer exactly like a free one (P2-14).
+
+    Registration used to reply 400/USER_ALREADY_EXISTS for a known address,
+    which confirmed which corporate mailboxes exist. The account is never
+    replaced or its password changed; activation is an OWNER decision either
+    way, so the caller loses nothing and learns nothing.
     """
     register_data = {
         "username": "dup_user1",
         "email": "duplicate@example.com",
         "password": "StrongPassword123!"
     }
-    
-    response = await async_client.post("/api/register", json=register_data)
-    assert response.status_code == 200
 
-    # Attempt second registration with same email
-    register_data_2 = {
+    first = await async_client.post("/api/register", json=register_data)
+    assert first.status_code == 200
+
+    second = await async_client.post("/api/register", json={
         "username": "dup_user2",
         "email": "duplicate@example.com",
         "password": "DifferentPassword123!"
-    }
-    response = await async_client.post("/api/register", json=register_data_2)
-    assert response.status_code == 400
-    data = response.json()
-    assert data["error_code"] == "USER_ALREADY_EXISTS"
-    assert "Email already registered" in data["message"]
+    })
+    assert second.status_code == 200
+    assert second.json() == first.json()
+
+    # The existing account is untouched: the original password still works and
+    # no second row was created.
+    async with app.state.context.app_db.get_app_db() as db:
+        rows = (
+            await db.execute(select(User).where(User.email == "duplicate@example.com"))
+        ).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].username == "dup_user1"
+        assert rows[0].check_password("StrongPassword123!")
 
 
 @pytest.mark.asyncio

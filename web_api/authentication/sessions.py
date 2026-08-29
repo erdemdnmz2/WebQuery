@@ -8,20 +8,16 @@ from datetime import UTC, datetime, timedelta
 from jose import jwt
 from sqlalchemy import select, update
 
-from app_database.models import User, UserSession
+from app_database.models import UserSession
 from authentication import config
 from common.audit import log_in
 from common.audit_actions import AuditAction, AuditTarget
 from common.audit_details import SessionAuditDetails
+from common.clock import db_now as _db_now
 
 ACCESS_TTL_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "20"))
 REFRESH_TTL_HOURS = int(os.getenv("REFRESH_TOKEN_EXPIRE_HOURS", "12"))
 REFRESH_GRACE_SECONDS = int(os.getenv("REFRESH_GRACE_SECONDS", "30"))
-
-
-def _db_now() -> datetime:
-    """Return naive UTC for the existing cross-database AppDateTime columns."""
-    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _hash(token: str) -> str:
@@ -119,14 +115,36 @@ async def rotate_refresh(app_db, refresh_token: str) -> dict | None:
                     "refresh_token": new_token,
                 }
 
-            result = await db.execute(
-                update(UserSession)
-                .where(UserSession.prev_refresh_hash == old_hash,
-                       UserSession.revoked_at.is_(None))
-                .values(revoked_at=now,
-                        revoked_reason="refresh token tekrar kullanımı tespit edildi")
-            )
-            if result.rowcount:
+            # Reuse of an already-rotated token past the grace window means the
+            # token was captured: the legitimate holder rotated it, and someone
+            # is now presenting the old one. Revoking only the matching row left
+            # the attacker's *other* sessions for that user alive. Identify the
+            # owner, then revoke everything they have.
+            compromised = (await db.execute(
+                select(UserSession).where(
+                    UserSession.prev_refresh_hash == old_hash,
+                    UserSession.revoked_at.is_(None),
+                ).with_for_update()
+            )).scalars().first()
+            if compromised:
+                user_id = compromised.user_id
+                reason = "refresh token tekrar kullanımı tespit edildi"
+                revoked = await db.execute(
+                    update(UserSession)
+                    .where(UserSession.user_id == user_id,
+                           UserSession.revoked_at.is_(None))
+                    .values(revoked_at=now, revoked_reason=reason)
+                )
+                await log_in(
+                    db,
+                    action=AuditAction.SESSION_REVOKED,
+                    target_type=AuditTarget.SESSION,
+                    target_id=compromised.id,
+                    details=SessionAuditDetails(
+                        event="revoked",
+                        reason=f"{reason} ({revoked.rowcount or 0} oturum)",
+                    ),
+                )
                 return {"reuse": True}
     return None
 
