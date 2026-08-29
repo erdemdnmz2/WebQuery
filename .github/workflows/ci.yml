@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  backend:
     runs-on: ubuntu-latest
     # Defense-in-depth: a background asyncio task (EngineCache cleanup
     # loop) used to outlive test teardown and hang `pytest` after it had
@@ -25,9 +25,18 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r web_api/requirements.txt
-          pip install pytest-cov ruff
+          pip install pytest-cov ruff pip-audit
 
-      - name: Lint (informational — not yet a merge gate, see ADR-0001 follow-up)
+      # Blocking. `F` (pyflakes) and `E9` (syntax/IO errors) are the rules that
+      # find real defects rather than style: an undefined name, an unused
+      # import hiding a moved symbol, a file that does not parse. The audit
+      # found three live F821s in a dead module this way. The remaining
+      # informational rules stay in the step below. See ADR-0002.
+      - name: Lint (correctness rules — merge gate)
+        working-directory: web_api
+        run: ruff check --select F,E9 .
+
+      - name: Lint (style — informational, see ADR-0002)
         working-directory: web_api
         continue-on-error: true
         run: ruff check .
@@ -52,3 +61,58 @@ jobs:
           ! grep -rn --include='*.py' --exclude-dir=tests \
               -E "(password|secret|api_key)\s*=\s*['\"][^'\"]{8,}" web_api/ \
             || (echo "Hardcoded secret-looking value found in source" && exit 1)
+
+      # Informational for now: this reports against the pinned versions in
+      # requirements.txt, and the fixes are upgrades that need their own
+      # verification pass (aiohttp and httpx in particular). Making it blocking
+      # before those upgrades land would put a red CI in front of every
+      # unrelated change. See ADR-0002.
+      - name: Dependency audit (informational)
+        continue-on-error: true
+        run: pip-audit -r web_api/requirements.txt
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # All four are blocking: they pass locally today, so making them a gate
+      # costs nothing now and keeps the frontend from drifting the way the
+      # backend lint did. There is still no frontend unit-test command; do not
+      # add one here until the suite exists.
+      - name: Typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      # Fails when frontend/services/api.ts calls a route the backend does not
+      # expose - the contract drift class the audit found repeatedly.
+      - name: API contract audit
+        working-directory: frontend
+        run: npm run audit:api
+
+      - name: Contrast audit
+        working-directory: frontend
+        run: npm run audit:contrast
+
+      # Informational for the same reason as pip-audit: the outstanding advisory
+      # is `xlsx` (SheetJS 0.18.5), whose upstream left npm, so the fix is a
+      # library replacement rather than a version bump.
+      - name: Dependency audit (informational)
+        working-directory: frontend
+        continue-on-error: true
+        run: npm audit --audit-level=high

@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed
+Amended (2026-08-30) — özgün karar korunuyor; ruff'ın `F`/`E9` kuralları
+blocking hâle getirildi ve bir frontend job'ı eklendi. Bkz. "2026-08-30
+Güncellemesi".
 
 ## Context
 
@@ -96,8 +98,56 @@ sorusuna cevap verecek bir trend (azalan/artan hata sayısı) sağlar.
   temiz çıkıyor. `timeout-minutes: 15` yine de savunma amaçlı korundu
   (gelecekte benzer bir sızıntı olursa CI sonsuza kadar asılı kalmasın).
 
+## 2026-08-30 Güncellemesi (denetim bulguları P2-15, P2-16)
+
+### Bağlam
+
+Özgün karar, lint borcunun (383 hata) tamamını blocking yapmanın kapsamı
+şişireceğini söylüyordu; bu hâlâ doğru. Ancak 2026-08-29 denetimi, o borcun
+içinde **gerçek bir hata** buldu: `static_files/router.py` içinde üç `F821`
+(tanımsız `get_current_user`). Modül `app.py`'de yorum satırındaydı, yani
+import edilse `NameError` verecekti. Bilgilendirici lint bunu her çalışmada
+raporladı ama kimse durmadı.
+
+Ayrıca frontend için hiçbir CI job'ı yoktu: `typecheck`, `build`, `audit:api`
+ve `audit:contrast` yalnızca yerelde çalışıyordu.
+
+### Karar
+
+1. **`ruff check --select F,E9` blocking.** `F` (pyflakes) ve `E9`
+   (sözdizimi/IO hataları) stil değil, doğruluk kurallarıdır: tanımsız isim,
+   taşınmış bir sembolü gizleyen kullanılmayan import, ayrıştırılamayan dosya.
+   Bu seçim bugün temiz (`static_files` P2-12 ile kaldırıldıktan sonra), yani
+   kapı hiçbir birikmiş borcu merge önüne koymuyor.
+2. **`ruff check .` (tüm kurallar) bilgilendirici kalıyor.** Kalan 34 bulgu
+   `BLE001`, `SIM117` ve bir `B017`; hepsi stil/desen borcu.
+3. **Yeni `frontend` job'ı, dört adımı da blocking:** `npm run typecheck`,
+   `npm run build`, `npm run audit:api`, `npm run audit:contrast`. Dördü de
+   bugün yeşil, dolayısıyla kapı yapmanın anlık maliyeti yok. `audit:api`
+   özellikle değerli: denetimin tekrar tekrar bulduğu frontend↔backend
+   sözleşme kayması sınıfını yakalıyor. Frontend'in henüz bir birim test
+   komutu yok; suite var olmadan buraya sahte bir adım eklenmeyecek.
+4. **Bağımlılık taraması (`pip-audit`, `npm audit --audit-level=high`)
+   eklendi ama `continue-on-error: true`.** Gerekçe: açık bulgular sürüm
+   yükseltmesi gerektiriyor (`aiohttp` 3.9.5, `httpx` 0.24.1) ve `xlsx`
+   (SheetJS 0.18.5) upstream npm'i terk ettiği için kütüphane değişimi
+   istiyor. Bunlar kendi doğrulama turlarını hak eden işler; tamamlanmadan
+   kapı yapmak, ilgisiz her değişikliğin önüne kırmızı CI koyardı.
+
+### Kabul edilen riskler (güncel)
+
+- Bağımlılık taraması bilgilendirici olduğu sürece bilinen açıklar merge'ü
+  engellemez. Azaltma: çıktı her çalışmada görünür ve yükseltme işi ayrı bir
+  kalem olarak izleniyor.
+- Testler hâlâ yalnız SQLite'a karşı çalışıyor. MSSQL'e özgü davranış
+  (`NVARCHAR`, `DATETIME2`, `UNIQUEIDENTIFIER`, statement timeout, satır
+  değerli `IN` desteğinin yokluğu) CI'da doğrulanmıyor. Bu, denetimin de
+  işaret ettiği kalıcı boşluk; MSSQL servis konteynerli bir nightly job
+  ayrı bir karar olarak duruyor ve bu güncellemeyle kapatılmadı.
+
 ## References
 
 - Spec: yok — operasyonel tooling kararı.
 - Kaynak plan: `webquery_implementasyon_sirasi.md`, Adım 2 (`4.2`).
+- Denetim: `webquery_denetim_raporu.md` P2-15, P2-16.
 - Supersedes / Superseded by: yok.
