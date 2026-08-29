@@ -8,9 +8,9 @@ from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from slack_bolt.async_app import AsyncApp
 from sqlalchemy import select
 
-from approval.service import decide
 from app_database.app_database import AppDatabase
 from app_database.models import QueryData, User, Workspace
+from approval.service import decide
 from common.exceptions import BaseServiceException
 from slack_integration.config import SLACK_APP_TOKEN, SLACK_BOT_TOKEN
 
