@@ -16,9 +16,10 @@ _KNOWN_BAD = {
 
 _PRIVILEGED_DB_USERS = {"sa", "root", "postgres", "admin"}
 
+# QUERY_ENCRYPTION_KEY is checked separately below: it is required unless the
+# plural QUERY_ENCRYPTION_KEYS (rotation) is set instead.
 _REQUIRED = (
     "SECRET_KEY",
-    "QUERY_ENCRYPTION_KEY",
     "APP_DATABASE_URL",
     "CENTRAL_DB_USER",
     "CENTRAL_DB_PASSWORD",
@@ -50,10 +51,26 @@ def verify_startup_config() -> None:
     if len(secret_key) < 32:
         _fail("SECRET_KEY en az 32 karakter olmalıdır.")
 
-    try:
-        Fernet(os.environ["QUERY_ENCRYPTION_KEY"].encode())
-    except Exception as exc:  # noqa: BLE001 - all invalid Fernet inputs fail closed
-        _fail(f"QUERY_ENCRYPTION_KEY geçerli bir Fernet anahtarı değil: {exc}")
+    # QUERY_ENCRYPTION_KEYS (plural, comma-separated, newest first) enables
+    # rotation; every key in it is validated the same way QUERY_ENCRYPTION_KEY
+    # is. See EncryptedText for how the list is used.
+    keys_csv = os.getenv("QUERY_ENCRYPTION_KEYS")
+    single_key = (os.getenv("QUERY_ENCRYPTION_KEY") or "").strip()
+    candidate_keys = (
+        [key.strip() for key in keys_csv.split(",") if key.strip()]
+        if keys_csv
+        else ([single_key] if single_key and single_key not in _KNOWN_BAD else [])
+    )
+    if not candidate_keys:
+        _fail(
+            "QUERY_ENCRYPTION_KEY veya QUERY_ENCRYPTION_KEYS tanımlı değil. "
+            "En az bir Fernet anahtarı gereklidir."
+        )
+    for candidate in candidate_keys:
+        try:
+            Fernet(candidate.encode())
+        except Exception as exc:
+            _fail(f"QUERY_ENCRYPTION_KEY(S) içinde geçerli olmayan bir Fernet anahtarı var: {exc}")
 
     central_db_user = os.environ["CENTRAL_DB_USER"].strip()
     if central_db_user.lower() in _PRIVILEGED_DB_USERS:
@@ -70,4 +87,18 @@ def verify_startup_config() -> None:
     }
     if not allowed_domains:
         logger.warning("ALLOWED_EMAIL_DOMAINS boş — self-registration kapalı.")
+
+    # DEBUG is the only signal this app has for "this is a production run"
+    # (see app.py, where it also gates uvicorn's --reload). A session cookie
+    # sent over plain HTTP is readable by anything on the network path, so a
+    # deploy that leaves DEBUG unset — production mode — must not be able to
+    # leave COOKIE_SECURE off by omission.
+    debug = os.getenv("DEBUG", "false").strip().lower() == "true"
+    cookie_secure = os.getenv("COOKIE_SECURE", "False").strip().lower() == "true"
+    if not debug and not cookie_secure:
+        _fail(
+            "DEBUG=false (üretim modu) iken COOKIE_SECURE=true olmalıdır. "
+            "Oturum çerezleri düz HTTP üzerinden gönderilmemelidir."
+        )
+
     logger.info("Konfigürasyon doğrulandı: %d kritik ayar mevcut", len(_REQUIRED))

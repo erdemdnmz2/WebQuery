@@ -84,10 +84,11 @@ class MaskingRulesAuditDetails(BaseModel):
 
 class DatabaseAccessAuditDetails(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    operation: Literal["grant", "change_role"]
+    operation: Literal["grant", "change_role", "revoke"]
     database_id: int | None
     previous_role: str | None = None
-    new_role: str
+    # None on a revoke that removed the association outright.
+    new_role: str | None = None
 
 
 class DatabaseAdminAuditDetails(BaseModel):
@@ -106,11 +107,31 @@ class OwnerBootstrapAuditDetails(BaseModel):
 
 
 class DatabaseConfigurationAuditDetails(BaseModel):
+    """Server, database and technology only.
+
+    Credential values never enter an audit record (SPEC-0002 s7); an update
+    records *which* tiers changed, never what they changed to.
+    """
+
     model_config = ConfigDict(extra="forbid")
-    operation: Literal["add"]
+    operation: Literal["add", "update", "remove"]
     servername: str
     database_name: str
     technology: str
+    #: Credential tiers whose username or password was rewritten by an update.
+    updated_tiers: list[Literal["ro", "rw", "ddl"]] = Field(default_factory=list)
+    previous_connection_mode: str | None = None
+    new_connection_mode: str | None = None
+
+
+class PasswordChangeAuditDetails(BaseModel):
+    """Never carries the old or new password, a hash, or a reset token."""
+
+    model_config = ConfigDict(extra="forbid")
+    event: Literal["password_changed"] = "password_changed"
+    source: Literal["self_service"] = "self_service"
+    #: Other sessions ended by the change; the current one is kept.
+    revoked_sessions: int = 0
 
 
 class QueryDecisionAuditDetails(BaseModel):

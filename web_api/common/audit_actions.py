@@ -7,7 +7,6 @@ class AuditAction(StrEnum):
     REVOKE_DATABASE_ACCESS = "revoke_database_access"
     CHANGE_DATABASE_ROLE = "change_database_role"
 
-    USER_CREATED = "user_created"
     USER_REGISTERED = "user_registered"
     USER_DISABLED = "user_disabled"
     USER_ENABLED = "user_enabled"
@@ -19,6 +18,7 @@ class AuditAction(StrEnum):
     PREVIEW_QUERY = "preview_query"
 
     ADD_DATABASE = "add_database"
+    UPDATE_DATABASE = "update_database"
     REMOVE_DATABASE = "remove_database"
     GRANT_DATABASE_ADMIN = "grant_database_admin"
     REVOKE_DATABASE_ADMIN = "revoke_database_admin"
@@ -44,7 +44,6 @@ STATE_CHANGING: frozenset[AuditAction] = frozenset(
         AuditAction.GRANT_DATABASE_ACCESS,
         AuditAction.REVOKE_DATABASE_ACCESS,
         AuditAction.CHANGE_DATABASE_ROLE,
-        AuditAction.USER_CREATED,
         AuditAction.USER_REGISTERED,
         AuditAction.USER_DISABLED,
         AuditAction.USER_ENABLED,
@@ -53,6 +52,7 @@ STATE_CHANGING: frozenset[AuditAction] = frozenset(
         AuditAction.APPROVE_QUERY,
         AuditAction.REJECT_QUERY,
         AuditAction.ADD_DATABASE,
+        AuditAction.UPDATE_DATABASE,
         AuditAction.REMOVE_DATABASE,
         AuditAction.GRANT_DATABASE_ADMIN,
         AuditAction.REVOKE_DATABASE_ADMIN,

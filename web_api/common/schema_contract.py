@@ -60,9 +60,8 @@ REQUIRED_INDEXES: tuple[IndexSpec, ...] = (
     IndexSpec("ix_AuditLog_id", "AuditLog", ("id",)),
     IndexSpec("ix_AuditLog_target_id", "AuditLog", ("target_id",)),
     IndexSpec("ix_AuditLog_trace_id", "AuditLog", ("trace_id",)),
-    IndexSpec("ix_BlacklistedTokens_id", "BlacklistedTokens", ("id",)),
-    IndexSpec("ix_BlacklistedTokens_jti", "BlacklistedTokens", ("jti",), unique=True),
     IndexSpec("ix_Databases_id", "Databases", ("id",)),
+    IndexSpec("ix_Databases_is_active", "Databases", ("is_active",)),
     IndexSpec("ix_Databases_uuid", "Databases", ("uuid",)),
     IndexSpec("ix_LoginLogging_id", "LoginLogging", ("id",)),
     IndexSpec("ix_MaskingRules_id", "MaskingRules", ("id",)),
@@ -85,6 +84,12 @@ REQUIRED_UNIQUE: tuple[UniqueSpec, ...] = (
     UniqueSpec("Databases", ("servername", "database_name"), name="uq_server_database"),
     UniqueSpec("Users", ("email",)),
     UniqueSpec("Workspaces", ("query_id",)),
+    # One rule per column per table; see migration a1b2c3d4e5f6.
+    UniqueSpec(
+        "MaskingRules",
+        ("database_id", "table_name", "column_name"),
+        name="uq_MaskingRules_database_table_column",
+    ),
 )
 
 REQUIRED_NOT_NULL: tuple[tuple[str, str], ...] = (
@@ -96,9 +101,8 @@ REQUIRED_NOT_NULL: tuple[tuple[str, str], ...] = (
     ("ActionLogging", "username"),
     ("AuditLog", "action"),
     ("AuditLog", "created_at"),
-    ("BlacklistedTokens", "expires_at"),
-    ("BlacklistedTokens", "jti"),
     ("Databases", "database_name"),
+    ("Databases", "is_active"),
     ("Databases", "servername"),
     ("Databases", "technology"),
     ("Databases", "uuid"),

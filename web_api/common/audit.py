@@ -1,14 +1,14 @@
 """Transaction-aware helpers for writing ``AuditLog`` records."""
 import json
 import logging
-from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app_database.models import AuditLog
-from common.audit_actions import AuditAction, AuditTarget, STATE_CHANGING
+from common.audit_actions import STATE_CHANGING, AuditAction, AuditTarget
+from common.clock import db_now
 
 logger = logging.getLogger("web_api.audit")
 
@@ -36,7 +36,7 @@ async def log_in(
     normalized_details = _normalize_details(details)
     session.add(
         AuditLog(
-            created_at=datetime.now(),
+            created_at=db_now(),
             actor_user_id=getattr(actor, "id", None) if actor else None,
             actor_username=(
                 actor_username

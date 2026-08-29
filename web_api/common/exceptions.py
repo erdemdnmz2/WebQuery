@@ -21,3 +21,14 @@ class BaseServiceException(Exception):
         self.message: str = message
         self.original_exception: Exception | None = original_exception
         super().__init__(self.message)
+
+    def response_context(self) -> dict | None:
+        """Structured, non-sensitive data the client needs to act on the error.
+
+        Most errors need only a message. A few carry a list the caller must
+        resolve before retrying — the grants blocking a connection-mode change,
+        for example — and re-deriving that list from prose is not something a
+        client should have to do. Subclasses that override this are responsible
+        for keeping secrets out of it; it goes straight into the response body.
+        """
+        return None

@@ -101,17 +101,27 @@ def effective_mode(connection_mode: str | None, role_string: str | None) -> str 
 
 
 def exceeds_mode(connection_mode: str | None, role_string: str | None) -> str | None:
-    """Return the first granted tier the database cannot serve, if any.
+    """Return the *highest* granted tier the database cannot serve, if any.
 
     ``ADMIN`` is exempt: it is the governance role that administers a
     registration, and ``add_database`` grants it on every database regardless
     of which credential tiers the DBA provided.
+
+    The answer is the highest exceeding tier, not the first one found. Walking
+    the roles alphabetically happened to put ``DDL`` ahead of ``WRITER`` and so
+    usually reported the right one, but that was an accident of the three role
+    names; the conflict list this feeds (OQ-2026-018) has to name the tier the
+    admin actually needs to remove.
     """
     database_tier = _TOP_TIER_BY_MODE.get(connection_mode or "")
     if database_tier is None:
         return None
-    for role in sorted(parse(role_string), key=lambda name: name):
-        tier = _TIER_BY_ROLE.get(role)
-        if tier and _TIER_RANK[tier] > _TIER_RANK[database_tier]:
-            return tier
-    return None
+    exceeding = [
+        tier
+        for role in parse(role_string)
+        if (tier := _TIER_BY_ROLE.get(role))
+        and _TIER_RANK[tier] > _TIER_RANK[database_tier]
+    ]
+    if not exceeding:
+        return None
+    return max(exceeding, key=_TIER_RANK.__getitem__)

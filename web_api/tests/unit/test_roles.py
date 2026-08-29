@@ -85,3 +85,14 @@ def test_exceeds_mode_exempts_admin_and_supported_tiers():
     assert exceeds_mode("ro_rw", "WRITER") is None
     assert exceeds_mode("ro_rw_ddl", "DDL") is None
     assert exceeds_mode(None, "WRITER") is None
+
+
+def test_exceeds_mode_reports_the_highest_exceeding_tier_not_the_first():
+    """The conflict list must name the tier the admin has to remove (P2-20k).
+
+    Both WRITER and DDL exceed a read-only registration; answering `rw` would
+    send the admin to fix the lesser of the two.
+    """
+    assert exceeds_mode("ro", "READER,WRITER,DDL") == "ddl"
+    assert exceeds_mode("ro", "WRITER,DDL") == "ddl"
+    assert exceeds_mode("ro", "DDL,WRITER") == "ddl"
