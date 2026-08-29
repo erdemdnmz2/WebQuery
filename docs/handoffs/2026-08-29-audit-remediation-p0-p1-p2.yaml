@@ -1,0 +1,476 @@
+handoff:
+  status: COMPLETE
+  from: "Claude Code (Opus 5)"
+  to: "erdemdnmz2"
+  created_at: "2026-08-29T17:25:00+03:00"
+  updated_at: "2026-08-30T01:40:00+03:00"
+  task: "Apply every P0, P1 and P2 finding from webquery_denetim_raporu.md (2026-08-29 audit)"
+
+  summary: >
+    Every P0, P1 and P2 finding in the audit report is now applied, plus the
+    spec/ADR write-ups the earlier session deferred. Two items are
+    deliberately still open and are listed under `remaining` with their
+    reasons: the legacy Databases.db_username/db_password columns (blocked on
+    a production-data measurement the inbox doc requires) and P2-20c
+    (QueryData<->Databases text-pair coupling, tracked separately as
+    docs/inbox/DATABASE-EXTERNAL-IDENTIFIER-UUID.md). Everything else the
+    report asked for is done, tested and documented.
+
+  scope:
+    completed:
+      - "P0-1: target DB transactions now commit for tier != ro, roll back on
+         exception; ro never commits. New integration test file
+         tests/integration/test_target_transaction.py against real sqlite."
+      - "P0-2: connection strings for target DBs and the app DB now built with
+         sqlalchemy.engine.URL.create instead of f-strings (percent-encoding
+         for @ / : / ? / # in credentials). database_provider/config.py,
+         app_database/config.py."
+      - "P0-3: PUT /api/workspaces/{id} no longer accepts `status` from the
+         client (WorkspaceUpdate schema forbids extra fields); editing is
+         restricted to saved_in_workspace/rejected via
+         WORKSPACE_EDITABLE_STATUSES; an accepted edit resets show_results and
+         status to draft. New WorkspaceNotEditableError (409)."
+      - "P0-4: new middlewares/proxy_middleware.py (TrustedProxyMiddleware)
+         resolves the real client IP from X-Forwarded-For only when the
+         immediate peer is in TRUSTED_PROXY_IPS; wired as the outermost
+         middleware in app.py. Also passes proxy_headers/forwarded_allow_ips
+         to uvicorn.run for non-middleware server launches. DEBUG default
+         flipped to 'false'."
+      - "P1-1: POST /api/multiple_query removed entirely (route, schemas,
+         MULTIPLE_QUERY_COUNT config) per OQ-2026-012."
+      - "P1-2: GET /api/admin/audit_log scoped to the caller's databases
+         (AdminService.get_audit_log) unless is_platform_owner; OWNER still
+         sees everything including platform-level records."
+      - "P1-3: GET /api/masking_rules now requires a UserDatabaseAssociation
+         (403 DATABASE_ACCESS_DENIED otherwise)."
+      - "P2-1: split QueryAnalysisRejectedError into QueryBlockedError,
+         QueryRoleDeniedError, DatabaseAccessDeniedError so the frontend only
+         shows 'sent for approval' when an approval request actually exists.
+         frontend/services/api.ts + lib/execution.ts updated."
+      - "P1-4: MSSQL connect timeout separated from the query timeout
+         (MSSQL_LOGIN_TIMEOUT_SECONDS); statement timeout now applied via a
+         SQLAlchemy connect-event that sets pyodbc's mutable
+         Connection.timeout (apply_statement_timeout in
+         database_provider/config.py, wired from engine_cache.py)."
+      - "P1-5 / P2-2 / P2-7: new query_execution/query_analyzer.py QueryPlan +
+         .plan()/.analyze_plan()/.permits_role() so one parse feeds role
+         check, tier, hard-block and analysis (was 3-4 parses per query). New
+         query_execution/runner.py streams pure-read queries via
+         session.stream() and asks for limit+1 rows to fix the truncation
+         off-by-one. All three execution paths share run_statement()."
+      - "P1-6: User.acheck_password/aset_password run bcrypt on a worker
+         thread (anyio.to_thread); login releases the app-DB session before
+         hashing; burn_password_check() equalises timing when no account
+         matches. /api/register returns the same acknowledgement whether or
+         not the email is already registered (P2-14)."
+      - "P1-7: new GET /api/admin/databases/{id}/users (members + active-user
+         candidates) and frontend AccessTab.tsx wired into the admin panel."
+      - "P1-8: new DELETE /api/admin/databases/{id}/users/{user_id}
+         (revoke_user_from_database) - first real caller of
+         AuditAction.REVOKE_DATABASE_ACCESS. Leaves ADMIN role untouched."
+      - "P1-9: new POST /api/me/password (current password required, all other
+         sessions revoked, audited via PasswordChangeAuditDetails). Frontend
+         PasswordChangeDialog wired into AppShell's account menu."
+      - "P1-10: soft-delete lifecycle for target DB registrations
+         (Databases.is_active/retired_at/retired_by), new
+         PATCH/DELETE /api/owner/databases/{id}, re-registering a retired
+         (servername, database_name) revives the row. Frontend OwnerTab.tsx
+         database list with edit/retire + DatabaseEditDialog.tsx.
+         Now specified in SPEC-0027 and ADR-0021."
+      - "P1-11: EncryptedText backed by cryptography.fernet.MultiFernet;
+         QUERY_ENCRYPTION_KEYS (comma-separated, newest first) enables
+         rotation. Decrypt failures now logger.error instead of silently
+         returning raw ciphertext. config_guard validates every key."
+      - "P1-12: docker-compose.yml hardened; docker-compose.override.yml holds
+         the dev-only bind mount + published ports. Dockerfile runs as a
+         non-root user. nginx.conf adds security headers + limit_req zones.
+         New config_guard rule: DEBUG=false requires COOKIE_SECURE=true.
+         Now specified in SPEC-0026."
+      - "P1-13: new web_api/wait_for_db.py does the real 'is SQL Server up'
+         probe with a truthful exit code; create_db.py no longer swallows
+         every exception and validates servername/DB_USER identifiers."
+      - "P2-3: AuthMiddleware sets request.state.session_verified=True after
+         its own session_alive() check; get_current_user skips the redundant
+         re-check when that flag is set."
+      - "P2-4 (COMPLETED this session): AdminService.list_databases and
+         AdminApprovalService.get_workspaces_for_approval were fixed
+         previously. Now also: owner/services.py list_database_admins gained a
+         SQL `role ILIKE '%ADMIN%'` prefilter (is_admin still makes the real
+         decision, since role is a comma-separated string); and
+         workspaces/services.py get_workspace_by_id no longer SELECTs the
+         entire Databases table - it selects three columns for exactly the
+         (servername, database_name) pairs the user's workspaces name, active
+         rows only. Two IN clauses rather than a row-value IN, because SQL
+         Server has no row-value IN; the map is keyed on the exact pair so a
+         cross-product match is unreachable."
+      - "P2-5 / P2-20g: AdminService.discover_schema no longer reloads every
+         registered database's decrypted credentials per call; a
+         missing-permission case raises DatabaseAdminRequiredError (403)
+         instead of returning {}."
+      - "P2-6: table-aware masking. columns_to_mask() resolves stored rules
+         against the tables the query's QueryPlan references; masking_type
+         constrained to 'full' at the Pydantic layer; new unique constraint
+         (database_id, table_name, column_name), migration a1b2c3d4e5f6.
+         Now specified in SPEC-0024 and ADR-0018."
+      - "P2-8: AdminService.save_masking_rules re-raises BaseServiceException
+         instead of swallowing auth failures into a generic False."
+      - "P2-9: EngineCache._evict_lru raises EngineCacheExhaustedError instead
+         of disposing an active pool; _loop logs and continues on an
+         unexpected exception instead of dying silently."
+      - "P2-10: TraceMiddleware only honours an incoming X-Request-ID if it
+         parses as a UUID."
+      - "P2-11 (COMPLETED this session): every remaining naive datetime.now()
+         write now uses common.clock.db_now(). Sites fixed:
+         app_database/app_database.py x6 (create_log, update_log,
+         update_approval_status, create_login_log, update_login_log x2 -
+         logout duration now subtracts from the value just written rather
+         than calling now() twice), common/audit.py log_in, approval/
+         service.py:123 (its `# noqa: DTZ005` is gone, not just silenced),
+         plus two ORM column defaults that were writing local time:
+         Users.created_at and AuditLog.created_at. authentication/router.py's
+         two inline `datetime.now(timezone.utc).replace(tzinfo=None)` calls
+         switched to db_now() for consistency. tests/unit/test_engine_cache.py
+         now ages the cache entry with the cache's own _now() - the old
+         datetime.now() could land in the future on a non-UTC server and the
+         entry would never expire. `ruff --select DTZ005 web_api/` is clean."
+      - "P2-12 (COMPLETED this session): BlacklistedToken model/table
+         (migration a1b2c3d4e5f6), blacklist helpers, create_access_token and
+         the JTI branch were removed previously. Now also removed:
+         web_api/static_files/ (whole package - three live F821s, referenced
+         only from a commented-out import, and the templates/ directory it
+         served does not exist), passlib and Jinja2 from requirements.txt
+         (neither has a call site or a reverse dependency; MarkupSafe stays,
+         Mako/Alembic needs it), AuditAction.USER_CREATED (never emitted;
+         USER_REGISTERED is the live action) and its STATE_CHANGING entry and
+         test mapping, and the dead `# from static_files.router import` line
+         in app.py. Now specified in SPEC-0025."
+      - "P2-13: refresh-token reuse revokes every active session for the user,
+         audited via a single SESSION_REVOKED row noting the count."
+      - "P2-14: /api/refresh rate-limited (REFRESH_RATE_LIMITER, 30/minute);
+         /api/register returns an identical acknowledgement either way."
+      - "P2-15 (COMPLETED this session): pip-audit added to the backend CI job
+         and `npm audit --audit-level=high` to the new frontend job, both
+         continue-on-error. Informational deliberately: the open advisories
+         need version upgrades (aiohttp 3.9.5, httpx 0.24.1) and a library
+         replacement (xlsx/SheetJS 0.18.5, upstream left npm), each of which
+         deserves its own verification pass. Rationale recorded in ADR-0002."
+      - "P2-16 (COMPLETED this session): .github/workflows/ci.yml restructured
+         into `backend` and `frontend` jobs. `ruff check --select F,E9` is now
+         a blocking merge gate and passes clean (this is what the three F821s
+         in static_files were hiding behind); the full `ruff check .` stays
+         informational for the 34 remaining style findings. The new frontend
+         job runs typecheck, build, audit:api and audit:contrast, all four
+         blocking - all four pass today. ADR-0002 amended with the reasoning
+         and with the still-open MSSQL testing gap."
+      - "P2-17 (COMPLETED this session): app_database/app_database.py's engine
+         now uses pool_pre_ping=True (the target engines already did). This
+         was the one the audit called the real risk."
+      - "P2-18 (COMPLETED this session): the decision to send the full SQL to
+         Slack is now recorded in ADR-0019, together with the deployment
+         requirement it implies (the approval channel must be access
+         controlled). Also fixed a live defect found while writing it: the
+         query block had no length cap, and Slack rejects the entire payload
+         when a section exceeds 3000 characters - so a long query meant the
+         approval notification never arrived at all. Now capped at 2700 with
+         a truncation note pointing the approver at the WebQuery queue.
+         New tests/unit/test_slack_approval_payload.py."
+      - "P2-19 (COMPLETED this session): README.md rewritten against the
+         actual architecture - per-database/per-tier credentials (not a
+         central service account), per-tier pool sizes (not pool_size=0), the
+         DDL and OWNER roles, server-side sessions (not stateless JWT),
+         Fernet/AES-128-CBC+HMAC (not AES-256), the real SQLi detection (parse
+         failure + EXEC/EXECUTE AS inside exp.Command, not UNION/OR 1=1
+         pattern matching), MAX_JOINS=8, the Redis hard dependency, the OWNER
+         bootstrap command, the fail-closed startup config table, the Docker
+         base/override split, the real directory tree, the frontend check
+         commands, the SQLite-only testing gap, and a documentation map.
+         ADR-0003 (engine cache lifecycle) written - it was cited by
+         OQ-2026-001 but never existed; it records the current per-tier pool
+         sizes and marks the old pool_size=50 answer as superseded by
+         ADR-0005. OQ-2026-001 updated to say so."
+      - "P2-20a: auth_middleware.py's SKIP_AUTH_PATHS matched by set
+         membership instead of startswith()."
+      - "P2-20b (COMPLETED this session): UserDatabaseAssociation.is_admin can
+         no longer diverge from `role`. A before_insert/before_update mapper
+         event recomputes it from the authoritative role, so a sixth call site
+         that forgets the mirror cannot write a row whose flag contradicts its
+         role. New tests/unit/test_association_is_admin_mirror.py. Audited the
+         five existing write sites first - all were consistent, including
+         admin/services.py:278 which sets is_admin=True inside a revoke path
+         (correct: that branch only runs when ADMIN survived the revoke)."
+      - "P2-20d (COMPLETED this session): update_log's docstring now states
+         what ExecutionDurationMS actually measures - wall time from create_log
+         to update_log, including analysis, connection acquisition and the
+         entire Slack approval wait, and written only on the success path.
+         Documentation only, as the report specified."
+      - "P2-20e: execute_for_preview's exception handler runs the same
+         redact_passwords/scrub pair the other execution paths use."
+      - "P2-20f (COMPLETED this session): the Slack listener task is held on
+         app.state.slack_task instead of being dropped (asyncio holds only a
+         weak reference, so it was GC-eligible mid-flight). It also has a
+         done-callback that logs an unexpected exit - previously the socket
+         connection could die permanently with approvals silently never
+         arriving - and lifespan shutdown now cancels it."
+      - "P2-20h: GET /api/get_workspace_by_id/{id} passes the requester's
+         user_id to the service instead of the workspace row's own."
+      - "P2-20i: (database_id, table_name, column_name) unique constraint on
+         MaskingRule - same fix as P2-6."
+      - "P2-20j (COMPLETED this session): AuditLog append-only is now enforced
+         at the ORM layer - before_update and before_delete raise
+         AuditLogImmutableError. The model docstring and ADR-0009 both state
+         plainly what this does and does not cover: it stops an application
+         bug, not a session holding the app's own DB credentials. Closing that
+         needs a restricted writer principal or an INSTEAD OF trigger, which
+         is a metadata-DBA deployment decision and is recorded as such."
+      - "P2-20k (COMPLETED this session): exceeds_mode returns the *highest*
+         exceeding tier rather than the first one found. The old alphabetical
+         walk happened to put DDL ahead of WRITER and so usually answered
+         correctly, but that was an accident of the three role names, and the
+         conflict list it feeds (OQ-2026-018, the 409 body) has to name the
+         tier the admin actually needs to remove."
+      - "P2-20l (COMPLETED this session): check_explain now scans the query
+         with comments, string literals and all four identifier-quoting styles
+         blanked out, so SELECT 'EXPLAIN ANALYZE' AS note is no longer
+         refused. Fails closed on an unterminated quote: the stripper returns
+         the raw query rather than risk swallowing a real statement (and such
+         a query does not parse, so analyze() blocks it a step later anyway)."
+      - "Task 10 (COMPLETED this session): every spec/ADR that
+         docs/open-questions.md cited but that did not exist has been written:
+         SPEC-0022 (P0 batch + multiple_query removal), SPEC-0024 +
+         ADR-0018 (table-aware masking), SPEC-0025 (dead code removal),
+         SPEC-0026 (deployment hardening), SPEC-0027 + ADR-0021 (target
+         database lifecycle), plus ADR-0003 (engine cache lifecycle, cited by
+         OQ-2026-001) and ADR-0019 (Slack approval payload). ADR-0002 and
+         ADR-0009 amended."
+
+    remaining:
+      - item: "P2-12 partial: Databases.db_username / db_password columns"
+        reason: >
+          docs/inbox/LEGACY-CENTRAL-CREDENTIAL-FALLBACK.md explicitly requires
+          measuring production data before these columns are dropped. No
+          measurement was available in this environment, so the columns stay.
+          They are unread by production code; only the migration to drop them
+          is outstanding.
+      - item: "P2-20c: QueryData <-> Databases coupled by (servername,
+              database_name) text pair rather than a foreign key"
+        reason: >
+          This is docs/inbox/DATABASE-EXTERNAL-IDENTIFIER-UUID.md, a
+          separately tracked piece of work, and the audit report itself
+          points there. SPEC-0027 compensates for the coupling (identity
+          changes carry the QueryData rows in the same transaction) rather
+          than removing it. Recorded as an accepted risk in ADR-0021.
+      - item: "MSSQL-backed CI job"
+        reason: >
+          Tests still run against SQLite only; MSSQL-specific behaviour
+          (NVARCHAR, DATETIME2, UNIQUEIDENTIFIER, statement timeouts, absence
+          of row-value IN) is unverified, and that includes the three new
+          migrations. Recorded as an accepted risk in ADR-0002's amendment
+          and stated plainly in README's Testing section. A nightly job with
+          an MSSQL service container is its own decision, not part of this
+          remediation.
+
+  changed_files:
+    created:
+      - web_api/middlewares/proxy_middleware.py
+      - web_api/query_execution/runner.py
+      - web_api/wait_for_db.py
+      - web_api/common/clock.py
+      - web_api/migrations/versions/a1b2c3d4e5f6_audit_remediation.py
+      - web_api/migrations/versions/b2c3d4e5f6a7_database_lifecycle.py
+      - web_api/tests/integration/test_target_transaction.py
+      - web_api/tests/integration/test_access_management.py
+      - web_api/tests/integration/test_database_lifecycle.py
+      - web_api/tests/unit/test_trusted_proxy.py
+      - web_api/tests/unit/test_query_runner.py
+      - web_api/tests/unit/test_table_aware_masking.py
+      - web_api/tests/unit/test_encrypted_text.py
+      - web_api/tests/unit/test_create_db_bootstrap.py
+      - web_api/tests/unit/test_association_is_admin_mirror.py
+      - web_api/tests/unit/test_slack_approval_payload.py
+      - frontend/components/app/admin/AccessTab.tsx
+      - frontend/components/app/owner/DatabaseEditDialog.tsx
+      - frontend/components/app/PasswordChangeDialog.tsx
+      - docker-compose.override.yml
+      - docs/adr/ADR-0003-engine-cache-lifecycle.md
+      - docs/adr/ADR-0018-table-aware-masking-enforcement.md
+      - docs/adr/ADR-0019-slack-approval-payload.md
+      - docs/adr/ADR-0021-target-database-soft-delete.md
+      - docs/specs/SPEC-0022-audit-remediation-p0.md
+      - docs/specs/SPEC-0024-table-aware-masking.md
+      - docs/specs/SPEC-0025-dead-code-removal.md
+      - docs/specs/SPEC-0026-deployment-hardening.md
+      - docs/specs/SPEC-0027-target-database-lifecycle.md
+      - docs/handoffs/2026-08-29-audit-remediation-p0-p1-p2.yaml (this file)
+    deleted:
+      - web_api/static_files/__init__.py
+      - web_api/static_files/router.py
+    modified: >
+      ~110 files. Run `git status --short` for the exact list. Notable
+      documentation edits beyond the new files: README.md (rewritten),
+      .github/workflows/ci.yml (restructured), docs/adr/ADR-0002 (amended),
+      docs/adr/ADR-0009 (amended), docs/open-questions.md (OQ-2026-001
+      answer updated).
+
+  decisions:
+    - decision: "Remove POST /api/multiple_query entirely rather than adding
+        a rate limit to it."
+      rationale: "No frontend caller existed; keeping an unused, newly-limited
+        execution surface was worse than removing it."
+      recorded_in: "docs/specs/SPEC-0022-audit-remediation-p0.md"
+    - decision: "Masking enforcement becomes table-aware; masking_type is
+        constrained to 'full' only."
+      rationale: "The stored (table_name, masking_type) were ignored at read
+        time, causing over-masking across tables and promising a masking_type
+        the engine never implemented."
+      recorded_in: "docs/specs/SPEC-0024-table-aware-masking.md,
+        docs/adr/ADR-0018-table-aware-masking-enforcement.md"
+    - decision: "Remove the dead BlacklistedToken/JTI mechanism rather than
+        wiring it up."
+      rationale: "ADR-0008's server-side UserSessions + rotating refresh
+        already covers revocation; mint_access never set a jti so the table
+        was never written."
+      recorded_in: "docs/specs/SPEC-0025-dead-code-removal.md"
+    - decision: "docker-compose.yml becomes production-safe; dev conveniences
+        move to docker-compose.override.yml."
+      rationale: "Compose auto-loads the override file, so local `docker
+        compose up` is unchanged; a deploy running `-f docker-compose.yml`
+        gets the hardened version with no code change."
+      recorded_in: "docs/specs/SPEC-0026-deployment-hardening.md"
+    - decision: "Target DB registration deletion is a soft delete; update is
+        PATCH semantics; a connection-mode narrowing that would strand an
+        existing grant is refused (409); identity changes carry matching
+        QueryData rows in the same transaction."
+      rationale: "Databases.id is referenced by three tables and QueryData
+        matches by text pair with no FK; a hard delete or an unguarded
+        identity change would silently orphan audit history or saved
+        workspaces."
+      recorded_in: "docs/specs/SPEC-0027-target-database-lifecycle.md,
+        docs/adr/ADR-0021-target-database-soft-delete.md"
+    - decision: "ruff's F and E9 rules become a blocking CI merge gate; the
+        rest of ruff stays informational. A frontend CI job is added with all
+        four of its checks blocking."
+      rationale: "F/E9 are correctness rules, not style. The audit found three
+        live F821s that informational lint had been reporting unheeded for
+        weeks. With static_files removed the selection is clean today, so the
+        gate blocks no accumulated debt. The frontend checks all pass today
+        too, so gating them costs nothing now and prevents the same drift."
+      recorded_in: "docs/adr/ADR-0002-ci-merge-gate-policy.md (2026-08-30
+        amendment)"
+    - decision: "Dependency scanning (pip-audit, npm audit) is added but
+        informational."
+      rationale: "The open advisories need version upgrades and one library
+        replacement, each deserving its own verification. Gating before those
+        land would put a red CI in front of every unrelated change."
+      recorded_in: "docs/adr/ADR-0002-ci-merge-gate-policy.md (2026-08-30
+        amendment)"
+    - decision: "The full SQL text keeps going to Slack, now with a 2700-char
+        cap."
+      rationale: "An approver cannot judge a query they cannot read; masking
+        the literals would look readable while hiding the statement's scope,
+        which is worse than sending nothing. The cap exists because Slack
+        rejects the whole payload over 3000 chars, so long queries were
+        silently producing no notification at all."
+      recorded_in: "docs/adr/ADR-0019-slack-approval-payload.md"
+    - decision: "AuditLog append-only is enforced at the ORM layer, and the
+        database-level gap is documented rather than papered over."
+      rationale: "An ORM guard stops application bugs, which is real value,
+        but it cannot stop a session holding the app's own DB credentials.
+        Claiming more than that would be worse than the original gap."
+      recorded_in: "docs/adr/ADR-0009-audit-log-foundation.md (2026-08-30
+        addendum)"
+    - decision: "UserDatabaseAssociation.is_admin is derived from `role` by a
+        mapper event rather than being dropped or left to call sites."
+      rationale: "Five call sites write it today and all are currently
+        correct; the risk is the sixth. Dropping the column would be a wider
+        schema and API change than the finding warrants."
+      recorded_in: "This handoff; behaviour covered by
+        tests/unit/test_association_is_admin_mirror.py"
+
+  validation:
+    commands_run:
+      - command: "cd web_api && ../.venv/bin/python -m pytest tests/ -q -p no:randomly"
+        result: "passed"
+        evidence: "317 passed, 1 warning, 216.94s (final run, 2026-08-30).
+          Was 298 before this session; the 19 new tests cover P2-11,
+          P2-20b/j/k/l and P2-18."
+      - command: "ruff check web_api --select F,E9"
+        result: "passed"
+        evidence: "All checks passed! - this is the new CI merge gate"
+      - command: "ruff check web_api --statistics"
+        result: "34 findings, all informational"
+        evidence: "25 BLE001, 8 SIM117, 1 B017. No F, E9 or DTZ rules remain."
+      - command: "cd frontend && npm run typecheck"
+        result: "passed"
+        evidence: "tsc --noEmit, no output"
+      - command: "cd frontend && npm run build"
+        result: "passed"
+        evidence: "vite build succeeded, 2.98s"
+      - command: "cd frontend && npm run audit:api"
+        result: "passed"
+        evidence: "every frontend api.ts call matches a backend route; only
+          GET /api/admin/audit_log flagged as backend-only (expected - no
+          screen for it yet)"
+      - command: "cd frontend && npm run audit:contrast"
+        result: "passed"
+        evidence: "all contrast targets met"
+      - command: "docker compose config -q"
+        result: "passed"
+        evidence: "only the pre-existing 'obsolete version attribute' warning"
+      - command: "bash -n web_api/entrypoint.sh"
+        result: "passed"
+        evidence: "shell syntax OK"
+      - command: "python -c import common.clock, common.audit, common.roles,
+          app_database.models, slack_integration.schemas"
+        result: "passed"
+        evidence: "imports OK - checked the new common.roles import in
+          models.py introduces no import cycle"
+      - command: "python -c yaml.safe_load('.github/workflows/ci.yml')"
+        result: "passed"
+        evidence: "jobs: ['backend', 'frontend']"
+
+  open_questions: []
+
+  known_risks:
+    - "NOTHING IS COMMITTED. The ~116-file diff is still entirely in the
+       working tree, exactly as it was at the previous handoff. This is the
+       single largest risk to the work: a crash or a lost worktree loses all
+       of it. Recommend committing in logical chunks (per P-item or per group)
+       rather than one giant commit, both for reviewability and as a
+       checkpoint."
+    - "The three migrations (a1b2c3d4e5f6, b2c3d4e5f6a7, and the earlier
+       baseline repair) have only ever run against SQLite. The project's own
+       stated testing gap applies to them, and they touch real tables
+       (BlacklistedTokens drop, MaskingRule unique constraint, Databases
+       lifecycle columns). Run them against a staging MSSQL instance before
+       deploying."
+    - "docker-compose.yml's TRUSTED_PROXY_IPS default (172.16.0.0/12) is a
+       guess at Docker's default bridge range, not a value verified for this
+       compose project's actual subnet - Compose assigns one per project
+       unless it is pinned. Verify with `docker network inspect` or pin an
+       explicit subnet before deploying. Recorded in SPEC-0026 s10."
+    - "Dependency advisories are reported by CI but not gated: aiohttp 3.9.5
+       (request smuggling, static route traversal fixed upstream), httpx
+       0.24.1 (two majors behind), python-jose (maintained-in-name-only;
+       PyJWT is the usual replacement), and xlsx/SheetJS 0.18.5 on the
+       frontend (prototype pollution / ReDoS; upstream left npm, so this is a
+       library replacement such as exceljs, not a bump)."
+    - "requirements.txt lost passlib and Jinja2 this session. Both were
+       verified to have no call site (`grep` for passlib/CryptContext/jinja2
+       across web_api) and no reverse dependency (`pip show ... Required-by`
+       empty for both). MarkupSafe was deliberately kept - Mako, and through
+       it Alembic, needs it. Worth one `pip install -r requirements.txt` in a
+       clean venv before deploying to confirm nothing transitive broke."
+
+  next_step: >
+    The remediation itself is finished. The next action is not more
+    remediation - it is committing this work. Suggested chunking: (1) the P0
+    batch + multiple_query removal with SPEC-0022, (2) the query analyzer /
+    runner / masking work with SPEC-0024 + ADR-0018, (3) the access
+    management, password change and database lifecycle features with
+    SPEC-0027 + ADR-0021, (4) dead code removal with SPEC-0025, (5) deployment
+    and CI hardening with SPEC-0026 + the ADR-0002 amendment, (6) the
+    documentation pass (README, ADR-0003, ADR-0019, ADR-0009 addendum).
+    After committing, the three items under `scope.remaining` are the honest
+    backlog: the legacy credential columns (needs a production measurement),
+    the QueryData foreign key (its own inbox item), and an MSSQL-backed CI
+    job (its own decision).

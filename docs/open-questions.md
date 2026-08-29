@@ -10,7 +10,7 @@ with status `Open` before doing task work; see `AGENTS.md`.
 - Scope: `web_api/database_provider/engine_cache.py`, engine-cache ADR ve performans dokümantasyonu
 - Question: Hedef DB engine'leri için amaçlanan ayar `pool_size=0, max_overflow=20` mi (README), yoksa `pool_size=50, max_overflow=100` mü (mevcut `EngineCache` kodu)?
 - Why it matters: Bağlantı yaşam döngüsü, kaynak tüketimi ve ölçekleme kararını iki ayar zıt biçimde etkiler; ADR ve spec'in doğru davranışı tarif etmesi gerekir.
-- Answer: Mevcut kod kaynak doğrudur; `EngineCache` içindeki `pool_size=50` ve `max_overflow=100` ayarları belgelenmelidir.
+- Answer: Mevcut kod kaynak doğrudur; `EngineCache` içindeki `pool_size=50` ve `max_overflow=100` ayarları belgelenmelidir. **Güncelleme (2026-08-30):** Bu cevap, veritabanı başına tek engine varsayımı altında verilmişti. ADR-0005 ile engine'ler kademe başına ayrıldığından o değerler artık geçerli değil; güncel boyutlar `_POOL_BY_TIER` içinde (`ro` 10/20, `rw` 5/10, `ddl` 1/2) ve ADR-0003'te belgelendi.
 - Recorded in: `docs/adr/ADR-0003-engine-cache-lifecycle.md`
 
 ### OQ-2026-002: Hedef DB sorgu bağlantısında hangi kimlik bilgisi modeli amaçlanıyor?
@@ -146,6 +146,139 @@ with status `Open` before doing task work; see `AGENTS.md`.
   çalıştırma (`ro`/`rw`/`ddl`) yetkisi vermeyecek.
 - Recorded in: `docs/specs/SPEC-0021-platform-owner-governance.md`,
   `docs/adr/ADR-0017-persisted-platform-owner-boundary.md`
+
+### OQ-2026-012: `POST /api/multiple_query` korunsun mu kaldırılsın mı?
+
+- Status: Answered
+- Raised: 2026-08-29
+- Scope: Denetim bulgusu P1-1; `web_api/query_execution/router.py`,
+  `MULTIPLE_QUERY_COUNT` yapılandırması
+- Question: Rate limit'i olmayan ve hiçbir arayüzden çağrılmayan
+  `POST /api/multiple_query` uca limiter mi eklenmeli, yoksa rota tamamen
+  kaldırılmalı mı?
+- Why it matters: Uç, istek başına `MULTIPLE_QUERY_COUNT` sorgu çalıştırıyor ve
+  tek sorgu ucundaki limiti atlamak için kullanılabiliyor. Korumak ölü bir
+  yürütme yüzeyini sürdürür; kaldırmak API sözleşmesini daraltır.
+- Answer: Rota kaldırılacak. Endpoint, şeması ve `MULTIPLE_QUERY_COUNT`
+  yapılandırması silinecek.
+- Recorded in: `docs/specs/SPEC-0022-audit-remediation-p0.md`
+
+### OQ-2026-013: Maskeleme kuralı tablo ve tip alanları nasıl uygulanmalı?
+
+- Status: Answered
+- Raised: 2026-08-29
+- Scope: Denetim bulgusu P2-6; `web_api/common/security.py`,
+  `web_api/query_execution/services.py`, `web_api/workspaces/services.py`,
+  maskeleme yönetim arayüzü
+- Question: Kural `(table_name, column_name, masking_type)` olarak saklanırken
+  uygulama yalnız `column_name` okuyor. Enforcement tablo farkındalığına mı
+  taşınmalı, yoksa model kolon bazına mı indirilmeli?
+- Why it matters: Mevcut hâlde `Customers.email` kuralı `Suppliers.email`
+  sonuçlarını da maskeliyor (aşırı maskeleme, sessiz veri kaybı) ve
+  `masking_type` hiç okunmuyor — arayüz motorun uygulamadığı bir ayrıntı
+  seviyesi vaat ediyor.
+- Answer: Enforcement tablo farkındalığına taşınacak; kural yalnız sorgu
+  AST'sinde geçen tablolara ait kolonlara uygulanacak. `masking_type` şemada
+  kalacak ancak tek desteklenen değer `full` olarak doğrulanacak.
+- Recorded in: `docs/specs/SPEC-0024-table-aware-masking.md`,
+  `docs/adr/ADR-0018-table-aware-masking-enforcement.md`
+
+### OQ-2026-014: Atıl `BlacklistedToken` mekanizması kaldırılsın mı yeniden bağlansın mı?
+
+- Status: Answered
+- Raised: 2026-08-29
+- Scope: Denetim bulgusu P2-12; `web_api/app_database/models.py`,
+  `web_api/app_database/app_database.py`, `web_api/authentication/sessions.py`
+- Question: `mint_access` `jti` üretmediği için hiç yazılmayan `BlacklistedToken`
+  tablosu ve fonksiyonları migration ile mi kaldırılmalı, yoksa `jti` üretilip
+  mekanizma yeniden mi bağlanmalı?
+- Why it matters: İkisinin arasında kalmak en kötüsü — kod ve tablo bir güvenlik
+  kontrolü vaat ediyor ama hiç çalışmıyor. Yeniden bağlamak her isteğe bir DB
+  sorgusu ekler; kaldırmak anlık access-token iptali imkânını kalıcı olarak
+  ADR-0008'deki oturum modeline bırakır.
+- Answer: Mekanizma kaldırılacak. ADR-0008'deki sunucu tarafı `UserSessions` +
+  rotasyonlu refresh iptal ihtiyacını karşılıyor; tablo, model ve fonksiyonlar
+  Alembic revizyonuyla silinecek.
+- Recorded in: `docs/specs/SPEC-0025-dead-code-removal.md`
+
+### OQ-2026-015: Üretim compose yapılandırması geliştirme kolaylıklarından nasıl ayrılmalı?
+
+- Status: Answered
+- Raised: 2026-08-29
+- Scope: Denetim bulgusu P1-12; `docker-compose.yml`, `web_api/Dockerfile`,
+  `nginx.conf`
+- Question: `./web_api:/app` bind mount ve `1433:1433` publish tek dosyada
+  tamamen mi kaldırılmalı, yoksa üretim-güvenli bir taban dosya + geliştirme
+  override dosyası mı olmalı?
+- Why it matters: Bind mount üretim imajının değişmezliğini bozuyor ve 1433
+  publish veritabanını doğrudan erişilebilir kılıyor; ancak ikisi de yerel
+  geliştirme akışının parçası. Tek dosyada kaldırmak yerel akışı bozar.
+- Answer: `docker-compose.yml` üretim-güvenli taban olacak; geliştirme
+  kolaylıkları Compose'un otomatik yüklediği `docker-compose.override.yml`
+  dosyasına taşınacak.
+- Recorded in: `docs/specs/SPEC-0026-deployment-hardening.md`
+
+### OQ-2026-016: Hedef veritabanı kaydı silinirken bağlı veriye ne olur?
+
+- Status: Answered
+- Raised: 2026-08-29
+- Scope: Denetim bulgusu P1-10; `docs/inbox/DATABASE-REGISTRATION-LIFECYCLE.md` S1;
+  `web_api/owner/`, `Databases` modeli
+- Question: `DELETE` sert silme + cascade mi olmalı, yoksa yumuşak silme
+  (`is_active=False`) mi?
+- Why it matters: `Databases.id` üç tablodan referans alınıyor ve `QueryData`
+  hedefe metin çiftiyle bağlı. Sert silme audit ve sorgu geçmişini öksüz
+  bırakır; yumuşak silme listeleme uçlarının ve yeniden kayıt akışının pasif
+  kaydı doğru ele almasını gerektirir.
+- Answer: Yumuşak silme. Kayıt `is_active=False` olur, hiçbir veri silinmez ve
+  işlem audit'e (`REMOVE_DATABASE`) yazılır. Aynı sunucu/veritabanı yeniden
+  kaydedilmek istenirse pasif kayıt yeniden etkinleştirilir.
+- Recorded in: `docs/specs/SPEC-0027-target-database-lifecycle.md`,
+  `docs/adr/ADR-0021-target-database-soft-delete.md`
+
+### OQ-2026-017: Kayıt güncellemesi sunucu/veritabanı adını değiştirebilir mi?
+
+- Status: Answered
+- Raised: 2026-08-29
+- Scope: Denetim bulgusu P1-10; inbox S2; `QueryData` ↔ `Databases` eşleşmesi
+- Question: Güncelleme yalnız credential ve bağlantı moduyla mı sınırlı olmalı,
+  yoksa kimlik alanları da değişebilmeli mi?
+- Why it matters: `QueryData` hedefe FK ile değil `(servername, database_name)`
+  metin çiftiyle bağlı. Kimlik değişir ve bu satırlar taşınmazsa mevcut
+  workspace'ler `db_uuid=""` döndürür ve çalıştırılamaz hâle gelir.
+- Answer: Kimlik alanları değişebilir; aynı transaction'da ilgili tüm
+  `QueryData` satırları eski addan yeni ada taşınır, böylece kayıtlı
+  workspace'ler bağlı kalır.
+- Recorded in: `docs/specs/SPEC-0027-target-database-lifecycle.md`
+
+### OQ-2026-018: Bağlantı modu daraltılırsa mevcut yetkiler ne olur?
+
+- Status: Answered
+- Raised: 2026-08-29
+- Scope: Denetim bulgusu P1-10; inbox S3; SPEC-0002 BR-09
+- Question: `ro_rw` bir kayıt `ro`'ya çekilirse `WRITER` yetkileri reddedilerek
+  mi durdurulmalı, otomatik mi düşürülmeli?
+- Why it matters: Otomatik düşürme admin'in fark etmediği bir yetki kaybı
+  üretir; reddetme SPEC-0002 BR-09 ile çelişen bir ara durumun hiç oluşmamasını
+  sağlar ama iki adım gerektirir.
+- Answer: İstek `409` ile reddedilir ve çakışan kullanıcı/rol listesi yanıtta
+  döner. Admin önce yetkileri düşürür, sonra modu daraltır.
+- Recorded in: `docs/specs/SPEC-0027-target-database-lifecycle.md`
+
+### OQ-2026-019: Kısmi credential güncellemesi nasıl ifade edilir?
+
+- Status: Answered
+- Raised: 2026-08-29
+- Scope: Denetim bulgusu P1-10; inbox S4; `OwnerDatabaseUpdate` sözleşmesi
+- Question: Güncelleme gövdesi kaydın tam hâli mi (`PUT`) olmalı, yoksa
+  gönderilmeyen alan "değiştirme" mi (`PATCH`) anlamına gelmeli?
+- Why it matters: WebQuery sakladığı şifreleri hiçbir listeleme ucunda geri
+  göstermiyor (SPEC-0002 §7). `PUT` semantiğinde admin tek bir şifreyi
+  döndürmek için DBA'den diğer tüm şifreleri yeniden istemek zorunda kalır.
+- Answer: `PATCH` semantiği. Gönderilmeyen alan değişmez; bir kademeyi tamamen
+  kaldırmak `connection_mode` daraltmasıyla yapılır, böylece eksik alan tek
+  anlama gelir.
+- Recorded in: `docs/specs/SPEC-0027-target-database-lifecycle.md`
 
 ## Entry Format
 
