@@ -2,9 +2,9 @@
 
 import logging
 
+from pydantic import EmailStr, TypeAdapter
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from pydantic import EmailStr, TypeAdapter
 
 from app_database.app_database import AppDatabase
 from app_database.models import User

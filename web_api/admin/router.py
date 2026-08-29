@@ -6,16 +6,13 @@ import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import select
 
-from app_database.app_database import AppDatabase
-from app_database.models import AuditLog, User
+from app_database.models import User
 from common.audit_actions import AuditAction, AuditTarget
 from common.roles import mode_from_credentials
 from dependencies import (
     admin_required,
     get_admin_service,
-    get_app_db,
 )
 
 from .schemas import (
@@ -24,6 +21,7 @@ from .schemas import (
     ApprovalRequest,
     DatabaseListResponse,
     DatabaseResponseSchema,
+    DatabaseUsersResponse,
     MaskingRuleSchema,
     MaskingRulesSaveRequest,
     RejectRequest,
@@ -229,16 +227,58 @@ async def associate_user(
         )
 
 
+@router.get("/databases/{database_id}/users", response_model=DatabaseUsersResponse)
+async def list_database_users(
+    database_id: int,
+    current_admin: User = Depends(admin_required),
+    service: AdminService = Depends(get_admin_service),
+):
+    """
+    Lists who holds access to a database, and which active users could be granted it.
+
+    Scoped to a database the caller administers. Without this a DB ADMIN had no
+    way to learn a `user_id`, which made `associate_user` — the only route to
+    granting query access — unreachable from the interface.
+    """
+    return await service.list_database_users(database_id, current_admin)
+
+
+@router.delete("/databases/{database_id}/users/{user_id}")
+async def revoke_user_from_database(
+    database_id: int,
+    user_id: int,
+    http_request: Request,
+    current_admin: User = Depends(admin_required),
+    service: AdminService = Depends(get_admin_service),
+):
+    """
+    Removes a user's data-access roles on one database.
+
+    The DB ADMIN role is untouched; that is the platform OWNER's to manage.
+    Before this endpoint existed the only way to cut off a departing employee
+    was to disable their account everywhere.
+    """
+    return await service.revoke_user_from_database(
+        database_id,
+        user_id,
+        current_admin,
+        client_ip=_peer_ip(http_request),
+    )
+
+
 @router.get("/audit_log")
 async def get_audit_log(
     action: str | None = None,
     target_type: str | None = None,
     target_id: str | None = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
-    _admin_user: User = Depends(admin_required),
-    app_db: AppDatabase = Depends(get_app_db),
+    admin_user: User = Depends(admin_required),
+    service: AdminService = Depends(get_admin_service),
 ):
-    """Return validated, filtered audit records from newest to oldest."""
+    """Return validated, filtered audit records from newest to oldest.
+
+    Scoped to what the caller administers; see `AdminService.get_audit_log`.
+    """
     action_filter: AuditAction | None = None
     if action is not None:
         try:
@@ -264,15 +304,13 @@ async def get_audit_log(
                 ),
             ) from exc
 
-    async with app_db.get_app_db() as db:
-        statement = select(AuditLog).order_by(AuditLog.id.desc()).limit(limit)
-        if action_filter is not None:
-            statement = statement.where(AuditLog.action == action_filter)
-        if target_filter is not None:
-            statement = statement.where(AuditLog.target_type == target_filter)
-        if target_id is not None:
-            statement = statement.where(AuditLog.target_id == str(target_id))
-        rows = (await db.execute(statement)).scalars().all()
+    rows = await service.get_audit_log(
+        admin_user,
+        action=action_filter,
+        target_type=target_filter,
+        target_id=target_id,
+        limit=limit,
+    )
 
     return [
         {

@@ -36,3 +36,28 @@ class LastActiveOwnerError(BaseServiceException):
 class LastDatabaseAdminError(BaseServiceException):
     status_code = 409
     code = "LAST_DATABASE_ADMIN"
+
+
+class ConnectionModeConflictError(BaseServiceException):
+    """Raised when narrowing a connection mode would strand existing grants.
+
+    Per OQ-2026-018 the request is refused rather than silently demoting users,
+    and the conflicting grants travel with the error so an administrator can
+    act on them without hunting for the list.
+    """
+
+    status_code = 409
+    code = "CONNECTION_MODE_CONFLICT"
+
+    def __init__(
+        self,
+        message: str,
+        conflicts: list[dict] | None = None,
+        original_exception: Exception | None = None,
+    ) -> None:
+        super().__init__(message, original_exception)
+        self.conflicts = conflicts or []
+
+    def response_context(self) -> dict:
+        # Usernames and roles only; no credential material.
+        return {"conflicts": self.conflicts}

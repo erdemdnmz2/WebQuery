@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -12,6 +12,7 @@ from app_database.models import (
     MaskingRule,
     User,
 )
+from tests.conftest import make_target_session_mock
 
 
 @pytest.fixture
@@ -19,9 +20,7 @@ def mock_db_session():
     """
     Fixture that patches DatabaseProvider.get_session to return a mock session.
     """
-    mock_session = AsyncMock()
-    mock_result = MagicMock()
-    mock_session.execute.return_value = mock_result
+    mock_session, mock_result = make_target_session_mock()
     
     @asynccontextmanager
     async def fake_get_session(user, db_uuid, tier="ro"):
@@ -198,8 +197,8 @@ async def test_dynamic_data_masking(async_client: AsyncClient, mock_db_session):
         db_uuid = new_db.uuid
         new_db_id = new_db.id
         
-        rule1 = MaskingRule(database_id=new_db.id, table_name="users", column_name="email", masking_type="default", is_active=True)
-        rule2 = MaskingRule(database_id=new_db.id, table_name="users", column_name="phone", masking_type="default", is_active=True)
+        rule1 = MaskingRule(database_id=new_db.id, table_name="users", column_name="email", masking_type="full", is_active=True)
+        rule2 = MaskingRule(database_id=new_db.id, table_name="users", column_name="phone", masking_type="full", is_active=True)
         db.add_all([rule1, rule2])
         await db.commit()
         

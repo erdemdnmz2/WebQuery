@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -7,13 +7,12 @@ from sqlalchemy import select
 
 from app import app
 from app_database.models import Databases, User
+from tests.conftest import make_target_session_mock
 
 
 @pytest.fixture
 def mock_db_session_auth():
-    mock_session = AsyncMock()
-    mock_result = MagicMock()
-    mock_session.execute.return_value = mock_result
+    mock_session, mock_result = make_target_session_mock()
     
     @asynccontextmanager
     async def fake_get_session(user, db_uuid, tier="ro"):
@@ -69,12 +68,16 @@ async def test_admin_user_association_and_visibility(async_client: AsyncClient, 
     assert info_resp.status_code == 200
     assert "auth-server" not in info_resp.json()["db_info"]
 
-    # 4. Before association, executing query should fail (Permission Denied)
+    # 4. Before association, executing query should fail (Permission Denied).
+    # This is an authorization failure, not an analyzer rejection: it carries
+    # DATABASE_ACCESS_DENIED/403 so the client stops drawing "sent for approval"
+    # over a request that was never filed (P2-1).
     exec_resp = await reg_client.post("/api/execute_query", json={
         "query": "SELECT 1",
         "db_uuid": db_uuid
     })
-    assert exec_resp.status_code == 400
+    assert exec_resp.status_code == 403
+    assert exec_resp.json()["error_code"] == "DATABASE_ACCESS_DENIED"
     assert "permission to access this database" in exec_resp.text
 
     # 5. Login as admin and associate the user

@@ -71,9 +71,21 @@ class RejectRequest(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
 
 class MaskingRuleSchema(BaseModel):
-    table_name: str
-    column_name: str
-    masking_type: str = "default"
+    """One persisted masking rule.
+
+    `table_name` is now enforced (OQ-2026-013): a rule applies only to the
+    tables a query actually reads, so `Customers.email` no longer blanks
+    `Suppliers.email`.
+
+    `masking_type` is constrained to the single strategy the engine implements.
+    It was previously free text defaulting to `"default"` and was never read at
+    all, so the admin screen offered a choice that had no effect. Validating it
+    here keeps the stored rule and the applied behaviour the same thing.
+    """
+
+    table_name: str = Field(min_length=1, max_length=256)
+    column_name: str = Field(min_length=1, max_length=256)
+    masking_type: Literal["full"] = "full"
     is_active: bool = True
 
 
@@ -97,3 +109,34 @@ class UserAssociationRequest(BaseModel):
     user_id: int
     database_id: int
     role: str # "READER", "WRITER", "DDL"; DB ADMIN is OWNER-managed.
+
+
+class DatabaseMemberSchema(BaseModel):
+    """A user who currently holds access to a database."""
+
+    user_id: int
+    username: str
+    email: str
+    role: str
+    is_admin: bool
+    is_active: bool
+
+
+class DatabaseCandidateSchema(BaseModel):
+    """An active user who could be granted access.
+
+    Username and email only: enough to name a colleague, nothing about their
+    lifecycle, platform role, or access elsewhere.
+    """
+
+    user_id: int
+    username: str
+    email: str
+
+
+class DatabaseUsersResponse(BaseModel):
+    database_id: int
+    #: What the registration provisions, so the UI offers only grantable tiers.
+    connection_mode: Literal["ro", "ro_rw", "ro_rw_ddl"] | None = None
+    members: list[DatabaseMemberSchema]
+    candidates: list[DatabaseCandidateSchema]

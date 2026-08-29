@@ -18,12 +18,13 @@ from app_database.models import (
 )
 from common.audit_actions import AuditAction
 from common.audit_details import MaskingRulesAuditDetails
+from common.exceptions import BaseServiceException
 
 
 def rule(
     table_name: str,
     column_name: str,
-    masking_type: str = "default",
+    masking_type: str = "full",
     is_active: bool = True,
 ) -> SimpleNamespace:
     return SimpleNamespace(
@@ -45,7 +46,7 @@ def test_masking_delta_contains_only_removed_rule() -> None:
         {
             "table_name": "users",
             "column_name": "salary",
-            "masking_type": "default",
+            "masking_type": "full",
             "is_active": True,
         }
     ]
@@ -102,21 +103,21 @@ async def seed_masking_data(session_factory: async_sessionmaker) -> tuple[User, 
                     database_id=database.id,
                     table_name="users",
                     column_name="email",
-                    masking_type="default",
+                    masking_type="full",
                     is_active=True,
                 ),
                 MaskingRule(
                     database_id=database.id,
                     table_name="users",
                     column_name="phone",
-                    masking_type="default",
+                    masking_type="full",
                     is_active=True,
                 ),
                 MaskingRule(
                     database_id=database.id,
                     table_name="users",
                     column_name="salary",
-                    masking_type="default",
+                    masking_type="full",
                     is_active=True,
                 ),
             ]
@@ -153,7 +154,7 @@ async def test_save_masking_rules_writes_only_the_delta_to_audit_log() -> None:
                     {
                         "table_name": "users",
                         "column_name": "salary",
-                        "masking_type": "default",
+                        "masking_type": "full",
                         "is_active": True,
                     }
                 ],
@@ -203,13 +204,16 @@ async def test_save_masking_rules_rejects_duplicates_without_changing_data() -> 
         admin, database_id = await seed_masking_data(session_factory)
         service = AdminService(SessionBackedAppDatabase(session_factory), MagicMock())
 
-        success = await service.save_masking_rules(
-            database_id,
-            [rule("users", "email"), rule("USERS", "EMAIL")],
-            admin,
-        )
+        # A duplicate table+column pair now surfaces as its own error (P2-8)
+        # instead of the generic "Failed to save masking rules" / False that
+        # swallowed every failure mode, authorization included, the same way.
+        with pytest.raises(BaseServiceException, match="Duplicate masking rule"):
+            await service.save_masking_rules(
+                database_id,
+                [rule("users", "email"), rule("USERS", "EMAIL")],
+                admin,
+            )
 
-        assert success is False
         async with session_factory() as session:
             assert [
                 masking_rule.column_name

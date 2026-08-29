@@ -11,6 +11,7 @@ from .schemas import (
     DatabaseAdminSummary,
     OwnerDatabaseCreate,
     OwnerDatabaseSummary,
+    OwnerDatabaseUpdate,
     OwnerUserSummary,
 )
 from .services import OwnerService
@@ -99,6 +100,7 @@ async def list_databases(
                 has_rw=bool(database.username_rw and database.password_rw),
                 has_ddl=bool(database.username_ddl and database.password_ddl),
             ),
+            is_active=bool(database.is_active),
         )
         for database in databases
     ]
@@ -113,6 +115,53 @@ async def add_database(
 ):
     return await service.add_database(
         payload,
+        owner,
+        client_ip=_peer_ip(request),
+        trace_id=_trace_id(request),
+    )
+
+
+@router.patch("/databases/{database_id}")
+async def update_database(
+    database_id: int,
+    payload: OwnerDatabaseUpdate,
+    request: Request,
+    owner: User = Depends(owner_required),
+    service: OwnerService = Depends(get_owner_service),
+):
+    """
+    Updates a registration's credentials, connection mode, or identity.
+
+    PATCH semantics: an absent field is left alone (OQ-2026-019). Narrowing the
+    connection mode is refused with 409 and the conflicting grants while any
+    user holds a role the narrowed registration could not serve (OQ-2026-018).
+    Renaming carries the matching saved queries along (OQ-2026-017).
+    """
+    return await service.update_database(
+        database_id,
+        payload,
+        owner,
+        client_ip=_peer_ip(request),
+        trace_id=_trace_id(request),
+    )
+
+
+@router.delete("/databases/{database_id}")
+async def retire_database(
+    database_id: int,
+    request: Request,
+    owner: User = Depends(owner_required),
+    service: OwnerService = Depends(get_owner_service),
+):
+    """
+    Retires a registration.
+
+    Deactivation, not deletion (OQ-2026-016): access grants, masking rules and
+    the audit trail are all preserved, and the record simply leaves the runtime
+    catalogue so nothing can be queried through it.
+    """
+    return await service.retire_database(
+        database_id,
         owner,
         client_ip=_peer_ip(request),
         trace_id=_trace_id(request),

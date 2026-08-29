@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class OwnerUserSummary(BaseModel):
@@ -52,12 +52,58 @@ class OwnerDatabaseCreate(BaseModel):
         return self
 
 
+class OwnerDatabaseUpdate(BaseModel):
+    """Partial update of a registration (OQ-2026-019).
+
+    PATCH semantics: a field that is absent is left alone. WebQuery never
+    returns a stored password (SPEC-0002 s7), so a full-replacement body would
+    force an administrator to obtain every other tier's password from the DBA
+    just to rotate one. Removing a tier is expressed by narrowing
+    `connection_mode`, so an absent field only ever means "do not touch".
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    servername: str | None = Field(default=None, min_length=1, max_length=100)
+    database_name: str | None = Field(default=None, min_length=1, max_length=100)
+    connection_mode: Literal["ro", "ro_rw", "ro_rw_ddl"] | None = None
+    username_ro: str | None = None
+    password_ro: str | None = None
+    username_rw: str | None = None
+    password_rw: str | None = None
+    username_ddl: str | None = None
+    password_ddl: str | None = None
+
+    @model_validator(mode="after")
+    def reject_empty_update(self) -> "OwnerDatabaseUpdate":
+        if not self.model_fields_set:
+            raise ValueError("Güncellenecek en az bir alan gönderilmelidir.")
+        return self
+
+    def credential_fields(self) -> dict[str, str | None]:
+        """Only the credential fields the caller actually sent."""
+        names = (
+            "username_ro",
+            "password_ro",
+            "username_rw",
+            "password_rw",
+            "username_ddl",
+            "password_ddl",
+        )
+        return {
+            name: getattr(self, name)
+            for name in names
+            if name in self.model_fields_set
+        }
+
+
 class OwnerDatabaseSummary(BaseModel):
     id: int
     servername: str
     database_name: str
     technology: str
     connection_mode: Literal["ro", "ro_rw", "ro_rw_ddl"] | None = None
+    is_active: bool = True
 
 
 class DatabaseAdminSummary(BaseModel):

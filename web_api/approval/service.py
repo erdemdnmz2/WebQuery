@@ -2,7 +2,6 @@
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Literal
 
 from sqlalchemy import select, update
@@ -20,6 +19,7 @@ from app_database.models import (
 from common.audit import log_in
 from common.audit_actions import AuditAction, AuditTarget
 from common.audit_details import QueryDecisionAuditDetails
+from common.clock import db_now
 from common.constants import QUERY_STATUS_WAITING_FOR_APPROVAL
 from common.roles import is_admin
 
@@ -120,7 +120,7 @@ async def decide(
                 )
 
             new_status = _STATUS_BY_DECISION[decision]
-            decided_at = datetime.now()  # noqa: DTZ005 - metadata DB uses naive legacy timestamps
+            decided_at = db_now()
             result = await db.execute(
                 update(QueryData)
                 .where(

@@ -3,7 +3,7 @@ Integration tests for admin router and service layer.
 Verifies Role-Based Access Control (RBAC), database registration, and query approval workflows.
 """
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
@@ -13,6 +13,7 @@ from app import app
 from app_database.models import AuditLog, Databases, QueryData, User, Workspace
 from common.audit import log_in
 from common.audit_actions import AuditAction, AuditTarget
+from tests.conftest import make_target_session_mock
 
 
 @pytest.fixture
@@ -20,9 +21,7 @@ def mock_db_session():
     """
     Fixture that patches DatabaseProvider.get_session to return a mock session.
     """
-    mock_session = AsyncMock()
-    mock_result = MagicMock()
-    mock_session.execute.return_value = mock_result
+    mock_session, mock_result = make_target_session_mock()
     
     @asynccontextmanager
     async def fake_get_session(user, db_uuid, tier="ro"):
@@ -452,7 +451,10 @@ async def test_admin_query_rejection(async_client: AsyncClient, mock_db_session)
         ).scalar_one()
         assert rejection_audit.client_ip == "127.0.0.1"
         
-    # Verify regular user execution remains blocked (returns 400 Bad Request / QUERY_REJECTED_BY_ANALYZER)
+    # Verify regular user execution remains blocked. This path really is the
+    # analyzer/approval gate ("not approved for execution"), so it keeps
+    # QUERY_REJECTED_BY_ANALYZER; role and access denials moved to their own
+    # codes in P2-1.
     exec_response = await regular_client.post(f"/api/execute_workspace/{workspace_id}")
     assert exec_response.status_code == 400
     assert exec_response.json()["error_code"] == "QUERY_REJECTED_BY_ANALYZER"
@@ -471,6 +473,8 @@ async def test_admin_audit_log_endpoint_validates_filters_and_authorization(
         )
         db.add(database)
         await db.commit()
+        await db.refresh(database)
+        database_id = database.id
 
     admin_id = await create_user_and_login(
         async_client, "audit-admin@example.com", "audit-admin", make_admin=True
@@ -478,24 +482,18 @@ async def test_admin_audit_log_endpoint_validates_filters_and_authorization(
 
     async with app_db.get_app_db() as db:
         admin = await db.get(User, admin_id)
-        await log_in(
-            db,
-            actor=admin,
-            action=AuditAction.ADD_DATABASE,
-            target_type=AuditTarget.DATABASE,
-            target_id="first",
-            details={"database_name": "first"},
-            client_ip="127.0.0.1",
-        )
-        await log_in(
-            db,
-            actor=admin,
-            action=AuditAction.ADD_DATABASE,
-            target_type=AuditTarget.DATABASE,
-            target_id="second",
-            details={"database_name": "second"},
-            client_ip="127.0.0.1",
-        )
+        # Both records target the database this admin actually administers, so
+        # the scoping added for P1-2 keeps them visible.
+        for label in ("first", "second"):
+            await log_in(
+                db,
+                actor=admin,
+                action=AuditAction.ADD_DATABASE,
+                target_type=AuditTarget.DATABASE,
+                target_id=database_id,
+                details={"database_name": label},
+                client_ip="127.0.0.1",
+            )
         await db.commit()
 
     response = await async_client.get(
@@ -509,7 +507,8 @@ async def test_admin_audit_log_endpoint_validates_filters_and_authorization(
     assert response.status_code == 200
     assert len(response.json()) == 1
     assert response.json()[0]["action"] == AuditAction.ADD_DATABASE
-    assert response.json()[0]["target"] == "database:second"
+    assert response.json()[0]["target"] == f"database:{database_id}"
+    assert response.json()[0]["details"] == {"database_name": "second"}
 
     assert (
         await async_client.get("/api/admin/audit_log", params={"action": "typo"})
@@ -574,7 +573,7 @@ async def test_admin_association_and_masking_audits_capture_peer_ip(
                 {
                     "table_name": "customers",
                     "column_name": "email",
-                    "masking_type": "default",
+                    "masking_type": "full",
                     "is_active": True,
                 }
             ]
@@ -600,3 +599,134 @@ async def test_admin_association_and_masking_audits_capture_peer_ip(
             AuditAction.UPDATE_MASKING_RULES,
         }
         assert all(row.client_ip == "127.0.0.1" for row in rows)
+
+
+# --- P1-2: audit log was not scoped to the caller's databases ---------------
+#
+# `admin_required` only asks whether the caller is ADMIN on *at least one*
+# database. The endpoint then returned the whole AuditLog table: other
+# databases' access changes, OWNER operations, and every user's login history.
+
+
+@pytest.mark.asyncio
+async def test_audit_log_hides_other_databases_from_a_database_admin(
+    async_client: AsyncClient,
+):
+    app_db = app.state.context.app_db
+    async with app_db.get_app_db() as db:
+        mine = Databases(servername="s", database_name="mine", technology="sqlite")
+        theirs = Databases(servername="s", database_name="theirs", technology="sqlite")
+        db.add_all([mine, theirs])
+        await db.commit()
+        await db.refresh(mine)
+        await db.refresh(theirs)
+        mine_id, theirs_id = mine.id, theirs.id
+
+    # make_admin=True associates the user with every database that exists at the
+    # time, so the second one is registered afterwards and stays out of scope.
+    admin_id = await create_user_and_login(
+        async_client, "scoped-admin@example.com", "scoped-admin", make_admin=False
+    )
+    async with app_db.get_app_db() as db:
+        from app_database.models import UserDatabaseAssociation
+
+        user = (
+            await db.execute(select(User).where(User.email == "scoped-admin@example.com"))
+        ).scalars().first()
+        admin_id = user.id
+        db.add(
+            UserDatabaseAssociation(
+                user_id=admin_id, database_id=mine_id, role="ADMIN", is_admin=True
+            )
+        )
+        await db.commit()
+
+    async with app_db.get_app_db() as db:
+        admin = await db.get(User, admin_id)
+        await log_in(
+            db,
+            actor=admin,
+            action=AuditAction.UPDATE_MASKING_RULES,
+            target_type=AuditTarget.DATABASE,
+            target_id=mine_id,
+            details={"scope": "mine"},
+        )
+        await log_in(
+            db,
+            actor=admin,
+            action=AuditAction.UPDATE_MASKING_RULES,
+            target_type=AuditTarget.DATABASE,
+            target_id=theirs_id,
+            details={"scope": "theirs"},
+        )
+        await db.commit()
+
+    rows = (await async_client.get("/api/admin/audit_log")).json()
+    targets = {row["target"] for row in rows}
+    assert f"database:{mine_id}" in targets
+    assert f"database:{theirs_id}" not in targets
+
+
+@pytest.mark.asyncio
+async def test_audit_log_hides_platform_records_from_a_database_admin(
+    async_client: AsyncClient,
+):
+    """User, session and login records belong to no single database."""
+    app_db = app.state.context.app_db
+    async with app_db.get_app_db() as db:
+        database = Databases(servername="s", database_name="d", technology="sqlite")
+        db.add(database)
+        await db.commit()
+
+    admin_id = await create_user_and_login(
+        async_client, "platform-blind@example.com", "platform-blind", make_admin=True
+    )
+    async with app_db.get_app_db() as db:
+        admin = await db.get(User, admin_id)
+        await log_in(
+            db,
+            actor=admin,
+            action=AuditAction.OWNER_GRANTED,
+            target_type=AuditTarget.USER,
+            target_id=admin_id,
+            details={"sensitive": True},
+        )
+        await db.commit()
+
+    rows = (await async_client.get("/api/admin/audit_log")).json()
+    assert all(not row["target"].startswith("user:") for row in rows)
+
+
+@pytest.mark.asyncio
+async def test_platform_owner_sees_every_audit_record(async_client: AsyncClient):
+    app_db = app.state.context.app_db
+    async with app_db.get_app_db() as db:
+        database = Databases(servername="s", database_name="d", technology="sqlite")
+        db.add(database)
+        await db.commit()
+
+    owner_id = await create_user_and_login(
+        async_client, "audit-owner@example.com", "audit-owner", make_admin=True, make_owner=True
+    )
+    async with app_db.get_app_db() as db:
+        owner = await db.get(User, owner_id)
+        await log_in(
+            db,
+            actor=owner,
+            action=AuditAction.OWNER_GRANTED,
+            target_type=AuditTarget.USER,
+            target_id=owner_id,
+        )
+        await log_in(
+            db,
+            actor=owner,
+            action=AuditAction.UPDATE_MASKING_RULES,
+            target_type=AuditTarget.DATABASE,
+            target_id=99999,  # a database the owner administers nothing on
+        )
+        await db.commit()
+
+    rows = (await async_client.get("/api/admin/audit_log")).json()
+    targets = {row["target"] for row in rows}
+    assert f"user:{owner_id}" in targets
+    assert "database:99999" in targets
