@@ -36,7 +36,7 @@ export const WORKSPACE_STATUS: Record<WorkspaceStatus, StatusMeta> = {
   rejected: {
     label: 'Reddedildi',
     tone: 'danger',
-    hint: 'Yönetici bu sorguyu reddetti. Yeni bir çalışma alanı oluşturun.',
+    hint: 'Yönetici bu sorguyu reddetti. Düzenleyip yeniden gönderebilirsiniz.',
   },
 };
 
@@ -50,9 +50,16 @@ export function statusMeta(status: string): StatusMeta {
   );
 }
 
-/** A workspace is editable only while it is not locked by the approval flow. */
+/**
+ * A workspace is editable only while no approval decision depends on its text.
+ *
+ * This mirrors `WORKSPACE_EDITABLE_STATUSES` on the server, which answers 409
+ * for anything else. Approved states are excluded on purpose: rewriting the SQL
+ * of an approved query would carry a single approval onto unlimited different
+ * statements. A rejected query stays editable so it can be fixed and resubmitted.
+ */
 export function isEditable(status: string): boolean {
-  return status !== 'waiting_for_approval' && status !== 'rejected';
+  return status === 'saved_in_workspace' || status === 'rejected';
 }
 
 /** Only an explicitly shared result set can be run from the execute screen. */

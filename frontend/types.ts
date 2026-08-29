@@ -125,12 +125,58 @@ export interface RegisteredDatabase {
   database_name: string;
   technology: string;
   connection_mode?: ConnectionMode | null;
+  /** Absent (older responses) is treated the same as active. */
+  is_active?: boolean;
 }
+
+/** A user who currently holds a role on a database. */
+export interface DatabaseMember {
+  user_id: number;
+  username: string;
+  email: string;
+  role: string;
+  is_admin: boolean;
+  is_active: boolean;
+}
+
+/** An active user who could be granted access; name only, nothing else. */
+export interface DatabaseCandidate {
+  user_id: number;
+  username: string;
+  email: string;
+}
+
+/** GET /api/admin/databases/{id}/users */
+export interface DatabaseUsers {
+  database_id: number;
+  connection_mode?: ConnectionMode | null;
+  members: DatabaseMember[];
+  candidates: DatabaseCandidate[];
+}
+
+/** A user whose granted role the narrowed connection mode could not serve. */
+export interface ConnectionModeConflict {
+  user_id: number;
+  username: string;
+  role: string;
+  unsupported_tier: string;
+}
+
+/**
+ * A rule applies to its own table only: the engine scopes rules to the tables a
+ * query actually reads, so a rule on `Customers.email` no longer blanks
+ * `Suppliers.email`.
+ *
+ * `masking_type` is the single strategy the engine implements. It used to be
+ * free text that nothing ever read, so the screen appeared to offer a choice
+ * that had no effect; the server now rejects anything else.
+ */
+export type MaskingType = 'full';
 
 export interface MaskingRule {
   table_name: string;
   column_name: string;
-  masking_type: string;
+  masking_type: MaskingType;
   is_active: boolean;
 }
 

@@ -96,7 +96,7 @@ export const MaskingTab: React.FC = () => {
     for (const [table, columns] of Object.entries(schema)) {
       for (const column of columns) {
         if (masked.has(key(table, column))) {
-          rules.push({ table_name: table, column_name: column, masking_type: 'default', is_active: true });
+          rules.push({ table_name: table, column_name: column, masking_type: 'full', is_active: true });
         }
       }
     }

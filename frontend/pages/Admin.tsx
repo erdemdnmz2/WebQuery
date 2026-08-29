@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowClockwiseIcon, CrownIcon, LockKeyIcon, ShieldCheckIcon } from '@phosphor-icons/react';
+import { ArrowClockwiseIcon, CrownIcon, LockKeyIcon, ShieldCheckIcon, UsersThreeIcon } from '@phosphor-icons/react';
 import { api, errorMessage, UnauthorizedError } from '../services/api';
 import { cn } from '../lib/cn';
 import { usePersistentState } from '../lib/hooks';
 import { useSession } from '../lib/session';
+import { AccessTab } from '../components/app/admin/AccessTab';
 import { ApprovalsTab } from '../components/app/admin/ApprovalsTab';
 import { MaskingTab } from '../components/app/admin/MaskingTab';
 import { OwnerTab } from '../components/app/owner/OwnerTab';
@@ -12,7 +13,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import type { PendingQuery } from '../types';
 
-type Tab = 'approvals' | 'masking' | 'owner';
+type Tab = 'approvals' | 'access' | 'masking' | 'owner';
 
 const Admin: React.FC = () => {
   const { user, status } = useSession();
@@ -87,6 +88,11 @@ const Admin: React.FC = () => {
                       count: requests.length,
                     },
                     {
+                      value: 'access' as const,
+                      label: 'Erişimler',
+                      icon: <UsersThreeIcon size={14} />,
+                    },
+                    {
                       value: 'masking' as const,
                       label: 'Maskeleme',
                       icon: <LockKeyIcon size={14} />,
@@ -103,6 +109,8 @@ const Admin: React.FC = () => {
 
       {visibleTab === 'approvals' ? (
         <ApprovalsTab requests={requests} loading={loading} error={error} reload={() => void loadRequests()} />
+      ) : visibleTab === 'access' ? (
+        <AccessTab />
       ) : visibleTab === 'masking' ? (
         <MaskingTab />
       ) : (

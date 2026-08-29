@@ -3,8 +3,10 @@ import {
   ArrowClockwiseIcon,
   CheckCircleIcon,
   DatabaseIcon,
+  PencilSimpleIcon,
   PlusIcon,
   ShieldCheckIcon,
+  TrashIcon,
   UserCircleIcon,
   WarningCircleIcon,
 } from '@phosphor-icons/react';
@@ -24,6 +26,7 @@ import { Select } from '../../ui/Select';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { Skeleton } from '../../ui/Skeleton';
 import { useToast } from '../../ui/Toast';
+import { DatabaseEditDialog } from './DatabaseEditDialog';
 
 const NONE = '__none__';
 const TECHNOLOGIES = [
@@ -75,6 +78,9 @@ export const OwnerTab: React.FC = () => {
   const [grantDatabaseId, setGrantDatabaseId] = useState(NONE);
   const [grantUserId, setGrantUserId] = useState(NONE);
   const [changingAdmin, setChangingAdmin] = useState(false);
+  const [editTarget, setEditTarget] = useState<RegisteredDatabase | null>(null);
+  const [retireTarget, setRetireTarget] = useState<RegisteredDatabase | null>(null);
+  const [retiring, setRetiring] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -188,6 +194,24 @@ export const OwnerTab: React.FC = () => {
       toast.error('DB ADMIN atanamadı', errorMessage(caught));
     } finally {
       setChangingAdmin(false);
+    }
+  };
+
+  const retireDatabase = async () => {
+    if (!retireTarget) return;
+    setRetiring(true);
+    try {
+      await api.retireOwnerDatabase(retireTarget.id);
+      toast.success(
+        'Veritabanı pasifleştirildi',
+        `${retireTarget.database_name} artık sorgu için seçilemez. Aynı sunucu/veritabanıyla yeniden kaydedilirse kayıt canlanır.`,
+      );
+      setRetireTarget(null);
+      await load();
+    } catch (caught) {
+      toast.error('Pasifleştirilemedi', errorMessage(caught));
+    } finally {
+      setRetiring(false);
     }
   };
 
@@ -334,6 +358,44 @@ export const OwnerTab: React.FC = () => {
 
         <Panel flush as="section">
           <PanelHeader
+            title="Kayıtlı veritabanları"
+            description={`${formatCount(databases.length)} kayıt · şifre rotasyonu, mod değişikliği ve pasifleştirme`}
+          />
+          {databases.length === 0 ? (
+            <EmptyState size="sm" icon={<DatabaseIcon size={18} />} title="Kayıtlı veritabanı yok" />
+          ) : (
+            <ul className="max-h-[280px] divide-y divide-line overflow-y-auto">
+              {databases.map((database) => (
+                <li key={database.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                  <DatabaseIcon size={15} className="shrink-0 text-subtle" />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate font-mono text-[12.5px] text-fg">{database.database_name}</span>
+                      {database.is_active === false && <Badge tone="neutral">Pasif</Badge>}
+                    </span>
+                    <span className="block truncate text-[11.5px] text-subtle">{database.servername}</span>
+                  </span>
+                  <Badge tone={CONNECTION_MODE[database.connection_mode ?? 'ro'].tone}>
+                    {database.connection_mode ? CONNECTION_MODE[database.connection_mode].label : 'Kademe tanımsız'}
+                  </Badge>
+                  {database.is_active !== false && (
+                    <>
+                      <IconButton label="Kaydı güncelle" size="sm" onClick={() => setEditTarget(database)}>
+                        <PencilSimpleIcon size={14} />
+                      </IconButton>
+                      <IconButton label="Kaydı pasifleştir" size="sm" onClick={() => setRetireTarget(database)}>
+                        <TrashIcon size={14} className="text-danger" />
+                      </IconButton>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel flush as="section">
+          <PanelHeader
             title="DB ADMIN atamaları"
             description={`${formatCount(databases.length)} veritabanı · ${formatCount(admins.length)} ADMIN ataması`}
           />
@@ -375,6 +437,29 @@ export const OwnerTab: React.FC = () => {
         onConfirm={() => void disableUser()}
       >
         {disableTarget && <p className="font-mono text-[12px] text-fg">{disableTarget.username} · {disableTarget.email}</p>}
+      </ConfirmDialog>
+
+      <DatabaseEditDialog
+        database={editTarget}
+        onOpenChange={(open) => !open && setEditTarget(null)}
+        onUpdated={() => void load()}
+      />
+
+      <ConfirmDialog
+        open={retireTarget !== null}
+        onOpenChange={(open) => !open && setRetireTarget(null)}
+        title="Veritabanı kaydı pasifleştirilsin mi?"
+        description="Erişim yetkileri, maskeleme kuralları ve denetim kaydı silinmez; kayıt yalnız sorgu için seçilemez hâle gelir. Aynı sunucu/veritabanıyla yeniden kaydedilirse kayıt canlanır."
+        confirmLabel="Pasifleştir"
+        destructive
+        busy={retiring}
+        onConfirm={() => void retireDatabase()}
+      >
+        {retireTarget && (
+          <p className="font-mono text-[12px] text-fg">
+            {retireTarget.database_name} · {retireTarget.servername}
+          </p>
+        )}
       </ConfirmDialog>
 
       <ConfirmDialog

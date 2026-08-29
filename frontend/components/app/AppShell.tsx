@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom';
 import {
   DesktopIcon,
   GearSixIcon,
+  KeyIcon,
   MagnifyingGlassIcon,
   MoonIcon,
   SignOutIcon,
@@ -21,6 +22,7 @@ import { Kbd } from '../ui/Kbd';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from '../ui/Menu';
 import { BrandMark } from './BrandMark';
 import { CommandPalette } from './CommandPalette';
+import { PasswordChangeDialog } from './PasswordChangeDialog';
 
 const NAV = [
   { to: '/', label: 'Çalışma alanları', icon: <SquaresFourIcon size={15} />, end: true },
@@ -44,6 +46,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, fullBleed }) => {
   const { workspaces } = useWorkspaces();
   const { preference, setPreference } = useTheme();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const navigate = useNavigate();
   const isMac = useIsMac();
 
@@ -208,6 +211,9 @@ export const AppShell: React.FC<AppShellProps> = ({ children, fullBleed }) => {
                 <MenuItem icon={<UserIcon size={15} />} onSelect={() => setPaletteOpen(true)}>
                   Komut paleti
                 </MenuItem>
+                <MenuItem icon={<KeyIcon size={15} />} onSelect={() => setPasswordDialogOpen(true)}>
+                  Şifreni değiştir
+                </MenuItem>
                 <MenuItem icon={<SignOutIcon size={15} />} onSelect={() => void handleSignOut()}>
                   Oturumu kapat
                 </MenuItem>
@@ -231,6 +237,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, fullBleed }) => {
       </main>
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} workspaces={workspaces} />
+      <PasswordChangeDialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen} />
     </div>
   );
 };

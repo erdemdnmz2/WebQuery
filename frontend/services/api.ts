@@ -2,6 +2,7 @@ import type {
   DatabaseInfo,
   DatabaseAdmin,
   DatabaseSchema,
+  DatabaseUsers,
   ConnectionMode,
   CreatedDatabase,
   OwnerUser,
@@ -27,13 +28,20 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code?: string;
   readonly traceId?: string;
+  /**
+   * A few errors carry structured, non-secret context beyond the message —
+   * e.g. `CONNECTION_MODE_CONFLICT`'s list of grants blocking the change. See
+   * `BaseServiceException.response_context` on the backend.
+   */
+  readonly context?: Record<string, unknown>;
 
-  constructor(message: string, status: number, code?: string, traceId?: string) {
+  constructor(message: string, status: number, code?: string, traceId?: string, context?: Record<string, unknown>) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.traceId = traceId;
+    this.context = context;
   }
 }
 
@@ -56,6 +64,16 @@ export const QUERY_SENT_FOR_APPROVAL = 'QUERY_REJECTED_BY_ANALYZER';
 export const QUERY_SYNTAX_ERROR = 'QUERY_SYNTAX_ERROR';
 
 /**
+ * Refusals that create no approval request. These used to share
+ * QUERY_REJECTED_BY_ANALYZER, so the UI drew "sent for approval" over all of
+ * them and left the user waiting on a request that was never filed.
+ */
+export const QUERY_ROLE_DENIED = 'QUERY_ROLE_DENIED';
+export const DATABASE_ACCESS_DENIED = 'DATABASE_ACCESS_DENIED';
+/** A hard-blocked risk class: no approval can lift it. */
+export const QUERY_BLOCKED = 'QUERY_BLOCKED';
+
+/**
  * Someone decided this approval request first. The decision is atomic on the
  * server, so the loser of the race gets this instead of overwriting a settled
  * status; the only correct response is to reload the pending list.
@@ -73,6 +91,16 @@ interface ParsedError {
   message: string;
   code?: string;
   traceId?: string;
+  context?: Record<string, unknown>;
+}
+
+const KNOWN_RESPONSE_FIELDS = new Set(['success', 'error_code', 'message', 'error', 'trace_id', 'detail']);
+
+/** Anything past the standard envelope, e.g. CONNECTION_MODE_CONFLICT's `conflicts`. */
+function extraContext(body: unknown): Record<string, unknown> | undefined {
+  if (typeof body !== 'object' || body === null) return undefined;
+  const entries = Object.entries(body as Record<string, unknown>).filter(([key]) => !KNOWN_RESPONSE_FIELDS.has(key));
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 async function readError(response: Response): Promise<ParsedError> {
@@ -80,15 +108,16 @@ async function readError(response: Response): Promise<ParsedError> {
     const body = await response.json();
     const code = typeof body?.error_code === 'string' ? body.error_code : undefined;
     const traceId = typeof body?.trace_id === 'string' && body.trace_id !== '-' ? body.trace_id : undefined;
+    const context = extraContext(body);
     const detail = body?.detail ?? body?.error ?? body?.message;
 
-    if (typeof detail === 'string' && detail.trim()) return { message: detail, code, traceId };
+    if (typeof detail === 'string' && detail.trim()) return { message: detail, code, traceId, context };
     if (Array.isArray(detail) && detail.length > 0) {
       // FastAPI validation errors arrive as a list of {loc, msg, type}.
       const first = detail[0];
-      if (typeof first?.msg === 'string') return { message: first.msg, code, traceId };
+      if (typeof first?.msg === 'string') return { message: first.msg, code, traceId, context };
     }
-    if (code) return { message: 'İstek tamamlanamadı.', code, traceId };
+    if (code) return { message: 'İstek tamamlanamadı.', code, traceId, context };
   } catch {
     /* Non-JSON error bodies fall through to the status-based message. */
   }
@@ -162,8 +191,8 @@ async function request<T>(url: string, options: RequestOptions = {}, retried = f
   }
 
   if (!response.ok) {
-    const { message, code, traceId } = await readError(response);
-    throw new ApiError(message, response.status, code, traceId);
+    const { message, code, traceId, context } = await readError(response);
+    throw new ApiError(message, response.status, code, traceId, context);
   }
 
   if (response.status === 204) return undefined as T;
@@ -195,6 +224,17 @@ export const api = {
     }),
   logout: () => request<{ success?: string }>('/api/logout', { method: 'POST' }),
 
+  /**
+   * Self-service password change. The current password is required so a
+   * stolen session cannot lock the real owner out; a success revokes every
+   * other session for the account.
+   */
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ success: boolean; message: string; revoked_sessions: number }>('/api/me/password', {
+      method: 'POST',
+      body: { current_password: currentPassword, new_password: newPassword },
+    }),
+
   /* ------------------------------------------------------------- targets */
 
   /** Servers and databases the signed-in user has been granted access to. */
@@ -213,8 +253,13 @@ export const api = {
   createWorkspace: (payload: { name: string; description?: string; query: string; db_uuid: string }) =>
     request<WorkspaceCreated>('/api/workspaces', { method: 'POST', body: payload }),
 
-  /** The API updates the stored SQL and status only; other fields are fixed. */
-  updateWorkspace: (id: number, payload: { query: string; status?: string }) =>
+  /**
+   * Rewrites the stored SQL. The status is server-owned — it is set by the
+   * approval decision and by execution, never by the client — and an accepted
+   * edit returns the record to a draft with results unshared. Sending any other
+   * field is rejected with 422; a locked record answers 409.
+   */
+  updateWorkspace: (id: number, payload: { query: string }) =>
     request<void>(`/api/workspaces/${id}`, { method: 'PUT', body: payload }),
 
   deleteWorkspace: (id: number) => request<void>(`/api/workspaces/${id}`, { method: 'DELETE' }),
@@ -270,6 +315,16 @@ export const api = {
       method: 'POST',
       body: payload,
     }),
+  /**
+   * Who holds access to a database and who could be granted it. This is the
+   * user_id source the grant form needs; /api/owner/users is OWNER-only.
+   */
+  databaseUsers: (databaseId: number) => request<DatabaseUsers>(`/api/admin/databases/${databaseId}/users`),
+  revokeDatabaseAccess: (databaseId: number, userId: number) =>
+    request<{ success?: boolean; message?: string; remaining_role?: string | null }>(
+      `/api/admin/databases/${databaseId}/users/${userId}`,
+      { method: 'DELETE' },
+    ),
 
   /* --------------------------------------------------------------- owner */
 
@@ -296,6 +351,34 @@ export const api = {
     username_ddl?: string;
     password_ddl?: string;
   }) => request<CreatedDatabase>('/api/owner/databases', { method: 'POST', body: payload }),
+  /**
+   * PATCH semantics: an absent field is left untouched. WebQuery never
+   * returns a stored password, so this lets an administrator rotate one tier
+   * without re-supplying the others. A narrowing `connection_mode` that
+   * conflicts with an existing grant answers 409 with `conflicts` on the
+   * thrown ApiError's `context`.
+   */
+  updateOwnerDatabase: (
+    databaseId: number,
+    payload: Partial<{
+      servername: string;
+      database_name: string;
+      connection_mode: ConnectionMode;
+      username_ro: string;
+      password_ro: string;
+      username_rw: string;
+      password_rw: string;
+      username_ddl: string;
+      password_ddl: string;
+    }>,
+  ) =>
+    request<{ success: boolean; message: string; updated_tiers: string[]; connection_mode: ConnectionMode | null }>(
+      `/api/owner/databases/${databaseId}`,
+      { method: 'PATCH', body: payload },
+    ),
+  /** Deactivates a registration; nothing is deleted and it can be revived by re-registering the same server/database. */
+  retireOwnerDatabase: (databaseId: number) =>
+    request<{ success?: boolean; message?: string }>(`/api/owner/databases/${databaseId}`, { method: 'DELETE' }),
   databaseAdmins: () => request<DatabaseAdmin[]>('/api/owner/database-admins'),
   grantDatabaseAdmin: (databaseId: number, userId: number) =>
     request<{ success?: boolean; message?: string }>(`/api/owner/databases/${databaseId}/admins/${userId}`, {

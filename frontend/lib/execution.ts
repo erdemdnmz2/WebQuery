@@ -1,4 +1,12 @@
-import { ApiError, QUERY_SENT_FOR_APPROVAL, QUERY_SYNTAX_ERROR, errorMessage } from '../services/api';
+import {
+  ApiError,
+  DATABASE_ACCESS_DENIED,
+  QUERY_BLOCKED,
+  QUERY_ROLE_DENIED,
+  QUERY_SENT_FOR_APPROVAL,
+  QUERY_SYNTAX_ERROR,
+  errorMessage,
+} from '../services/api';
 import type { ResultRow, SqlResponse } from '../types';
 
 /**
@@ -73,12 +81,25 @@ export function outcomeFromError(error: unknown): ExecutionOutcome {
   outcome.error = errorMessage(error);
   if (error instanceof ApiError) {
     outcome.traceId = error.traceId;
+    // Only this code means an approval request now exists. The refusals below
+    // create none, and drawing a waiting state over them made users wait on an
+    // administrator who had never been asked.
     outcome.sentForApproval = error.code === QUERY_SENT_FOR_APPROVAL;
     if (error.code === QUERY_SYNTAX_ERROR) {
       // The analyzer could not parse the statement, so it never reached a role
       // decision and no approval request was created. Saying so keeps the user
       // on their own SQL instead of waiting on an administrator.
       outcome.error = 'Sorgu çözümlenemedi. SQL sözdizimini kontrol edip tekrar deneyin.';
+    } else if (error.code === QUERY_ROLE_DENIED) {
+      outcome.error =
+        'Rolünüz bu ifadeyi çalıştırmaya yetkili değil. Erişim için veritabanı yöneticinize başvurun.';
+    } else if (error.code === DATABASE_ACCESS_DENIED) {
+      outcome.error =
+        'Bu veritabanına erişim yetkiniz yok. Erişim için veritabanı yöneticinize başvurun.';
+    } else if (error.code === QUERY_BLOCKED) {
+      // A hard-blocked risk class. No approval can lift it, so the user must
+      // not be told to wait for one.
+      outcome.error = errorMessage(error);
     }
   }
   return outcome;
