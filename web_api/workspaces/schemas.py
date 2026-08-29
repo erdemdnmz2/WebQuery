@@ -3,7 +3,7 @@ Workspace Schemas
 Pydantic models for workspace endpoints
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class WorkspaceInfo(BaseModel):
@@ -54,13 +54,19 @@ class WorkspaceList(BaseModel):
 class WorkspaceUpdate(BaseModel):
     """
     Workspace update schema
-    
+
+    Only the SQL text is client-supplied. `status` was removed deliberately:
+    workspace state transitions belong to the approval decision and to the
+    execution flow, and accepting one here let an owner mark their own query
+    approved. Any unknown field is rejected rather than ignored, so a client
+    still sending `status` fails loudly instead of believing it took effect.
+
     Attributes:
         query: SQL query to update
-        status: Status to update (optional)
     """
+    model_config = ConfigDict(extra="forbid")
+
     query: str
-    status: str | None = None
 
 
 class WorkspaceExecutionRequest(BaseModel):

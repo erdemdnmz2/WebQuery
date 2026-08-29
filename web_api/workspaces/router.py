@@ -108,20 +108,24 @@ async def update_workspace(
     app_db: AppDatabase = Depends(get_app_db)
 ):
     """
-    Updates workspace (query and/or status)
-    
+    Rewrites the SQL text of a workspace.
+
+    The status is not client-supplied; see `WorkspaceUpdate`. An accepted edit
+    returns the record to a draft with results unshared.
+
     Args:
         workspace_id: ID of the workspace to update
-        request: Update data (query, status)
-    
+        request: Update data (query)
+
     Returns:
         Response: 200 OK
-    
+
     Raises:
         HTTPException 400: If workspace cannot be updated
+        WorkspaceNotEditableError (409): If the query is awaiting or carrying approval
     """
     async with app_db.get_app_db() as db:
-        success = await service.update_workspace(db, workspace_id, query=request.query, status=request.status)
+        success = await service.update_workspace(db, workspace_id, query=request.query)
         if success:
             return Response(status_code=status.HTTP_200_OK)
         else:
@@ -131,6 +135,7 @@ async def update_workspace(
 async def get_workspace_by_id(
     workspace_id: int,
     _ws: Workspace = Depends(ensure_owner),
+    current_user: User = Depends(get_current_user),
     service: WorkspaceService = Depends(get_workspace_service),
     app_db: AppDatabase = Depends(get_app_db)
 ):
@@ -147,10 +152,12 @@ async def get_workspace_by_id(
         HTTPException 404: If workspace is not found or does not belong to the user
     
     Note:
-        Only workspace owner can access
+        Only workspace owner can access. `ensure_owner` is the gate; the service
+        is handed the *requester's* id (not the row's own `user_id`, which made
+        its internal ownership check a tautology).
     """
     async with app_db.get_app_db() as db:
-        result = await service.get_workspace_detail_by_id(db, workspace_id, _ws.user_id)
+        result = await service.get_workspace_detail_by_id(db, workspace_id, current_user.id)
         if not result:
             raise HTTPException(status_code=404, detail="Workspace not found")
         return result
