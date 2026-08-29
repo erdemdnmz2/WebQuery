@@ -158,7 +158,11 @@ def upgrade() -> None:
                 f"{duplicates} yinelenen grup var. '{spec.name}' kısıtı "
                 "oluşturulamaz; önce yinelenen kayıtları temizleyin."
             )
-        op.create_unique_constraint(spec.name, spec.table, list(spec.columns))
+        # batch_alter_table so the repair also runs under SQLite, which cannot
+        # ALTER a constraint in place. On SQL Server it compiles to the same
+        # ADD CONSTRAINT this used to emit directly.
+        with op.batch_alter_table(spec.table) as batch:
+            batch.create_unique_constraint(spec.name, list(spec.columns))
 
     # 3. Indexes.
     for spec in REQUIRED_INDEXES:

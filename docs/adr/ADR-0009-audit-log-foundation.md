@@ -78,12 +78,40 @@ bırakılır.
 - Masking-rule güncellemeleri delta olarak sorgulanır; bir kuralın güncel
   setini bulmak için audit yerine `MaskingRules` tablosu kaynak doğrusu kalır.
 
+## Append-only'in nerede zorlandığı (2026-08-30 eki)
+
+Denetim bulgusu P2-20j, "append-only" ifadesinin hiçbir yerde
+**zorlanmadığını** işaret etti: yalnız test geleneğiydi. Sınır şimdi açıkça
+şöyle çizildi:
+
+| Katman | Durum |
+| --- | --- |
+| Uygulama kodu | Hiçbir servis `AuditLog` satırını güncellemiyor veya silmiyor |
+| ORM | `before_update` ve `before_delete` olayları `AuditLogImmutableError` fırlatır (`app_database/models.py`) |
+| Veritabanı | **Zorlanmıyor.** Uygulamanın kendi kimlik bilgileriyle açılan bir oturum bu satırları hâlâ değiştirebilir |
+
+ORM guard'ı, uygulama içi bir hatanın (yanlışlıkla `session.delete`,
+bir cascade, bir toplu güncelleme) audit kaydını bozmasını engeller. Kötü
+niyetli veya yetkili bir veritabanı kullanıcısını engellemez.
+
+Veritabanı düzeyinde kapatmak, uygulamanın kendisine veremeyeceği bir
+kontrol gerektirir: bu tabloda `INSERT` yetkisi olan ama `UPDATE`/`DELETE`
+yetkisi olmayan ayrı bir yazma principal'ı ya da bir `INSTEAD OF` trigger.
+İkisi de metadata veritabanının DBA'ine ait, dağıtım zamanı kararlardır ve
+bu ADR'nin kapsamı dışındadır.
+
 ## Accepted Risks
 
 - Endpoint'i olmayan revoke/remove/enable/disable/password-change action'ları
   çağrı noktaları eklenene kadar audit coverage dışında kalır.
+- **`AuditLog` değişmezliği veritabanı düzeyinde zorlanmıyor** (yukarıya
+  bakın). Uygulamanın kendi DB kullanıcısı bu satırları değiştirebilir.
+  Azaltma: ORM guard'ı uygulama içi kazaları kapatıyor ve
+  `tests/unit/test_audit_log.py` bunu doğruluyor; veritabanı düzeyinde
+  kısıtlama bir dağıtım gereksinimi olarak kaydedildi.
 
 ## References
 
 - Spec: `docs/specs/SPEC-0006-audit-log-foundation.md`
+- Denetim: `webquery_denetim_raporu.md` P2-20j
 - Supersedes / Superseded by: Yok

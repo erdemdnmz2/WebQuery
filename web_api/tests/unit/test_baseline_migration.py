@@ -34,11 +34,31 @@ def test_baseline_migration_accepts_a_complete_legacy_schema(tmp_path: Path) -> 
     database_path = tmp_path / "legacy.db"
     engine = create_engine(f"sqlite:///{database_path}")
     Base.metadata.create_all(engine)
+    # A pre-Alembic install had `BlacklistedTokens`; the model was removed in
+    # OQ-2026-014 and revision a1b2c3d4e5f6 drops the table. The baseline's
+    # completeness check still names it, correctly, because it describes the
+    # schema as it stood then — so the simulated legacy database must have it
+    # too, or this test would be checking today's models rather than a legacy
+    # install.
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            'CREATE TABLE "BlacklistedTokens" ('
+            "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+            "jti VARCHAR(100) NOT NULL UNIQUE, "
+            "expires_at DATETIME NOT NULL)"
+        )
     engine.dispose()
 
     result = _run_upgrade(database_path)
 
     assert result.returncode == 0, result.stderr
+
+    # ...and the migration chain removes it again.
+    engine = create_engine(f"sqlite:///{database_path}")
+    try:
+        assert "BlacklistedTokens" not in inspect(engine).get_table_names()
+    finally:
+        engine.dispose()
 
 
 def test_audit_log_migration_creates_expected_schema(tmp_path: Path) -> None:

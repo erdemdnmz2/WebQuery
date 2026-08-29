@@ -2,14 +2,14 @@
 Application Database Manager
 Application database operations (user, log, workspace CRUD)
 """
-from contextlib import asynccontextmanager
-from datetime import datetime
 import logging
+from contextlib import asynccontextmanager
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.sql import select
 
+from common.clock import db_now
 from common.roles import mode_from_credentials
 
 from .config import DATABASE_URL
@@ -17,7 +17,6 @@ from .models import (
     ActionLogging,
     ApprovalStatus,
     Base,
-    BlacklistedToken,
     Databases,
     LoginLogging,
     MaskingRule,
@@ -40,10 +39,15 @@ class AppDatabase:
         """
         Initializes AppDatabase and configures the connection pool.
         """
+        # A pooled connection that the server, a firewall or a failover has
+        # already dropped looks alive to the pool until the first statement on
+        # it fails. Every app-DB write here (audit rows, session rows, login
+        # logs) would surface that as a request-level error instead of a
+        # transparent reconnect, so the pool checks the connection first.
         kwargs = {
-            "pool_pre_ping": False
+            "pool_pre_ping": True
         }
-        
+
         if not DATABASE_URL.startswith("sqlite"):
             kwargs.update({
                 "pool_size": 20,
@@ -136,7 +140,7 @@ class AppDatabase:
                 created_log = ActionLogging(
                     user_id=user.id,
                     username=user.username,
-                    query_date=datetime.now(),
+                    query_date=db_now(),
                     query=query,
                     machine_name=machine_name,
                     approved_execution=approved_execution,
@@ -172,6 +176,14 @@ class AppDatabase:
         Note:
             - If failed: ErrorMessage and isSuccessfull are updated.
             - If successful: ExecutionDurationMS, isSuccessfull and row_count are updated.
+
+        ``ExecutionDurationMS`` is wall time from ``create_log`` to this call,
+        not the target database's execution time. It therefore includes query
+        analysis, masking-rule resolution, connection acquisition and - for a
+        query that went to Slack - the entire time an admin took to approve it.
+        A pending approval can make it hours. It is also written only on the
+        success path, so a failed query has no duration at all. Read it as
+        "how long the user waited", never as a database performance metric.
         """
         async with self.get_app_db() as db, db.begin():
             result = await db.execute(select(ActionLogging).where(ActionLogging.id == log_id))
@@ -182,7 +194,7 @@ class AppDatabase:
                     log.ErrorMessage = error
                     log.isSuccessfull = False
                 else:
-                    duration = datetime.now() - log.query_date
+                    duration = db_now() - log.query_date
                     log.ExecutionDurationMS = int(duration.total_seconds() * 1000)
                     log.isSuccessfull = True
                     log.row_count = row_count
@@ -221,7 +233,7 @@ class AppDatabase:
             log.approved_execution = (approval_status == ApprovalStatus.APPROVED)
             log.approved_by = approved_by
             log.approved_by_slack_id = approved_by_slack_id
-            log.approved_at = datetime.now()
+            log.approved_at = db_now()
             return True
 
     async def create_login_log(self, user_id: int, client_ip):
@@ -238,7 +250,7 @@ class AppDatabase:
         async with self.get_app_db() as db, db.begin():
             created_log = LoginLogging(
                 user_id = user_id,
-                login_date = datetime.now(),
+                login_date = db_now(),
                 client_ip = client_ip
             )
             db.add(created_log)
@@ -263,8 +275,8 @@ class AppDatabase:
             )
             log = result.scalars().first()
             if log:
-                log.logout_date = datetime.now()
-                duration = datetime.now() - log.login_date
+                log.logout_date = db_now()
+                duration = log.logout_date - log.login_date
                 log.login_duration_ms = int(duration.total_seconds() * 1000)
             else:
                 logger.warning("Aktif giriş kaydı bulunamadı: kullanıcı_id=%d", user_id)
@@ -292,8 +304,11 @@ class AppDatabase:
             }
         """
         async with self.get_app_db() as db, db.begin():
+            # A retired registration keeps its rows for the audit trail but must
+            # never reach the runtime catalogue: it has no entry in
+            # `db_by_uuid`, so every execution path fails closed on it.
             result = await db.execute(
-                select(Databases)
+                select(Databases).where(Databases.is_active.is_(True))
             )
             databases = result.scalars().all()
             db_info : dict[str, dict[str, Any]] = {}
@@ -320,25 +335,6 @@ class AppDatabase:
                     },
                 })
             return db_info
-
-    async def blacklist_token(self, jti: str, expires_at: datetime) -> None:
-        """
-        Registers a new blacklisted JTI token upon user logout.
-        """
-        async with self.get_app_db() as db, db.begin():
-            blacklisted = BlacklistedToken(jti=jti, expires_at=expires_at)
-            db.add(blacklisted)
-
-    async def is_token_blacklisted(self, jti: str) -> bool:
-        """
-        Checks if a JTI token has been blacklisted.
-        """
-        async with self.get_app_db() as db:
-            result = await db.execute(
-                select(BlacklistedToken).where(BlacklistedToken.jti == jti)
-            )
-            blacklisted = result.scalars().first()
-            return blacklisted is not None
 
     async def get_masking_rules(self, database_id: int) -> list[MaskingRule]:
         """
