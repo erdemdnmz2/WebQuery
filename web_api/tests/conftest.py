@@ -1,5 +1,6 @@
 import os
 import sys
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -40,6 +41,32 @@ import pytest_asyncio
 
 from app_database import AppDatabase
 from database_provider import DatabaseProvider
+
+
+def make_target_session_mock():
+    """A target-session double that serves both execution paths.
+
+    Reads go through `AsyncSession.stream()` so a large result set is never
+    materialised in the worker (P1-5); writes and anything the planner cannot
+    classify as a plain read still go through `execute()`. Both are wired to the
+    same `mock_result`, so a test only has to set `returns_rows` and
+    `fetchmany.return_value` as before.
+
+    Returns:
+        tuple: (mock_session, mock_result)
+    """
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_session.execute.return_value = mock_result
+
+    stream_result = AsyncMock()
+    stream_result.fetchmany = AsyncMock(
+        side_effect=lambda size=None: mock_result.fetchmany(size=size)
+    )
+    stream_result.close = AsyncMock()
+    mock_session.stream = AsyncMock(return_value=stream_result)
+
+    return mock_session, mock_result
 
 
 class FakeLoginThrottle:

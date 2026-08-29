@@ -287,6 +287,32 @@ class TestExplainAnalyze:
 
         assert result["return"] is True
 
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "SELECT 'EXPLAIN ANALYZE' AS note FROM orders",
+            "SELECT * FROM orders -- EXPLAIN ANALYZE is blocked here",
+            "SELECT * FROM orders /* EXPLAIN ANALYZE */",
+            'SELECT "EXPLAIN ANALYZE" FROM orders',
+        ],
+    )
+    def test_the_phrase_inside_a_literal_or_comment_is_not_a_block(
+        self, analyzer, query
+    ):
+        """The text check reads SQL, not prose (P2-20l)."""
+        result = analyzer.analyze(query, technology="postgresql")
+
+        assert result["return"] is True
+
+    def test_an_unterminated_literal_still_fails_closed(self, analyzer):
+        """A dangling quote must not let the stripper hide the real statement."""
+        result = analyzer.analyze(
+            "SELECT 'oops; EXPLAIN ANALYZE DELETE FROM orders",
+            technology="postgresql",
+        )
+
+        assert result["return"] is False
+
 
 class TestBatchTierMixing:
     """

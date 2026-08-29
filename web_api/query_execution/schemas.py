@@ -27,23 +27,6 @@ class SQLResponse(BaseModel):
     masked_columns: list[str] = []
 
 
-class ExecutionInfo(BaseModel):
-    """Execution information for multiple queries"""
-    db_uuid: str
-    query: str
-    ad_hoc_mask_columns: list[str] | None = None
-
-
-class MultipleQueryRequest(BaseModel):
-    """Multiple query execution request"""
-    execution_info: list[ExecutionInfo]
-
-
-class MultipleQueryResponse(BaseModel):
-    """Multiple query execution response"""
-    results: list[SQLResponse]
-
-
 class DatabaseInformationResponse(BaseModel):
     """
     Database information response with server metadata

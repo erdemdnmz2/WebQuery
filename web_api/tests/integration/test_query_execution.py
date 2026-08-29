@@ -3,7 +3,7 @@ Integration tests for query execution endpoints.
 Verifies SELECT and DML/non-SELECT query execution paths, safety, and Role-Based Access Control (RBAC).
 """
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from app import app
 from app_database.models import Databases, User, UserDatabaseAssociation
+from tests.conftest import make_target_session_mock
 
 
 @pytest.fixture
@@ -18,10 +19,7 @@ def mock_db_session():
     """
     Fixture that patches DatabaseProvider.get_session to return a mock session.
     """
-    mock_session = AsyncMock()
-    mock_result = MagicMock()
-    
-    mock_session.execute.return_value = mock_result
+    mock_session, mock_result = make_target_session_mock()
     
     @asynccontextmanager
     async def fake_get_session(user, db_uuid, tier="ro"):
@@ -233,7 +231,8 @@ async def test_reader_blocked_from_dml(async_client: AsyncClient, mock_db_sessio
         "db_uuid": db_uuid
     }
     response = await async_client.post("/api/execute_query", json=query_payload)
-    assert response.status_code == 400
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "QUERY_ROLE_DENIED"
     assert "not authorized to execute" in response.text
 
 @pytest.mark.asyncio
@@ -295,7 +294,8 @@ async def test_writer_blocked_from_ddl(async_client: AsyncClient, mock_db_sessio
         "db_uuid": db_uuid
     }
     response = await async_client.post("/api/execute_query", json=query_payload)
-    assert response.status_code == 400
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "QUERY_ROLE_DENIED"
     assert "not authorized to execute" in response.text
 
 
@@ -383,7 +383,8 @@ async def test_multi_role_query_execution(async_client: AsyncClient, mock_db_ses
         "db_uuid": db_uuid
     }
     response_ddl = await async_client.post("/api/execute_query", json=ddl_payload)
-    assert response_ddl.status_code == 400
+    assert response_ddl.status_code == 403
+    assert response_ddl.json()["error_code"] == "QUERY_ROLE_DENIED"
     assert "not authorized to execute" in response_ddl.text
 
 
@@ -450,6 +451,7 @@ async def test_admin_cannot_skip_a_hard_blocked_query(
     )
 
     assert response.status_code == 400
+    assert response.json()["error_code"] == "QUERY_BLOCKED"
     assert "pg_read_file" in response.text
     mock_session.execute.assert_not_called()
 
@@ -473,3 +475,72 @@ async def test_admin_still_skips_approval_for_a_reviewable_risk(
 
     assert response.status_code == 200
     mock_session.execute.assert_called_once()
+
+
+# --- P1-3: GET /api/masking_rules performed no access check ------------------
+#
+# The endpoint resolved a database by UUID and returned its masked column names
+# with no association check at all. Any authenticated user holding a UUID could
+# enumerate a foreign database's sensitive columns (`salary`, `tckn`, `iban`, …).
+
+
+async def _register_and_login(async_client: AsyncClient, email: str, username: str) -> None:
+    credentials = {"email": email, "password": "StrongPassword123!"}
+    await async_client.post(
+        "/api/register", json={"username": username, **credentials}
+    )
+    await async_client.post("/api/login", json=credentials)
+
+
+@pytest.mark.asyncio
+async def test_masking_rules_requires_an_association(async_client: AsyncClient):
+    from app_database.models import MaskingRule
+
+    app_db = app.state.context.app_db
+    async with app_db.get_app_db() as db:
+        target = Databases(
+            servername="masking-server",
+            database_name="masking-db",
+            technology="postgresql",
+        )
+        db.add(target)
+        await db.commit()
+        await db.refresh(target)
+        db_uuid, db_id = str(target.uuid), target.id
+        db.add(
+            MaskingRule(
+                database_id=db_id,
+                table_name="Employees",
+                column_name="salary",
+                masking_type="full",
+                is_active=True,
+            )
+        )
+        await db.commit()
+
+    app.state.context.db_provider.set_db_info(await app_db.get_db_info())
+
+    # An authenticated user with no association must be refused, not answered
+    # with an empty list — "no rules" and "no access" have to stay distinct.
+    await _register_and_login(async_client, "outsider@example.com", "outsider")
+    denied = await async_client.get("/api/masking_rules", params={"db_uuid": db_uuid})
+    assert denied.status_code == 403
+    assert denied.json()["error_code"] == "DATABASE_ACCESS_DENIED"
+    assert "salary" not in denied.text
+
+    # An associated user still gets the list.
+    await _register_and_login(async_client, "insider@example.com", "insider")
+    async with app_db.get_app_db() as db:
+        insider = (
+            await db.execute(select(User).where(User.email == "insider@example.com"))
+        ).scalars().first()
+        db.add(
+            UserDatabaseAssociation(
+                user_id=insider.id, database_id=db_id, role="READER", is_admin=False
+            )
+        )
+        await db.commit()
+
+    allowed = await async_client.get("/api/masking_rules", params={"db_uuid": db_uuid})
+    assert allowed.status_code == 200
+    assert allowed.json() == ["salary"]

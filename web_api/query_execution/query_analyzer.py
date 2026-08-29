@@ -3,6 +3,7 @@ Query Analyzer
 SQL query security and performance analysis via AST parsing
 """
 import re
+from dataclasses import dataclass, field
 from enum import Enum
 
 import sqlglot
@@ -61,6 +62,40 @@ _MAX_SLEEP_SECONDS = 5
 # accepts the British spelling as a synonym, so ANALYSE has to match too.
 _EXPLAIN_ANALYZE_RE = re.compile(r"\bEXPLAIN\b[^;]*\bANALY[SZ]E\b", re.IGNORECASE)
 
+# Everything a raw-text check must not read as SQL keywords: comments, string
+# literals, and the four identifier-quoting styles across our dialects. Matched
+# in one pass so the leftmost construct wins - `-- it's fine` is a comment that
+# happens to contain a quote, and `'a -- b'` is a literal that happens to
+# contain a comment marker.
+_SQL_NOISE_RE = re.compile(
+    r"""
+      (?P<line_comment>--[^\n]*)
+    | (?P<block_comment>/\*.*?\*/)
+    | (?P<string>'(?:[^']|'')*')
+    | (?P<double_quoted>"(?:[^"]|"")*")
+    | (?P<bracketed>\[[^\]]*\])
+    | (?P<backticked>`(?:[^`]|``)*`)
+    """,
+    re.VERBOSE | re.DOTALL,
+)
+
+# A quote character surviving the strip means the literal was never closed.
+_UNTERMINATED_QUOTE_RE = re.compile(r"['\"`]")
+
+
+def _strip_sql_noise(query: str) -> str:
+    """Blank out comments, literals and quoted identifiers for text scanning.
+
+    Returns the query unchanged when a quote is left dangling: an unterminated
+    literal would otherwise swallow the rest of the statement and could hide the
+    very construct the caller is scanning for. Such a query does not parse
+    either, so ``analyze`` blocks it a step later regardless.
+    """
+    stripped = _SQL_NOISE_RE.sub(" ", query)
+    if _UNTERMINATED_QUOTE_RE.search(stripped):
+        return query
+    return stripped
+
 _DDL_TYPES = (exp.Drop, exp.Create, exp.Alter, exp.TruncateTable)
 _DML_TYPES = (exp.Insert, exp.Update, exp.Delete, exp.Merge)
 
@@ -98,6 +133,58 @@ def _anonymous_name(call: exp.Anonymous) -> str:
     return name.lower() if isinstance(name, str) else ""
 
 
+_READ_ROOTS = (exp.Select, exp.Union, exp.Subquery)
+
+
+@dataclass(frozen=True)
+class QueryPlan:
+    """One parse of one submitted query, shared by every check that follows.
+
+    Executing a single query used to re-parse the same SQL three times
+    (`check_permissions_match_role` → `required_tier` → `analyze`) and four times
+    on the workspace path, where `hard_block_reason` parsed it again. sqlglot
+    parsing is not free and all of it ran synchronously on the event loop.
+
+    Building the plan is also the one place that can raise
+    `sqlglot.errors.ParseError`, so callers have a single point at which to
+    decide what an unparsable statement means to them.
+    """
+
+    query: str
+    technology: str
+    dialect: str
+    statements: list[exp.Expression]
+    #: Set when a pre-parse check already refuses the query (EXPLAIN ANALYZE).
+    explain_block: str | None = None
+    tier: str = "ro"
+    #: True only when every statement is a plain read with no Command node.
+    #: Deliberately conservative: it selects the streaming execution path, and
+    #: anything uncertain must keep the buffered path it has today.
+    is_pure_read: bool = False
+    #: Lowercased table names referenced anywhere in the batch, in both bare and
+    #: schema-qualified form, used to scope masking rules to the tables actually
+    #: queried.
+    tables: frozenset[str] = field(default_factory=frozenset)
+
+
+def _referenced_tables(statements: list[exp.Expression]) -> frozenset[str]:
+    """Collect every table name in the batch, bare and schema-qualified."""
+    names: set[str] = set()
+    for statement in statements:
+        for table in statement.find_all(exp.Table):
+            bare = (table.name or "").lower()
+            if not bare:
+                continue
+            names.add(bare)
+            schema = (table.db or "").lower()
+            if schema:
+                names.add(f"{schema}.{bare}")
+            catalog = (table.catalog or "").lower()
+            if catalog and schema:
+                names.add(f"{catalog}.{schema}.{bare}")
+    return frozenset(names)
+
+
 def hard_block_reason(
     analyzer: "QueryAnalyzer", query: str, technology: str = "mssql"
 ) -> str | None:
@@ -110,6 +197,14 @@ def hard_block_reason(
     checks that have no door at all.
     """
     analysis = analyzer.analyze(query, technology=technology)
+    if analysis.get("risk_type") in HARD_BLOCKED_RISKS:
+        return analysis.get("reason") or "Bu sorgu güvenlik politikası gereği engellendi."
+    return None
+
+
+def hard_block_reason_for(analyzer: "QueryAnalyzer", plan: QueryPlan) -> str | None:
+    """`hard_block_reason` against an already-parsed plan."""
+    analysis = analyzer.analyze_plan(plan)
     if analysis.get("risk_type") in HARD_BLOCKED_RISKS:
         return analysis.get("reason") or "Bu sorgu güvenlik politikası gereği engellendi."
     return None
@@ -135,6 +230,46 @@ class QueryAnalyzer:
         """Map a registered technology name onto a sqlglot dialect."""
         return _DIALECT_BY_TECHNOLOGY.get(technology.lower().strip(), "tsql")
 
+    def plan(self, query: str, technology: str = "mssql") -> QueryPlan:
+        """Parse a query once and derive everything the execution path needs.
+
+        Raises:
+            sqlglot.errors.ParseError: The statement did not parse. Callers
+                decide what that means: `analyze` treats it as a hard block,
+                the execution path turns it into a syntax error for the user.
+        """
+        q = query.strip()
+        dialect = self._dialect(technology)
+        statements = [statement for statement in sqlglot.parse(q, read=dialect) if statement]
+
+        tier = "ro"
+        for statement in statements:
+            statement_tier = self._statement_tier(statement)
+            if statement_tier == "ddl":
+                tier = "ddl"
+                break
+            if statement_tier == "rw":
+                tier = "rw"
+
+        # A batch qualifies for streaming only if every statement is a plain
+        # read. `exp.Command` is sqlglot's opaque fallback, so its result shape
+        # is unknown and it stays on the buffered path.
+        is_pure_read = bool(statements) and tier == "ro" and all(
+            isinstance(statement, _READ_ROOTS) and not any(statement.find_all(exp.Command))
+            for statement in statements
+        )
+
+        return QueryPlan(
+            query=q,
+            technology=technology,
+            dialect=dialect,
+            statements=statements,
+            explain_block=self.check_explain(q),
+            tier=tier,
+            is_pure_read=is_pure_read,
+            tables=_referenced_tables(statements),
+        )
+
     def analyze(self, query: str, technology: str = "mssql") -> dict[str, any]:
         """
         Analyzes SQL query and performs risk assessment using sqlglot with target database dialect.
@@ -148,30 +283,40 @@ class QueryAnalyzer:
             when a check has something specific to say - ``reason`` (str) and
             ``warnings`` (list[str]).
         """
-        result: dict[str, any] = {"risk_type": None, "return": True}
-        q: str = query.strip()
-        dialect: str = self._dialect(technology)
-
         # Checked before parsing: sqlglot sees EXPLAIN ANALYZE as one opaque
         # command, so by the time we have an AST the wrapped statement is gone.
-        explain_block = self.check_explain(q)
+        explain_block = self.check_explain(query.strip())
         if explain_block:
-            result["risk_type"] = RiskLevel.BLOCKED_OPERATION.value
-            result["reason"] = explain_block
-            result["return"] = False
-            return result
+            return {
+                "risk_type": RiskLevel.BLOCKED_OPERATION.value,
+                "reason": explain_block,
+                "return": False,
+            }
 
         try:
-            # Parse all statements in the query using the matched dialect.
-            statements = sqlglot.parse(q, read=dialect)
+            plan = self.plan(query, technology=technology)
         except sqlglot.errors.ParseError:
             # If the SQL is malformed or uses obfuscated syntax that breaks the parser,
             # block it entirely to prevent bypasses.
-            result["risk_type"] = RiskLevel.SQL_INJECTION.value
-            result["reason"] = "Sorgu ayrıştırılamadı ve güvenlik gereği engellendi."
+            return {
+                "risk_type": RiskLevel.SQL_INJECTION.value,
+                "reason": "Sorgu ayrıştırılamadı ve güvenlik gereği engellendi.",
+                "return": False,
+            }
+
+        return self.analyze_plan(plan)
+
+    def analyze_plan(self, plan: QueryPlan) -> dict[str, any]:
+        """Risk assessment against an already-parsed plan."""
+        result: dict[str, any] = {"risk_type": None, "return": True}
+
+        if plan.explain_block:
+            result["risk_type"] = RiskLevel.BLOCKED_OPERATION.value
+            result["reason"] = plan.explain_block
             result["return"] = False
             return result
 
+        statements = plan.statements
         mixed_ddl = self._mixed_ddl_batch(statements)
         if mixed_ddl:
             result["risk_type"] = RiskLevel.BLOCKED_OPERATION.value
@@ -223,8 +368,13 @@ class QueryAnalyzer:
         return result
 
     def check_explain(self, query: str) -> str | None:
-        """EXPLAIN ANALYZE runs the statement it wraps - block it."""
-        if _EXPLAIN_ANALYZE_RE.search(query):
+        """EXPLAIN ANALYZE runs the statement it wraps - block it.
+
+        Scans the query with comments and literals blanked out, so
+        ``SELECT 'EXPLAIN ANALYZE' AS note`` is not refused for quoting the
+        phrase it is describing.
+        """
+        if _EXPLAIN_ANALYZE_RE.search(_strip_sql_noise(query)):
             return ("EXPLAIN ANALYZE, sarılan sorguyu gerçekten çalıştırır ve "
                     "bu nedenle izin verilmiyor. Düz EXPLAIN kullanın.")
         return None
@@ -275,20 +425,9 @@ class QueryAnalyzer:
         statement receives the highest tier so a caller can safely fail closed.
         """
         try:
-            statements = sqlglot.parse(query.strip(), read=self._dialect(technology))
+            return self.plan(query, technology=technology).tier
         except sqlglot.errors.ParseError:
             return "ddl"
-
-        tier = "ro"
-        for statement in statements:
-            if not statement:
-                continue
-            statement_tier = self._statement_tier(statement)
-            if statement_tier == "ddl":
-                return "ddl"
-            if statement_tier == "rw":
-                tier = "rw"
-        return tier
 
     def _check_dangerous_functions(self, stmt: exp.Expression) -> str | None:
         """Return a rejection reason for a blocked function name, else None."""
@@ -369,17 +508,17 @@ class QueryAnalyzer:
 
             bool: True if query is permitted under at least one of the roles, False otherwise.
         """
-        q = query.strip()
-        dialect = self._dialect(technology)
         # A query that will not parse is not a permission decision. Swallowing the
         # parse error here made every typo surface as "your role is not authorized",
         # which sends the user to their administrator instead of to their SQL.
         # The caller turns this into a syntax error; the query is still blocked.
-        statements = sqlglot.parse(q, read=dialect)
+        return self.permits_role(self.plan(query, technology=technology), role)
 
+    def permits_role(self, plan: QueryPlan, role: str) -> bool:
+        """`check_permissions_match_role` against an already-parsed plan."""
         roles_list = parse(role)
 
-        for stmt in statements:
+        for stmt in plan.statements:
             if not stmt:
                 continue
 

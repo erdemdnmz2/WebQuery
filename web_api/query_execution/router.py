@@ -5,7 +5,7 @@ All routes are strictly typed and documented.
 """
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.future import select
 
 from app_database.app_database import AppDatabase
@@ -55,44 +55,10 @@ async def execute_query(
     return result
 
 
-@router.post("/multiple_query", response_model=query_models.MultipleQueryResponse)
-async def multiple_query(
-    request: Request,
-    query_request: query_models.MultipleQueryRequest,
-    current_user: User = Depends(get_current_user),
-    query_service: QueryService = Depends(get_query_service)
-) -> query_models.MultipleQueryResponse:
-    """
-    Executes multiple SQL queries sequentially.
-    
-    Args:
-        request: The multiple SQL queries request payload.
-        current_user: The authenticated user instance.
-        query_service: The query execution service instance.
-        
-    Returns:
-        query_models.MultipleQueryResponse: The list of results for each executed query.
-    """
-    if len(query_request.execution_info) > config.MULTIPLE_QUERY_COUNT:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Too many queries. Maximum: {config.MULTIPLE_QUERY_COUNT}"
-        )
-    
-    client_ip: str | None = request.client.host if request.client else None
-    results: list[dict[str, Any]] = []
-    
-    for execution_info in query_request.execution_info:
-        result: dict[str, Any] = await query_service.execute_query(
-            query=execution_info.query,
-            user=current_user,
-            db_uuid=execution_info.db_uuid,
-            ad_hoc_mask_columns=execution_info.ad_hoc_mask_columns,
-            client_ip=client_ip,
-        )
-        results.append(result)
-    
-    return query_models.MultipleQueryResponse(results=results)
+# `POST /api/multiple_query` was removed (OQ-2026-012). It carried no rate limit
+# while running up to MULTIPLE_QUERY_COUNT statements per request, which made it
+# a way to bypass the per-request limit on /execute_query, and no client ever
+# called it. See docs/specs/SPEC-0022-audit-remediation-p0.md.
 
 
 @router.get("/database_information", response_model=query_models.DatabaseInformationResponse)
@@ -167,6 +133,12 @@ async def get_masking_rules(
 ) -> list[str]:
     """
     Returns the list of column names persistently masked by admin for the given database UUID.
+
+    Scoped to databases the caller is associated with. Without that check any
+    authenticated user could hand over a UUID and read the sensitive column
+    names (`salary`, `tckn`, `iban`, …) of a database they have no access to —
+    a useful schema-discovery primitive. `database_information` already applies
+    the same narrowing.
     """
-    rules = await query_service.get_active_masking_rules(db_uuid)
+    rules = await query_service.get_active_masking_rules(db_uuid, user=current_user)
     return rules
