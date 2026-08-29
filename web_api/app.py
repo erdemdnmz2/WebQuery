@@ -39,6 +39,7 @@ from middlewares import AuthMiddleware
 from middlewares.trace_middleware import TraceMiddleware
 from slack_integration import SlackListener
 
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -47,16 +48,17 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     verify_startup_config()
-    print("🚀 Application starting...")
+    logger.info("Uygulama başlatılıyor")
 
     try:
         app.state.login_throttle = RedisLoginThrottle.from_environment()
         await app.state.login_throttle.ping()
-        print("✓ Redis login throttle connection successful")
+        logger.info("Redis giriş kısıtlayıcı bağlantısı doğrulandı")
     except (LoginThrottleUnavailable, ValueError) as exc:
-        print("\n❌ FATAL: Redis login throttle connection error!")
-        print(f"   Error: {type(exc).__name__}: {exc}")
-        print("   Application cannot start without Redis login protection.\n")
+        logger.critical(
+            "Redis giriş kısıtlayıcı bağlantısı kurulamadı: %s; uygulama başlatılmayacak",
+            type(exc).__name__,
+        )
         raise SystemExit(1) from exc
     
     try:
@@ -71,17 +73,17 @@ async def lifespan(app: FastAPI):
             # than trusted. verify_schema raises SystemExit, which is a
             # BaseException and deliberately passes through the handler below.
             await conn.run_sync(verify_schema)
-        print("✓ AppDatabase connection successful, schema verified")
+        logger.info("Uygulama veritabanı bağlantısı ve şema doğrulandı")
         # Schema is managed by Alembic (`alembic upgrade head`, run in
         # entrypoint.sh before this process starts) — see
         # docs/adr/ADR-0001-schema-migrations-alembic.md. Two instances
         # calling create_all() concurrently on startup raced on schema
         # changes and couldn't add columns to existing tables.
     except Exception as e:
-        print("\n❌ FATAL: AppDatabase connection error!")
-        print(f"   Error: {type(e).__name__}: {e}")
-        print("   Please check the APP_DATABASE_URL environment variable")
-        print("   Application cannot start!\n")
+        logger.critical(
+            "Uygulama veritabanı başlatılamadı: %s; APP_DATABASE_URL ayarını kontrol edin",
+            type(e).__name__,
+        )
         await app.state.app_db.app_engine.dispose() if hasattr(app.state, 'app_db') else None
         raise SystemExit(1)
     
@@ -93,20 +95,22 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(slack_listener.start())
 
     except Exception as e:
-        print(f"⚠️ Slack integration could not be started: {e}")
-        print("   Slack features will be disabled, but the application will continue to run.")
+        logger.warning(
+            "Slack entegrasyonu başlatılamadı: %s; Slack özellikleri devre dışı kalacak",
+            type(e).__name__,
+        )
 
     try:
         app.state.db_provider = DatabaseProvider()
         db_info = await app.state.app_db.get_db_info()
         app.state.db_provider.set_db_info(db_info)
         await app.state.db_provider.start_cache_loop()
-        print("✓ DatabaseProvider ready, db_info loaded, and cache loop started")
+        logger.info("Hedef veritabanı sağlayıcısı ve engine cache başlatıldı")
     except Exception as e:
-        print("\n❌ FATAL: DatabaseProvider initialization error!")
-        print(f"   Error: {type(e).__name__}: {e}")
-        print("   Please check the SQL_SERVER_NAMES environment variable and SQL Server connections")
-        print("   Application cannot start!\n")
+        logger.critical(
+            "Hedef veritabanı sağlayıcısı başlatılamadı: %s; bağlantı yapılandırmasını kontrol edin",
+            type(e).__name__,
+        )
         # Cleanup
         await app.state.app_db.app_engine.dispose()
         raise SystemExit(1)
@@ -118,34 +122,34 @@ async def lifespan(app: FastAPI):
             app_db=app.state.app_db,
             db_provider=app.state.db_provider
         )
-        print("✓ AppContext initialized successfully")
+        logger.info("Uygulama bağlamı başlatıldı")
     except Exception as e:
-        print(f"\n❌ FATAL: AppContext initialization error: {e}")
+        logger.critical("Uygulama bağlamı başlatılamadı: %s", type(e).__name__)
         await app.state.app_db.app_engine.dispose()
         raise SystemExit(1)
 
-    print("All services started successfully\n")
+    logger.info("Tüm servisler başlatıldı")
 
     try:
         yield
     finally:
-        print("\nApplication shutting down...")
+        logger.info("Uygulama kapatılıyor")
         if getattr(app.state, "login_throttle", None):
             await app.state.login_throttle.close()
-            print("✓ Redis login throttle connection closed")
+            logger.info("Redis giriş kısıtlayıcı bağlantısı kapatıldı")
         try:
             if hasattr(app.state, 'db_provider') and app.state.db_provider:
                 await app.state.db_provider.close_engines()
-                print("✓ DatabaseProvider connections closed")
+                logger.info("Hedef veritabanı bağlantıları kapatıldı")
         except Exception as e:
-            print(f"DatabaseProvider shutdown error: {e}")
+            logger.error("Hedef veritabanı sağlayıcısı kapatılamadı: %s", type(e).__name__)
         try:
             if hasattr(app.state, 'app_db') and app.state.app_db:
                 await app.state.app_db.app_engine.dispose()
-                print("✓ AppDatabase connection closed")
+                logger.info("Uygulama veritabanı bağlantısı kapatıldı")
         except Exception as e:
-            print(f"AppDatabase shutdown error: {e}")
-        print("Shutdown complete")
+            logger.error("Uygulama veritabanı bağlantısı kapatılamadı: %s", type(e).__name__)
+        logger.info("Uygulama kapatma işlemi tamamlandı")
 
 app = FastAPI(
     title="WebQuery API",
@@ -174,15 +178,20 @@ app.add_middleware(
 
 @app.exception_handler(BaseServiceException)
 async def service_exception_handler(request: Request, exc: BaseServiceException):
-    logger = logging.getLogger("web_api.exception")
+    exception_logger = logging.getLogger("web_api.exception")
     if exc.original_exception:
-        logger.error(
-            f"Service Exception [{exc.code}] on {request.url.path}: {exc.message} - "
-            f"Underlying Error: {type(exc.original_exception).__name__}: "
-            f"{redact_passwords(str(exc.original_exception))}"
+        exception_logger.error(
+            "Service exception [%s] at %s: %s; underlying %s: %s",
+            exc.code,
+            request.url.path,
+            exc.message,
+            type(exc.original_exception).__name__,
+            redact_passwords(str(exc.original_exception)),
         )
     else:
-        logger.warning(f"Service Exception [{exc.code}] on {request.url.path}: {exc.message}")
+        exception_logger.warning(
+            "Service exception [%s] at %s: %s", exc.code, request.url.path, exc.message
+        )
     
     trace_id = getattr(request.state, "request_id", "-")
     return JSONResponse(

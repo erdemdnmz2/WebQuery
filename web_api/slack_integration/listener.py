@@ -41,7 +41,7 @@ class SlackListener:
 
     async def start(self):
         if not SLACK_APP_TOKEN:
-            print("⚠️ SLACK_APP_TOKEN missing, Slack Socket Mode could not be started.")
+            logger.warning("SLACK_APP_TOKEN eksik; Slack Socket Mode başlatılamadı")
             return
         self.handler = AsyncSocketModeHandler(self.app, SLACK_APP_TOKEN)
         await self.handler.start_async()

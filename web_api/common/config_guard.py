@@ -2,7 +2,6 @@
 
 import logging
 import os
-import sys
 
 from cryptography.fernet import Fernet
 
@@ -29,7 +28,6 @@ _REQUIRED = (
 
 def _fail(message: str) -> None:
     logger.critical("KONFIGÜRASYON HATASI: %s", message)
-    print(f"\n❌ FATAL: {message}\n", file=sys.stderr)
     raise SystemExit(1)
 
 

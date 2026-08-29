@@ -4,6 +4,7 @@ FastAPI router for user login, registration, logout, and self-information.
 Strictly typed and documented.
 """
 import os
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -26,6 +27,7 @@ from common.roles import any_admin
 from dependencies import get_app_db
 
 router = APIRouter(prefix="/api")
+logger = logging.getLogger(__name__)
 
 # Using centralized limiter
 ACCESS_COOKIE = "access_token"
@@ -330,8 +332,8 @@ async def logout(
                 await app_db.blacklist_token(jti=jti, expires_at=expires_at)
             if payload.get("sid"):
                 await sessions.revoke_session(app_db, int(payload["sid"]), "logout")
-        except Exception as e:
-            print(f"Error blacklisting token on logout: {e}")
+        except Exception as exc:
+            logger.warning("Çıkış sırasında token iptal edilemedi: %s", type(exc).__name__)
 
     # Clear token from cookie
     response.delete_cookie(

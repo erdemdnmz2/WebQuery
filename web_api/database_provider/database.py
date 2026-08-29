@@ -1,4 +1,5 @@
 """Target database session provisioning with per-database role credentials."""
+import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -17,6 +18,8 @@ from database_provider.config import (
 )
 
 from .engine_cache import EngineCache
+
+logger = logging.getLogger(__name__)
 
 
 class DatabaseProvider:
@@ -69,6 +72,12 @@ class DatabaseProvider:
                 "databases": public_databases,
                 "technology": tech,
             }
+
+        logger.debug(
+            "Hedef veritabanı kataloğu güncellendi: %d sunucu, %d veritabanı",
+            len(self.db_info),
+            len(self.db_by_uuid),
+        )
 
     def _credentials_for(self, db_uuid: str, tier: str) -> tuple[str, str] | None:
         """Resolve one selected tier without exposing credentials to callers."""

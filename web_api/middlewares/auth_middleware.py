@@ -2,6 +2,7 @@
 Authentication Middleware
 Her HTTP request için JWT token doğrulama ve session kontrolü yapar
 """
+import logging
 import os
 
 from fastapi import Request
@@ -15,6 +16,8 @@ from app_database.models import User
 from authentication.services import get_user_id_from_payload, verify_token
 from authentication.sessions import session_alive
 from common.logging_config import user_id_var
+
+logger = logging.getLogger(__name__)
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -98,8 +101,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 raise HTTPException(status_code=401, detail="Invalid token")
 
             request.state.authenticated_user = authenticated_user
-        except Exception as e:
-            print(f"Auth verification failed: {e}")
+        except Exception as exc:
+            logger.warning("Kimlik doğrulama reddedildi: %s", type(exc).__name__)
             if request.url.path.startswith("/api/"):
                 return StarletteResponse(
                     content='{"detail":"Invalid token"}',

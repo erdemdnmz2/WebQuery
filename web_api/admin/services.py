@@ -373,8 +373,8 @@ class AdminApprovalService(BaseAdminService):
 
                             result_list.append(data)
             return result_list
-        except  Exception as e:
-            print(f"Error: {e!s}")
+        except Exception as exc:
+            logger.error("Onay bekleyen çalışma alanları alınamadı: %s", type(exc).__name__)
             return []
         
     async def execute_for_preview(
@@ -491,22 +491,22 @@ class AdminApprovalService(BaseAdminService):
                 "message": message,
                 "error": None
             }
-        except Exception as e:
+        except Exception as exc:
             if log_id:
                 await self.app_db.update_log(
                     log_id=log_id,
                     successfull=False,
-                    error=str(e)
+                    error=str(exc),
                 )
 
-            print(f"Query preview failed: {e}")
+            logger.error("Sorgu önizlemesi başarısız oldu: %s", type(exc).__name__)
             return {
                 "response_type": "error",
                 "data": [],
                 "columns": [],
                 "row_count": 0,
                 "message": None,
-                "error": str(e)
+                "error": str(exc),
             }
 
     async def reject_query_by_workspace_id(

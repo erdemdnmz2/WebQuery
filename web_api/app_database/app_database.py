@@ -4,6 +4,7 @@ Application database operations (user, log, workspace CRUD)
 """
 from contextlib import asynccontextmanager
 from datetime import datetime
+import logging
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -23,6 +24,8 @@ from .models import (
     User,
 )
 from .schemas import UserCreate
+
+logger = logging.getLogger(__name__)
 
 
 class AppDatabase:
@@ -264,7 +267,7 @@ class AppDatabase:
                 duration = datetime.now() - log.login_date
                 log.login_duration_ms = int(duration.total_seconds() * 1000)
             else:
-                print(f"Active login record NOT found for user {user_id}")
+                logger.warning("Aktif giriş kaydı bulunamadı: kullanıcı_id=%d", user_id)
         
     async def get_db_info(self) -> dict[str, dict[str, Any]]:
         """

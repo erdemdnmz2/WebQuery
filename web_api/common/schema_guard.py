@@ -33,17 +33,10 @@ def verify_schema(connection) -> None:
         logger.info("Şema doğrulandı: tüm index ve kısıtlar mevcut")
         return
 
-    detail = "\n".join(f"   - {item}" for item in missing)
     logger.critical(
-        "ŞEMA HATASI: %d şema garantisi eksik:\n%s", len(missing), detail
-    )
-    print(
-        "\n❌ FATAL: Uygulama veritabanı şeması eksik.\n"
-        f"{detail}\n\n"
-        "   Bu genellikle Alembic'ten önce create_all() ile kurulmuş bir\n"
-        "   veritabanında görülür. 'alembic upgrade head' çalıştırın; onarım\n"
-        "   revizyonu eksik index ve kısıtları oluşturur.\n"
-        "   Ayrıntı: docs/adr/ADR-0015-schema-integrity-startup-guard.md\n",
-        flush=True,
+        "ŞEMA HATASI: %d şema garantisi eksik: %s. Alembic onarımı için "
+        "docs/adr/ADR-0015-schema-integrity-startup-guard.md belgesine bakın.",
+        len(missing),
+        ", ".join(missing),
     )
     raise SystemExit(1)

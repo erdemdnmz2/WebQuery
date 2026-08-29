@@ -1,7 +1,13 @@
 
+import logging
+
 from sqlalchemy import create_engine, make_url, text
 
 from app_database.config import DATABASE_URL
+from common.logging_config import setup_logging
+
+setup_logging()
+logger = logging.getLogger(__name__)
 
 
 def create_database_and_user_if_not_exists():
@@ -10,7 +16,7 @@ def create_database_and_user_if_not_exists():
     Also handles custom user creation if DB_USER is not 'sa'.
     Uses a synchronous SQLAlchemy engine with AUTOCOMMIT isolation level.
     """
-    print("Checking database and user configuration...")
+    logger.info("Uygulama veritabanı ve kullanıcı yapılandırması denetleniyor")
     try:
         # Parse the configured URL (which might use a custom user)
         url = make_url(DATABASE_URL)
@@ -29,29 +35,31 @@ def create_database_and_user_if_not_exists():
         )
         
         # Create engine with AUTOCOMMIT (required for CREATE DATABASE)
-        engine = create_engine(sa_url, echo=True, isolation_level="AUTOCOMMIT")
+        # SQL echo may include the CREATE LOGIN password literal. Keep SQL
+        # statement logging disabled during bootstrap.
+        engine = create_engine(sa_url, echo=False, isolation_level="AUTOCOMMIT")
         
         with engine.connect() as conn:
             # 1. Create Database if not exists
             result = conn.execute(text(f"SELECT 1 FROM sys.databases WHERE name = '{target_db}'"))
             if not result.scalar():
-                print(f"Database '{target_db}' does not exist. Creating...")
+                logger.info("Uygulama veritabanı oluşturuluyor")
                 conn.execute(text(f"CREATE DATABASE {target_db}"))
-                print(f"Database '{target_db}' created successfully.")
+                logger.info("Uygulama veritabanı oluşturuldu")
             else:
-                print(f"Database '{target_db}' already exists.")
+                logger.info("Uygulama veritabanı zaten mevcut")
 
             # 2. Create User if not 'sa'
             if target_user and target_user.lower() != 'sa':
-                print(f"Checking configuration for user '{target_user}'...")
+                logger.info("Uygulama veritabanı kullanıcısı denetleniyor")
                 
                 # Check if Login exists
                 login_check = conn.execute(text(f"SELECT 1 FROM sys.server_principals WHERE name = '{target_user}'"))
                 if not login_check.scalar():
-                    print(f"Login '{target_user}' does not exist. Creating...")
+                    logger.info("Uygulama veritabanı giriş hesabı oluşturuluyor")
                     # Create Login
                     conn.execute(text(f"CREATE LOGIN {target_user} WITH PASSWORD = '{target_password}'"))
-                    print(f"Login '{target_user}' created.")
+                    logger.info("Uygulama veritabanı giriş hesabı oluşturuldu")
                 
                 # Switch to target database to create User and assign roles
                 conn.execute(text(f"USE {target_db}"))
@@ -59,17 +67,19 @@ def create_database_and_user_if_not_exists():
                 # Check if User exists in DB
                 user_check = conn.execute(text(f"SELECT 1 FROM sys.database_principals WHERE name = '{target_user}'"))
                 if not user_check.scalar():
-                    print(f"User '{target_user}' does not exist in database '{target_db}'. Creating...")
+                    logger.info("Uygulama veritabanı kullanıcısı oluşturuluyor")
                     conn.execute(text(f"CREATE USER {target_user} FOR LOGIN {target_user}"))
                     conn.execute(text(f"ALTER ROLE db_owner ADD MEMBER {target_user}"))
-                    print(f"User '{target_user}' created and added to db_owner role.")
+                    logger.info("Uygulama veritabanı kullanıcısı ve rolü oluşturuldu")
                 else:
-                    print(f"User '{target_user}' already exists in database.")
+                    logger.info("Uygulama veritabanı kullanıcısı zaten mevcut")
 
         engine.dispose()
-    except Exception as e:
-        print(f"Warning: Could not check/create database or user: {e}")
-        print("Proceeding to table creation (this might fail if user/db doesn't exist)...")
+    except Exception as exc:
+        logger.warning(
+            "Uygulama veritabanı veya kullanıcı denetlenemedi: %s; başlangıç akışı devam ediyor",
+            type(exc).__name__,
+        )
 
 if __name__ == "__main__":
     # Only the database/login bootstrap runs here. Table schema is managed

@@ -3,6 +3,7 @@ Authentication Service Layer
 JWT token generation, verification, and user authorization operations.
 """
 import uuid
+import logging
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, Request, status
@@ -14,6 +15,8 @@ from app_database.models import User
 from authentication import config
 from authentication.schemas import TokenData
 from authentication.sessions import session_alive
+
+logger = logging.getLogger(__name__)
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
@@ -106,8 +109,8 @@ async def get_current_user(
         if user_id is None:
             raise credentials_exception
         token_data = TokenData(sub=user_id)
-    except JWTError as e:
-        print(f"JWT Error: {e!s}")
+    except JWTError:
+        logger.warning("Geçersiz JWT reddedildi")
         raise credentials_exception
         
     # Check if token is blacklisted

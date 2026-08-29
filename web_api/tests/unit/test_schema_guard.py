@@ -27,7 +27,7 @@ def test_complete_schema_starts(schema_engine):
         verify_schema(connection)  # must not raise
 
 
-def test_missing_index_stops_startup(schema_engine, capsys):
+def test_missing_index_stops_startup(schema_engine, caplog):
     with schema_engine.begin() as connection:
         connection.execute(sa.text("DROP INDEX ix_Databases_uuid"))
 
@@ -35,9 +35,8 @@ def test_missing_index_stops_startup(schema_engine, capsys):
         verify_schema(connection)
 
     assert exit_info.value.code == 1
-    output = capsys.readouterr().out
-    assert "ix_Databases_uuid" in output
-    assert "alembic upgrade head" in output
+    assert "ix_Databases_uuid" in caplog.text
+    assert "Alembic" in caplog.text
 
 
 def test_missing_unique_constraint_stops_startup(schema_engine):

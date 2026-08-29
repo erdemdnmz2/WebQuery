@@ -28,7 +28,7 @@ class TraceMiddleware(BaseHTTPMiddleware):
         trace_token = trace_id_var.set(request_id)
         
         # 3. Log request initiation
-        logger.info(f"Request started: {request.method} {request.url.path}")
+        logger.info("İstek başladı: %s %s", request.method, request.url.path)
         
         start_time: float = time.time()
         try:
@@ -37,19 +37,24 @@ class TraceMiddleware(BaseHTTPMiddleware):
             # 4. Measure and log request completion
             process_time: float = (time.time() - start_time) * 1000
             logger.info(
-                f"Request completed: {request.method} {request.url.path} - "
-                f"Status: {response.status_code} - Duration: {process_time:.2f}ms"
+                "İstek tamamlandı: %s %s - durum: %d - süre: %.2fms",
+                request.method,
+                request.url.path,
+                response.status_code,
+                process_time,
             )
             
             # 5. Expose Trace ID in response headers
             response.headers["X-Request-ID"] = request_id
             return response
-        except Exception as e:
+        except Exception as exc:
             process_time: float = (time.time() - start_time) * 1000
             logger.error(
-                f"Request crashed: {request.method} {request.url.path} - "
-                f"Error: {type(e).__name__} - Duration: {process_time:.2f}ms",
-                exc_info=e
+                "İstek başarısız oldu: %s %s - hata: %s - süre: %.2fms",
+                request.method,
+                request.url.path,
+                type(exc).__name__,
+                process_time,
             )
             raise
         finally:
