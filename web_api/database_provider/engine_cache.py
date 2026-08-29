@@ -1,11 +1,18 @@
 import asyncio
 import hashlib
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from .config import TIME_INTERVAL_FOR_CACHE
+from .config import TIME_INTERVAL_FOR_CACHE, apply_statement_timeout
+
+logger = logging.getLogger(__name__)
+
+class EngineCacheExhaustedError(RuntimeError):
+    """Raised when the cache is at capacity and no pool can be evicted safely."""
+
 
 _POOL_BY_TIER = {
     "ro": {"pool_size": 10, "max_overflow": 20},
@@ -62,10 +69,21 @@ class EngineCache:
                 yield db_key, tier, tier_entry
 
     async def _evict_lru(self) -> None:
-        """Evict one least-recently-used pool, preferring an idle pool."""
+        """Evict the least-recently-used *idle* pool.
+
+        Only idle pools are eligible. Disposing a pool with checked-out
+        connections tears the pool out from under a query that is still running,
+        so when every pool is busy the cache refuses to grow instead — the
+        caller gets a clear error rather than a severed connection.
+        """
         entries = list(self._all_entries())
         idle = [entry for entry in entries if not self._is_engine_active(entry[2].engine)]
-        db_key, tier, entry = min(idle or entries, key=lambda item: item[2].last_accessed)
+        if not idle:
+            raise EngineCacheExhaustedError(
+                f"Engine cache is full ({self._max_engines}) and every pool is "
+                "serving an active query; try again shortly."
+            )
+        db_key, tier, entry = min(idle, key=lambda item: item[2].last_accessed)
         del self._cache[db_key].engines[tier]
         if not self._cache[db_key].engines:
             del self._cache[db_key]
@@ -78,6 +96,8 @@ class EngineCache:
         db_uuid: str | None = None,
         tier: str = "ro",
         connect_args: dict | None = None,
+        tech: str | None = None,
+        query_timeout_seconds: int = 0,
     ) -> AsyncEngine:
         """Return a pool keyed by target UUID and permission tier.
 
@@ -107,10 +127,16 @@ class EngineCache:
                 url,
                 pool_timeout=30,
                 pool_recycle=1800,
-                pool_pre_ping=False,
+                # A target server restart or a firewall dropping an idle
+                # connection leaves a stale entry in the pool; pool_recycle
+                # narrows that window but does not close it. The cost is one
+                # round-trip per checkout.
+                pool_pre_ping=True,
                 connect_args=connect_args or {},
                 **_POOL_BY_TIER[tier],
             )
+            if tech:
+                apply_statement_timeout(engine, tech, query_timeout_seconds)
             database_entry = self._cache.setdefault(db_key, EngineCacheEntry(db_uuid=db_key))
             database_entry.engines[tier] = TierEngineEntry(
                 engine=engine,
@@ -150,6 +176,13 @@ class EngineCache:
                             self._stats["engine_count"] -= 1
             except asyncio.CancelledError:
                 break
+            except Exception:
+                # An unexpected failure here used to end the loop silently,
+                # which meant TTL cleanup never ran again for the lifetime of
+                # the process and nothing said so. Log and keep the loop alive.
+                logger.exception(
+                    "Engine cache temizlik döngüsünde beklenmeyen hata; döngü sürüyor"
+                )
 
     async def stop_loop(self) -> None:
         if self._running:

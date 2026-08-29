@@ -1,7 +1,7 @@
 import asyncio
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -9,7 +9,7 @@ import pytest
 # Add the web_api directory to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from database_provider.engine_cache import EngineCache
+from database_provider.engine_cache import EngineCache, _now
 
 
 # Helper to mock AsyncEngine
@@ -98,7 +98,10 @@ async def test_ttl_cleanup(mock_create_engine):
     
     # Artificially age the entry to bypass wait time
     key = cache._hash_key(url)
-    cache._cache[key].engines["ro"].last_accessed = datetime.now() - timedelta(seconds=10)
+    # Must use the cache's own clock: `datetime.now()` is local time, so on a
+    # non-UTC server this "aged" value can land in the future and the entry
+    # never expires.
+    cache._cache[key].engines["ro"].last_accessed = _now() - timedelta(seconds=10)
     
     # Start loop and wait for it to process
     await cache.start_loop()

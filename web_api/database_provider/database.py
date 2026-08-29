@@ -147,6 +147,8 @@ class DatabaseProvider:
             db_uuid=db_uuid,
             tier=tier,
             connect_args=get_connect_args(tech, QUERY_TIMEOUT_SECONDS),
+            tech=tech,
+            query_timeout_seconds=QUERY_TIMEOUT_SECONDS,
         )
 
         AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -158,6 +160,21 @@ class DatabaseProvider:
                         text(init_sql.format(ms=QUERY_TIMEOUT_SECONDS * 1000))
                     )
                 yield session
+            except BaseException:
+                # Any failure inside the caller's block discards the batch.
+                await session.rollback()
+                raise
+            else:
+                # SQLAlchemy rolls an open transaction back on close(), so a
+                # write that is never committed here runs, reports a rowcount,
+                # is audited as successful — and then disappears. The `ro` tier
+                # is read-only by construction and stays uncommitted.
+                #
+                # Callers must have consumed their rows before this point:
+                # the `async with` block they wrote around this session has
+                # already exited, so fetching after the commit is not possible.
+                if tier != "ro":
+                    await session.commit()
             finally:
                 await session.close()
 
