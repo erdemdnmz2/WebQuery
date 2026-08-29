@@ -1,0 +1,31 @@
+version: '3.8'
+
+# Local development conveniences (OQ-2026-015). Compose loads this file
+# automatically alongside docker-compose.yml — `docker compose up` gets both,
+# with these values overriding the base. `docker compose -f docker-compose.yml
+# up` (no override) is what a production deploy uses instead.
+#
+# Do not add anything here that changes application behavior, only reachability
+# and iteration speed: a bind mount for live code edits, and direct host access
+# to services that production reaches only through nginx.
+
+services:
+  web:
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    volumes:
+      # Live-reloads the API on edit. The base file intentionally has no
+      # mount, so what ships in a built image is what is actually tested.
+      - ./web_api:/app
+    environment:
+      # Loosened from the base file's compose-network CIDR because a local
+      # setup often talks to `web` directly (curl, browser dev tools) rather
+      # than through nginx, so the request's peer IP is not a compose service.
+      - TRUSTED_PROXY_IPS=
+
+  db:
+    ports:
+      # Lets a local SQL client connect directly for debugging. The base file
+      # omits this: a target database open on the host network is exactly the
+      # exposure a production deploy must not have.
+      - "1433:1433"
