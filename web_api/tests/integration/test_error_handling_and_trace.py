@@ -2,8 +2,9 @@
 Centralized Exception Handling and Trace ID tracking integration tests.
 Verifies Trace ID headers, global exception routing, and error translation.
 """
+import uuid
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
@@ -11,6 +12,7 @@ from sqlalchemy import select
 
 from app import app
 from app_database.models import Databases, User, UserDatabaseAssociation
+from tests.conftest import make_target_session_mock
 
 
 @pytest.fixture
@@ -18,9 +20,7 @@ def mock_db_session():
     """
     Fixture that patches DatabaseProvider.get_session to return a mock session.
     """
-    mock_session = AsyncMock()
-    mock_result = MagicMock()
-    mock_session.execute.return_value = mock_result
+    mock_session, mock_result = make_target_session_mock()
     
     @asynccontextmanager
     async def fake_get_session(user, db_uuid, tier="ro"):
@@ -94,8 +94,11 @@ async def test_query_execution_error_translation(async_client: AsyncClient, mock
         db.add(assoc)
         await db.commit()
     
-    # 3. Configure mock session to raise a database execution exception (e.g. syntax error)
-    mock_session.execute.side_effect = Exception("column 'non_existent' does not exist")
+    # 3. Configure mock session to raise a database execution exception (e.g. syntax error).
+    # A plain SELECT takes the streaming path, so both entry points fail.
+    failure = Exception("column 'non_existent' does not exist")
+    mock_session.execute.side_effect = failure
+    mock_session.stream.side_effect = failure
     
     # 4. Execute query
     query_payload = {
@@ -151,3 +154,34 @@ async def test_workspace_not_found_error_translation(async_client: AsyncClient):
     # Verify Trace ID matches header
     assert "X-Request-ID" in response.headers
     assert resp_data["trace_id"] == response.headers["X-Request-ID"]
+
+
+# --- P2-10: X-Request-ID was accepted verbatim ------------------------------
+#
+# The header flowed straight into `AuditLog.trace_id`, a String(36) column, and
+# into the response. An oversized value could take the audit write down with a
+# database error, and a hand-picked one let a client file its requests under
+# another actor's trace.
+
+
+@pytest.mark.asyncio
+async def test_valid_uuid_request_id_is_honoured(async_client: AsyncClient):
+    supplied = "3f1d8b6a-2c4e-4f9a-9b1d-5e7a0c2f4b31"
+    response = await async_client.get("/health", headers={"X-Request-ID": supplied})
+    assert response.headers["X-Request-ID"] == supplied
+
+
+@pytest.mark.asyncio
+async def test_oversized_request_id_is_replaced(async_client: AsyncClient):
+    response = await async_client.get("/health", headers={"X-Request-ID": "A" * 200})
+    returned = response.headers["X-Request-ID"]
+    assert returned != "A" * 200
+    assert len(returned) == 36
+
+
+@pytest.mark.asyncio
+async def test_non_uuid_request_id_is_replaced(async_client: AsyncClient):
+    response = await async_client.get("/health", headers={"X-Request-ID": "../../etc/passwd"})
+    returned = response.headers["X-Request-ID"]
+    assert returned != "../../etc/passwd"
+    uuid.UUID(returned)

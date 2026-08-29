@@ -19,6 +19,17 @@ from common.logging_config import user_id_var
 
 logger = logging.getLogger(__name__)
 
+# Routes that must be reachable without a session. Compared for equality; see
+# the note in `dispatch`.
+SKIP_AUTH_PATHS: frozenset[str] = frozenset({
+    "/login",
+    "/register",
+    "/api/login",
+    "/api/register",
+    "/api/refresh",
+    "/health",
+})
+
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """
@@ -42,18 +53,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
         Returns:
             StarletteResponse: The HTTP response object.
         """
-        skip_auth_paths: list[str] = [
-            "/login", 
-            "/register", 
-            "/api/login", 
-            "/api/register",
-            "/api/refresh",
-            "/health"
-        ]
-        
-        if any(request.url.path.startswith(path) for path in skip_auth_paths):
+        # Matched exactly, not by prefix. `startswith` meant any future route
+        # beginning with one of these strings — `/api/registered_databases`,
+        # `/login-history` — would silently become unauthenticated, and nothing
+        # about adding that route would reveal it.
+        if request.url.path in SKIP_AUTH_PATHS:
             return await call_next(request)
-        
+
         token: str | None = request.cookies.get("access_token")
         if not token:
             if request.url.path.startswith("/api/"):
@@ -71,18 +77,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if not user_id:
                 raise HTTPException(status_code=401, detail="Invalid token")
                 
-            # Check JTI blacklist
-            jti = payload.get("jti")
-            if jti:
-                app_db = request.app.state.context.app_db
-                is_blacklisted = await app_db.is_token_blacklisted(jti)
-                if is_blacklisted:
-                    raise HTTPException(status_code=401, detail="Token has been revoked")
             session_id = payload.get("sid")
             if session_id is not None:
                 app_db = request.app.state.context.app_db
                 if not await session_alive(app_db, int(session_id), int(user_id)):
                     raise HTTPException(status_code=401, detail="Session has been revoked")
+                # `get_current_user` used to repeat this exact query on every
+                # authenticated request — the same question, the same answer,
+                # a third of the per-request database load for nothing.
+                request.state.session_verified = True
 
             # The middleware already has the user ID from the JWT. Load the
             # complete user once so account disablement takes effect before

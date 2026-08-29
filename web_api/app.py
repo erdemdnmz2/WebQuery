@@ -16,7 +16,7 @@ from common.logging_config import setup_logging
 setup_logging()
 
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -35,12 +35,30 @@ from common.exceptions import BaseServiceException
 from common.limiter import limiter
 from common.schema_guard import verify_schema
 from database_provider import DatabaseProvider
-from middlewares import AuthMiddleware
+from middlewares import AuthMiddleware, TrustedProxyMiddleware
 from middlewares.trace_middleware import TraceMiddleware
 from owner.bootstrap import ensure_active_owner
 from slack_integration import SlackListener
 
 logger = logging.getLogger(__name__)
+
+
+def _log_slack_listener_exit(task: "asyncio.Task[None]") -> None:
+    """Surface a Slack listener that dies on its own.
+
+    Without this the socket-mode connection could fail permanently and the only
+    symptom would be approvals silently never arriving.
+    """
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error(
+            "Slack dinleyicisi beklenmedik şekilde sonlandı: %s; "
+            "Slack onay akışı çalışmayacak",
+            type(exc).__name__,
+        )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -95,7 +113,14 @@ async def lifespan(app: FastAPI):
         # Start Slack Listener (Socket Mode)
         app.state.slack_listener = SlackListener(app_db=app_db)
         slack_listener = app.state.slack_listener
-        asyncio.create_task(slack_listener.start())
+        # Held on app.state, not dropped on the floor: asyncio keeps only a
+        # weak reference to a running task, so an unreferenced one can be
+        # garbage-collected mid-flight and the Slack approval channel would
+        # stop working with nothing in the logs to say why. The reference also
+        # gives shutdown something to cancel.
+        slack_task = asyncio.create_task(slack_listener.start())
+        slack_task.add_done_callback(_log_slack_listener_exit)
+        app.state.slack_task = slack_task
 
     except Exception as e:
         logger.warning(
@@ -137,6 +162,12 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         logger.info("Uygulama kapatılıyor")
+        slack_task = getattr(app.state, "slack_task", None)
+        if slack_task is not None and not slack_task.done():
+            slack_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await slack_task
+            logger.info("Slack dinleyicisi durduruldu")
         if getattr(app.state, "login_throttle", None):
             await app.state.login_throttle.close()
             logger.info("Redis giriş kısıtlayıcı bağlantısı kapatıldı")
@@ -179,6 +210,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Added last, so it is the outermost middleware and runs first. Everything that
+# reads the client address downstream — SlowAPIMiddleware's rate limit key, the
+# login throttle's IP bucket, and every audit `client_ip` — must see the address
+# this resolves, not the reverse proxy's own.
+app.add_middleware(TrustedProxyMiddleware)
+
 @app.exception_handler(BaseServiceException)
 async def service_exception_handler(request: Request, exc: BaseServiceException):
     exception_logger = logging.getLogger("web_api.exception")
@@ -197,16 +234,19 @@ async def service_exception_handler(request: Request, exc: BaseServiceException)
         )
     
     trace_id = getattr(request.state, "request_id", "-")
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "success": False,
-            "error_code": exc.code,
-            "message": exc.message,
-            "error": exc.message,  # Backward compatibility
-            "trace_id": trace_id
-        }
-    )
+    body = {
+        "success": False,
+        "error_code": exc.code,
+        "message": exc.message,
+        "error": exc.message,  # Backward compatibility
+        "trace_id": trace_id
+    }
+    # A few errors carry a list the caller must resolve before retrying; see
+    # BaseServiceException.response_context.
+    context = exc.response_context()
+    if context:
+        body.update(context)
+    return JSONResponse(status_code=exc.status_code, content=body)
 
 from authentication.router import router as auth_router
 
@@ -228,9 +268,6 @@ from workspaces.router import router as workspace_router
 
 app.include_router(workspace_router, tags=["Workspace"])
 
-# from static_files.router import router as static_router
-# app.include_router(static_router, tags=["Static Files"])
-
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -241,10 +278,21 @@ async def health_check():
     }
 
 if __name__ == "__main__":
+    # DEBUG defaults to false: with reload=True uvicorn ignores `workers`
+    # entirely and watches the filesystem, which is not a production server.
+    # Opting into auto-reload now has to be explicit.
+    debug = os.getenv("DEBUG", "false").strip().lower() == "true"
+    trusted_proxies = os.getenv("TRUSTED_PROXY_IPS", "").strip()
+
     uvicorn.run(
         "app:app",
         host=os.getenv("HOST", "0.0.0.0"),
         port=int(os.getenv("PORT", "8080")),
         workers=int(os.getenv("WORKERS", "1")),
-        reload=os.getenv("DEBUG", "True").lower() == "true"
+        reload=debug,
+        # Defence in depth alongside TrustedProxyMiddleware, which does the same
+        # resolution inside the app so it also holds under gunicorn or the
+        # uvicorn CLI. Never "*": that lets any client forge its own address.
+        proxy_headers=bool(trusted_proxies),
+        forwarded_allow_ips=trusted_proxies or None,
     )
