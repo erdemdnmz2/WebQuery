@@ -1,0 +1,11 @@
+# CI runs `ruff check .` informationally (see docs/adr/ADR-0002). This file
+# only silences a rule that's a false positive for this codebase's
+# framework, not a relaxation of real findings.
+
+[lint]
+ignore = [
+    # FastAPI's dependency injection idiom is `def route(x = Depends(get_x))`
+    # — a function call in a default argument, by design. ~70 of this
+    # codebase's ruff findings were this single false positive.
+    "B008",
+]

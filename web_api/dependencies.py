@@ -2,20 +2,20 @@
 Common Dependency Injection Functions
 All routers use these functions to retrieve service instances from app.state.
 """
-from fastapi import Request
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 
-from app_database.app_database import AppDatabase
-from database_provider import DatabaseProvider
-from authentication.services import get_current_user
-from app_database.models import Workspace, User, UserDatabaseAssociation
-from workspaces.exceptions import WorkspaceNotFoundError, WorkspaceAccessDeniedError
-
-from query_execution.services import QueryService
-from workspaces.services import WorkspaceService
 from admin.services import AdminService
+from app_database.app_database import AppDatabase
+from app_database.models import User, UserDatabaseAssociation, Workspace
+from authentication.services import get_current_user
+from common.roles import any_admin
+from database_provider import DatabaseProvider
 from notification import NotificationService
+from owner.services import OwnerService
+from query_execution.services import QueryService
+from workspaces.exceptions import WorkspaceAccessDeniedError, WorkspaceNotFoundError
+from workspaces.services import WorkspaceService
 
 
 class AppContext:
@@ -36,6 +36,7 @@ class AppContext:
         )
         self.workspace_service = WorkspaceService(app_db=self.app_db)
         self.admin_service = AdminService(app_db=self.app_db, db_provider=self.db_provider)
+        self.owner_service = OwnerService(app_db=self.app_db, db_provider=self.db_provider)
 
 
 def get_context(request: Request) -> AppContext:
@@ -85,6 +86,11 @@ def get_admin_service(context: AppContext = Depends(get_context)) -> AdminServic
     return context.admin_service
 
 
+def get_owner_service(context: AppContext = Depends(get_context)) -> OwnerService:
+    """Return the platform-scoped OWNER service."""
+    return context.owner_service
+
+
 def get_notification_service(context: AppContext = Depends(get_context)) -> NotificationService:
     """
     Returns the NotificationService instance from context.
@@ -109,14 +115,7 @@ async def admin_required(
         res = await db.execute(stmt)
         assocs = res.scalars().all()
         
-        is_admin = False
-        for assoc in assocs:
-            roles = [r.strip().upper() for r in assoc.role.split(",")]
-            if "ADMIN" in roles:
-                is_admin = True
-                break
-                
-        if not is_admin:
+        if not any_admin(assocs):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
             
     return current_user

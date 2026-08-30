@@ -2,43 +2,26 @@
 Authentication Service Layer
 JWT token generation, verification, and user authorization operations.
 """
-import base64
-import os
-import re
-import bcrypt
-import uuid
-from datetime import datetime, timedelta, UTC
-from typing import Optional
+import logging
+
+from fastapi import HTTPException, Request, status
 from jose import JWTError, jwt
-from fastapi import HTTPException, status, Request
 from sqlalchemy.future import select
 
-from authentication import config
-from app_database.models import User
-from authentication.schemas import TokenData
 from app_database.app_database import AppDatabase
+from app_database.models import User
+from authentication import config
+from authentication.schemas import TokenData
+from authentication.sessions import session_alive
+
+logger = logging.getLogger(__name__)
+
+# `create_access_token` was removed together with the token blacklist
+# (OQ-2026-014). Access tokens are minted by `sessions.mint_access`, which binds
+# them to a server-side `UserSession` row; revocation lives there.
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """
-    Generates a new JWT access token.
-    
-    Args:
-        data: Payload content (typically {"sub": user_id}).
-        expires_delta: Token expiration duration (defaults to config.ACCESS_TOKEN_EXPIRE_MINUTES).
-        
-    Returns:
-        str: Generated JWT token string.
-    """
-    to_encode = data.copy()
-    expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=config.ACCESS_TOKEN_EXPIRE_MINUTES))
-    jti = uuid.uuid4().hex
-    to_encode.update({"exp": expire, "jti": jti})
-    encoded_jwt = jwt.encode(to_encode, config.SECRET_KEY, algorithm=config.ALGORITHM)
-    return encoded_jwt
-
-
-def verify_token(token: str) -> Optional[dict]:
+def verify_token(token: str) -> dict | None:
     """
     Validates a JWT token.
     
@@ -55,7 +38,7 @@ def verify_token(token: str) -> Optional[dict]:
         return None
 
 
-def get_user_id_from_payload(payload: dict) -> Optional[str]:
+def get_user_id_from_payload(payload: dict) -> str | None:
     """
     Extracts the user_id (sub) from the token payload.
     
@@ -105,26 +88,34 @@ async def get_current_user(
     try:
         payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
         user_id: str = payload.get("sub")
-        jti: str = payload.get("jti")
         if user_id is None:
             raise credentials_exception
         token_data = TokenData(sub=user_id)
-    except JWTError as e:
-        print(f"JWT Error: {str(e)}")
+    except JWTError:
+        logger.warning("Geçersiz JWT reddedildi")
         raise credentials_exception
-        
-    # Check if token is blacklisted
-    if jti:
-        is_blacklisted = await app_db.is_token_blacklisted(jti)
-        if is_blacklisted:
+
+    # AuthMiddleware verifies the session once per request and records it. The
+    # query is only repeated when this dependency is used without the
+    # middleware — an isolated test, or a future non-middleware entry point.
+    session_id = payload.get("sid")
+    if session_id is not None and not getattr(request.state, "session_verified", False):
+        try:
+            if not await session_alive(app_db, int(session_id), int(user_id)):
+                raise credentials_exception
+        except (TypeError, ValueError):
             raise credentials_exception
-    
-    # Retrieve user from AppDatabase
-    async with app_db.get_app_db() as db:
-        result = await db.execute(select(User).filter(User.id == int(token_data.sub)))
-        user = result.scalars().first()
-    
+
+    # AuthMiddleware loads the user once per request and shares it through
+    # request.state. Keep a database fallback so this dependency remains safe
+    # when called without the middleware (for example in isolated tests).
+    user = getattr(request.state, "authenticated_user", None)
     if user is None:
+        async with app_db.get_app_db() as db:
+            result = await db.execute(select(User).filter(User.id == int(token_data.sub)))
+            user = result.scalars().first()
+
+    if user is None or not user.is_active:
         raise credentials_exception
     
     return user

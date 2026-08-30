@@ -1,0 +1,74 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "claude-code"
+  to: "user / next-session-agent"
+  created_at: "2026-08-21T16:35:00+03:00"
+  task: "Adım 2 devamı: CI'ı gerçekten yeşile taşımak (gerçek GitHub Actions'ta doğrulama) + ruff borcunun mekanik kısmının temizlenmesi"
+
+  scope:
+    completed:
+      - "İlk CI push'u (67efa45) GitHub Actions'ta gerçekten çalıştırıldı ve incelendi: 'Tests' adımı kırmızıydı — sebep yerelde gözlemlenenden FARKLI çıktı: SLACK_BOT_TOKEN hiç tanımlı olmadığı için SlackListener() constructor'da BoltError fırlatıyordu (yerelde gerçek bir .env olduğu için bu hata hiç görünmemişti, sadece slack.com'a SSL bağlantı hatası görünüyordu)"
+      - "Kök neden: tests/integration/test_notifications_and_slack.py, kendi docstring'inde 'out-of-band network çağrıları mock'lanır' dese de self.app.client.users_info() çağrısını hiç mock'lamıyordu — gerçek Slack API'sine bağımlıydı"
+      - "Düzeltme: tests/conftest.py'ye SLACK_BOT_TOKEN/SLACK_APP_TOKEN/SLACK_ADMIN_CHANNEL için dummy değerler eklendi (APP_DATABASE_URL ile aynı desen, from app import app'tan önce); test dosyasına users_info için gerçek bir mock + mock'lanan Slack hesabının eşleştiği bir WebQuery 'admin' kullanıcısı eklendi (assertion 'Approved by admin via Slack' gerçek bir kullanıcı çözümlemesi gerektiriyordu, sadece API'nin cevap vermesi yetmiyordu)"
+      - "Doğrulama: gerçek GitHub Actions run'ında (32486266019) CI yeşile döndü — 1m31s, tüm adımlar geçti"
+      - "Ruff borcunun mekanik kısmı temizlendi: ruff check --fix web_api/ iki kez çalıştırıldı (ilk geçiş ikinci bir düzeltme turu açığa çıkarıyor — F401 kaldırma import bloklarını yeniden sıralanabilir hale getiriyor), 383 → 155 → sonra web_api/ruff.toml ile B008 (FastAPI Depends() yanlış pozitifi, ~70 hata) devre dışı bırakılıp 85'e indi"
+      - "Bu geniş mekanik değişiklikten sonra regresyon kontrolü: tam pytest süiti (40/40 geçti), Alembic baseline migration'ın hâlâ temiz uygulandığı ve autogenerate ile sıfır fark ürettiği yeniden doğrulandı"
+      - "Bu commit de gerçek GitHub Actions'ta yeşil (32486706540, 1m39s)"
+      - "Kalan 85 hatanın döküm/kategorizasyonu kullanıcıya sunuldu: ~36'sı sıfır riskli (implicit-optional, unused-variable, unused-unpacked-variable, envvar-default, collapsible-if, verbose-raise), ~46'sı davranışa dokunabilir (36 blind-except, 10 tz-naive datetime — ayrı, dikkatli bir incelemeye bırakıldı), 3'ü zaten bilinen ölü kod (static_files/router.py, F821)"
+    excluded:
+      - "'Sıfır riskli' 36 hatanın elle düzeltilmesi — bu handoff'tan SONRA, ayrı bir adımda yapılacak (kullanıcı onayladı, henüz uygulanmadı)"
+      - "BLE001 (blind except, 36) ve DTZ005 (tz-naive datetime, 10) — davranışa dokunabileceği için kasıtlı olarak ele alınmadı, dosya dosya ayrı bir gözden geçirme gerektiriyor"
+      - "static_files/router.py'nin silinmesi (ölü kod) — plandaki Adım 17 (4.5) kapsamına bırakıldı"
+
+  changed_files:
+    created:
+      - web_api/ruff.toml
+      - docs/handoffs/2026-08-21-adim2b-ci-yesil-ve-ruff-temizligi.yaml
+    modified:
+      - web_api/tests/conftest.py
+      - web_api/tests/integration/test_notifications_and_slack.py
+      - "web_api/ (59 dosya, ruff --fix ile mekanik olarak: import sıralama, kullanılmayan import, eski tip anotasyonu → modern sözdizimi; manuel düzenleme yok)"
+    deleted: []
+
+  decisions:
+    - decision: "tests/conftest.py'ye dummy Slack env değişkenleri eklendi, testler gerçek Slack API çağrısını (users_info) mock'luyor"
+      rationale: "CI'da SLACK_BOT_TOKEN yoktu → SlackListener() hiç construct edilemiyordu; yerelde ise gerçek slack.com'a bağlanmaya çalışıp SSL hatası veriyordu. İkisi de aynı kök soruna işaret ediyordu: test hiçbir zaman gerçekten izole değildi."
+      recorded_in: "commit 5da8977, web_api/tests/conftest.py, web_api/tests/integration/test_notifications_and_slack.py"
+    - decision: "ruff --fix'in mekanik kısmı (204+28=232 düzeltme) uygulandı, B008 ruff.toml ile devre dışı bırakıldı"
+      rationale: "383 hatanın ~274'ü (204 otomatik düzeltilebilir + 70 B008) davranışa hiç dokunmayan stil/yanlış-pozitif kategorisiydi; kalan 85'i ayrı, dikkatli bir gözden geçirme gerektiriyor (ADR-0002'nin 'ruff bilgilendirici kalsın' kararıyla tutarlı — burada blocking yapılmadı, sadece mekanik borç azaltıldı)"
+      recorded_in: "commit 5486429, web_api/ruff.toml, docs/adr/ADR-0002-ci-merge-gate-policy.md"
+
+  validation:
+    commands_run:
+      - command: "GitHub Actions run 32485364896 (ilk CI push) incelendi: gh run view --log-failed"
+        result: failed
+        evidence: "Tests adımı: slack_bolt.error.BoltError: SLACK_BOT_TOKEN gerekli — CI ortamında hiç .env yok"
+      - command: "cd web_api && pytest -q (Slack env değişkenleri olmadan, düzeltme sonrası, yerel)"
+        result: passed
+        evidence: "40 passed in ~51-53s (3 kez tekrarlandı, tutarlı)"
+      - command: "GitHub Actions run 32486266019 (Slack düzeltmesi push'u)"
+        result: passed
+        evidence: "completed/success, 1m31s"
+      - command: "ruff check web_api/ --fix (2 geçiş) + web_api/ruff.toml ekleme"
+        result: passed
+        evidence: "383 → 155 (ilk --fix) → 113 (ruff.toml, B008 hariç) → 85 (ikinci --fix geçişi, 28 daha)"
+      - command: "cd web_api && pytest -q (ruff --fix sonrası, yerel)"
+        result: passed
+        evidence: "40 passed in 52.67s — regresyon yok"
+      - command: "alembic upgrade head + alembic revision --autogenerate (ruff --fix sonrası, geçici sqlite)"
+        result: passed
+        evidence: "Baseline temiz uygulandı, autogenerate sıfır fark üretti (no-op migration, silindi)"
+      - command: "GitHub Actions run 32486706540 (ruff cleanup push'u)"
+        result: passed
+        evidence: "completed/success, 1m39s"
+
+  open_questions:
+    - id: "OQ-2026-002"
+      status: "Deferred"
+      question: "Hedef DB sorgu bağlantısında yalnızca CENTRAL_DB_USER mı, yoksa veritabanı-başına db_username/db_password mi kullanılacak? Blok 4 / Adım 16 (`3.1`) öncesi cevaplanmalı."
+
+  known_risks:
+    - "CI_FERNET_KEY GitHub Actions secret'ı hâlâ oluşturulmadı — testler bunsuz geçiyor (fail-open fallback), Adım 3 (config guard) sonrası zorunlu olacak."
+    - "Kalan 85 ruff hatasından 46'sı (BLE001 blind-except, DTZ005 tz-naive datetime) davranışa dokunabilir; blanket bir düzeltme yeni hatalar (ör. naive/aware datetime karşılaştırma TypeError'ı) üretebilir. Dosya dosya, ayrı bir incelemede ele alınmalı."
+
+  next_step: "Kullanıcı onayladı: kalan 85 hatanın 'sıfır riskli' ~36'lık alt kümesini (RUF013, RUF059, F841, PLW1508, SIM102/SIM117, TRY201) elle düzelt. Bu handoff'tan SONRA yapılacak, henüz uygulanmadı."

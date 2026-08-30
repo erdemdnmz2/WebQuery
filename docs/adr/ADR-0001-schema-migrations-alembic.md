@@ -73,9 +73,10 @@ geçirme adımı olmadan production'a gitmesi kabul edilemez bir risk.
 - Test ortamı (sqlite in-memory + `create_tables()`) migration akışının dışında
   kalır — bilinçli bir tercih, testler şema geçmişini değil güncel şemayı
   ister.
-- Baseline revizyon, gerçek production veritabanına karşı `alembic stamp head`
-  ile işaretlenmelidir; bu adım bu ortamdan (sandbox, DB erişimi yok)
-  çalıştırılamaz ve **operatör tarafından deploy öncesi elle yapılmalıdır**.
+- Baseline revizyon, mevcut dokuz tablo eksiksiz bulunuyorsa DDL'yi tekrar
+  çalıştırmadan migration'ı uygulanmış kabul eder. Kısmi veya şüpheli bir
+  şemada migration bilerek hata verir; operatör şemayı inceleyip
+  `alembic stamp head` kararını elle vermelidir.
 
 ## Accepted Risks
 

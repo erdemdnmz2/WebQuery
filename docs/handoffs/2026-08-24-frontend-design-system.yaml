@@ -1,0 +1,101 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "Claude Code (frontend redesign session)"
+  to: "erdemdnmz2"
+  created_at: "2026-08-24T00:00:00Z"
+  task: "WebQuery frontend'inin tasarım sistemi ve tüm ekranlarıyla yeniden yazımı (branch: redesign/frontend-design-system)"
+
+  scope:
+    completed:
+      - "OKLCH token katmanı (styles/tokens.css) ve Tailwind v4 @theme inline bağlaması"
+      - "19 primitive bileşen (components/ui) ve 8 ürün bileşeni (components/app)"
+      - "7 ekranın yeniden yazımı: Login, Register, Workspaces, Studio, RunWorkspace, Admin, NotFound"
+      - "Açık/koyu/sistem teması, ilk boyadan önce uygulanan tema, kalıcı tercih"
+      - "Komut paleti (Cmd/Ctrl+K), Cmd+Enter çalıştır, Cmd+S kaydet, içeriğe atlama bağlantısı"
+      - "Ace Editor yerine token temalı CodeMirror 6, sunucu teknolojisine göre SQL lehçesi"
+      - "window.alert / window.confirm yerine bildirim ve onay penceresi bileşenleri"
+      - "Üç CDN bağımlılığının kaldırılması; Tailwind, yazı tipi ve düzenleyici paket içine alındı"
+      - "Tekil tipli API istemcisi; 401 yönlendirmesi ve hata gövdesi normalizasyonu tek noktada"
+      - "TypeScript strict açıldı; eksik olan @types/react ve @types/react-dom eklendi"
+      - "npm run audit:contrast ile paletin WCAG denetimi otomatikleştirildi"
+      - "Arayüz dili Türkçede birleştirildi"
+    excluded:
+      - "Backend: hiçbir endpoint, şema veya iş kuralı değişmedi"
+      - "Bilgi mimarisi ve rota yapısı korundu"
+      - "xlsx@0.18.5 güvenlik uyarıları: sürüm değiştirilmedi, ayrı iş olarak bırakıldı"
+      - "Çok dilli metin katmanı: metinler bugün doğrudan bileşenlerin içinde"
+
+  changed_files:
+    created:
+      - "frontend/styles/tokens.css"
+      - "frontend/styles/global.css"
+      - "frontend/lib/{cn,export,format,hooks,workspace-status}.ts"
+      - "frontend/lib/{session,theme,workspaces}.tsx"
+      - "frontend/components/ui/*.tsx (19 dosya)"
+      - "frontend/components/app/*.tsx ve components/app/admin/*.tsx (8 dosya)"
+      - "frontend/pages/{Workspaces,Studio,RunWorkspace,NotFound}.tsx"
+      - "frontend/scripts/contrast-audit.mjs"
+      - "docs/specs/SPEC-0010-frontend-design-system.md"
+      - "docs/adr/ADR-0010-frontend-design-system.md"
+      - ".claude/launch.json"
+    modified:
+      - "frontend/{App,index}.tsx"
+      - "frontend/index.html"
+      - "frontend/{types.ts,services/api.ts}"
+      - "frontend/pages/{Login,Register,Admin}.tsx"
+      - "frontend/{vite.config.ts,tsconfig.json,package.json,package-lock.json}"
+      - "frontend/README.md"
+      - "docs/open-questions.md"
+    deleted:
+      - "frontend/components/{AceEditor,Layout,Modal}.tsx"
+      - "frontend/pages/{Home,SqlEditor,WorkspaceExecute,ConnectDb}.tsx"
+      - "frontend/metadata.json"
+
+  decisions:
+    - decision: "Krom akromatik tutuldu; kroma yalnızca duruma ayrıldı, birincil eylem mürekkep rengi oldu"
+      rationale: "Üretim veritabanına giden bir onay düğmesi, bir risk rozetiyle dikkat için yarışmamalı"
+      recorded_in: "docs/specs/SPEC-0010-frontend-design-system.md (BR-01)"
+    - decision: "Tailwind v4 + CSS token katmanı + Radix primitives"
+      rationale: "Kapalı ağ uyumluluğu ve tedarik zinciri yüzeyi belirleyici kriterdi; @theme inline temayı yeniden derlemesiz kılıyor"
+      recorded_in: "docs/adr/ADR-0010-frontend-design-system.md"
+    - decision: "Ace Editor yerine CodeMirror 6"
+      rationale: "Ace'in sabit dracula teması açık temayla uyumsuzdu ve CDN'den yükleniyordu"
+      recorded_in: "docs/adr/ADR-0010-frontend-design-system.md"
+    - decision: "Arayüz dili Türkçede birleştirildi"
+      rationale: "Yönetim ve maskeleme ekranları zaten Türkçeydi; karışık dil kullanıcı için tutarsızdı"
+      recorded_in: "docs/adr/ADR-0010-frontend-design-system.md (Accepted Risks)"
+    - decision: "pages/ConnectDb.tsx silindi"
+      rationale: "Hiçbir rotadan erişilemiyordu ve var olmayan /api/mssql-connect uç noktasına istek atıyordu"
+      recorded_in: "docs/adr/ADR-0010-frontend-design-system.md (Consequences)"
+
+  validation:
+    commands_run:
+      - command: "npx tsc --noEmit"
+        result: "passed"
+        evidence: "strict, noUnusedLocals, noUnusedParameters açık; 0 hata"
+      - command: "npm run build"
+        result: "passed"
+        evidence: "vite 6.4.3, 4745 modül; ilk yük index 488 kB / 150 kB gzip, editor ve xlsx tembel yükleniyor"
+      - command: "npm run audit:contrast"
+        result: "passed"
+        evidence: "64 kontrol (32 renk çifti x 2 tema); tüm metin çiftleri >= 4.5:1, tüm kontrol kenarları >= 3:1"
+      - command: "manuel tarayıcı doğrulaması (vite dev + geçici API mock'u)"
+        result: "passed"
+        evidence: "Login, Workspaces, Studio (çalıştırma + sonuç ızgarası + maskeleme penceresi), RunWorkspace, Admin (onaylar + şema ağacı) her iki temada ve 375/1400 px genişlikte kontrol edildi; mock ve geçici import silindi"
+      - command: "pytest (web_api)"
+        result: "not-run"
+        evidence: "Backend'e dokunulmadı; ayrıca çalışma ağacında bu oturuma ait olmayan web_api değişiklikleri var (aşağıya bakın)"
+
+  open_questions:
+    - id: "OQ-2026-002"
+      status: "Deferred"
+      question: "Runtime hedef DB bağlantısında merkezi credential mı, veritabanı başına credential mı kullanılacak? Kullanıcı 2026-08-24'te erteledi; bu iş backend davranışına dokunmuyor."
+
+  known_risks:
+    - "Tailwind v4 ve OKLCH modern tarayıcı gerektirir (Safari 16.4+, Chrome 111+)"
+    - "Radix ve CodeMirror yeni birinci sınıf bağımlılıklar; sürüm yükseltmelerinde görsel regresyon riski"
+    - "xlsx@0.18.5 bilinen güvenlik uyarılarıyla korundu"
+    - "Çalışma ağacında bu oturuma ait olmayan, commit edilmemiş web_api değişiklikleri var (audit.py, audit_actions.py, audit_details.py, models.py ve iki doküman). Bunlara dokunulmadı ve stage edilmedi."
+    - "Frontend için otomatik test komutu hâlâ yok; doğrulama tip kontrolü, derleme, kontrast denetimi ve manuel tarayıcı geçişiyle yapıldı"
+
+  next_step: "npm --prefix frontend run dev ile backend'e karşı çalıştırıp gerçek veriyle Studio ve Admin akışlarını gözden geçirin."

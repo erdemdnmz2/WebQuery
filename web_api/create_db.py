@@ -1,90 +1,140 @@
-import asyncio
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy import create_engine, text, make_url
-from app_database.config import DATABASE_URL
-from app_database.models import Base
-import os
+"""One-time bootstrap: create the application database and login if missing.
 
-def create_database_and_user_if_not_exists():
+Idempotent and safe to run on every container start. Table schema is managed
+by Alembic (`alembic upgrade head`, run next in entrypoint.sh) — see
+docs/adr/ADR-0001-schema-migrations-alembic.md. This only ensures the database
+and the login `APP_DATABASE_URL` names exist before that runs.
+
+Readiness waiting lives in `wait_for_db.py` (P1-13): this script used to catch
+every exception and log a warning instead of raising, which made it always
+"succeed" from entrypoint.sh's point of view even against an unreachable
+server, and the alembic step then failed hard immediately after. This script
+raises on a real failure, so a caller that runs it knows whether it worked.
+"""
+
+import logging
+import re
+
+from sqlalchemy import create_engine, make_url, text
+
+from app_database.config import DATABASE_URL
+from common.logging_config import setup_logging
+
+setup_logging()
+logger = logging.getLogger(__name__)
+
+# SQL Server identifiers accepted here. DDL statements cannot bind an
+# identifier as a query parameter, so the database and login names taken from
+# APP_DATABASE_URL are validated against this pattern before they are
+# interpolated into any statement. A name that fails this check is refused
+# rather than passed through, closing the injection path a crafted
+# DB_USER/DB_NAME value would otherwise have through this bootstrap step.
+_SAFE_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
+
+
+def _validate_identifier(name: str, field: str) -> str:
+    if not _SAFE_IDENTIFIER.match(name):
+        raise ValueError(
+            f"{field} güvenli bir SQL tanımlayıcı değil: {name!r}. "
+            "Yalnız harf, rakam ve alt çizgi kabul edilir."
+        )
+    return name
+
+
+def _escape_literal(value: str) -> str:
+    """Double every single quote for a T-SQL string literal.
+
+    `CREATE LOGIN ... WITH PASSWORD = '...'` takes the password as a literal;
+    T-SQL has no parameter placeholder for it. Doubling the quote character is
+    the same escaping T-SQL itself applies to a literal containing a quote, so
+    a password containing `'` can no longer terminate the literal early and
+    inject additional SQL.
+    """
+    return value.replace("'", "''")
+
+
+def create_database_and_user_if_not_exists() -> None:
     """
     Checks if the target database exists and creates it if not.
     Also handles custom user creation if DB_USER is not 'sa'.
     Uses a synchronous SQLAlchemy engine with AUTOCOMMIT isolation level.
     """
-    print("Checking database and user configuration...")
+    logger.info("Uygulama veritabanı ve kullanıcı yapılandırması denetleniyor")
+
+    url = make_url(DATABASE_URL)
+    target_db = _validate_identifier(url.database, "Hedef veritabanı adı")
+    target_user = url.username
+    target_password = url.password
+    if target_user and target_user.lower() != "sa":
+        _validate_identifier(target_user, "Uygulama kullanıcı adı")
+
+    # We need to connect as 'sa' to create DBs and Users.
+    # We assume the password provided in env is the SA password
+    # (since docker-compose sets MSSQL_SA_PASSWORD=${DB_PASSWORD})
+    sa_url = url.set(
+        username='sa',
+        password=target_password,
+        database='master',
+        drivername='mssql+pyodbc'
+    )
+
+    # SQL echo may include the CREATE LOGIN password literal. Keep SQL
+    # statement logging disabled during bootstrap.
+    engine = create_engine(sa_url, echo=False, isolation_level="AUTOCOMMIT")
     try:
-        # Parse the configured URL (which might use a custom user)
-        url = make_url(DATABASE_URL)
-        target_db = url.database
-        target_user = url.username
-        target_password = url.password
-        host = url.host
-        
-        # We need to connect as 'sa' to create DBs and Users.
-        # We assume the password provided in env is the SA password 
-        # (since docker-compose sets MSSQL_SA_PASSWORD=${DB_PASSWORD})
-        sa_url = url.set(
-            username='sa', 
-            password=target_password, 
-            database='master', 
-            drivername='mssql+pyodbc'
-        )
-        
-        # Create engine with AUTOCOMMIT (required for CREATE DATABASE)
-        engine = create_engine(sa_url, echo=True, isolation_level="AUTOCOMMIT")
-        
         with engine.connect() as conn:
-            # 1. Create Database if not exists
-            result = conn.execute(text(f"SELECT 1 FROM sys.databases WHERE name = '{target_db}'"))
+            # 1. Create Database if not exists. `target_db` was validated
+            #    above; the value itself is still bound as a parameter.
+            result = conn.execute(
+                text("SELECT 1 FROM sys.databases WHERE name = :name"),
+                {"name": target_db},
+            )
             if not result.scalar():
-                print(f"Database '{target_db}' does not exist. Creating...")
-                conn.execute(text(f"CREATE DATABASE {target_db}"))
-                print(f"Database '{target_db}' created successfully.")
+                logger.info("Uygulama veritabanı oluşturuluyor")
+                conn.execute(text(f"CREATE DATABASE [{target_db}]"))
+                logger.info("Uygulama veritabanı oluşturuldu")
             else:
-                print(f"Database '{target_db}' already exists.")
+                logger.info("Uygulama veritabanı zaten mevcut")
 
             # 2. Create User if not 'sa'
             if target_user and target_user.lower() != 'sa':
-                print(f"Checking configuration for user '{target_user}'...")
-                
-                # Check if Login exists
-                login_check = conn.execute(text(f"SELECT 1 FROM sys.server_principals WHERE name = '{target_user}'"))
+                logger.info("Uygulama veritabanı kullanıcısı denetleniyor")
+
+                login_check = conn.execute(
+                    text("SELECT 1 FROM sys.server_principals WHERE name = :name"),
+                    {"name": target_user},
+                )
                 if not login_check.scalar():
-                    print(f"Login '{target_user}' does not exist. Creating...")
-                    # Create Login
-                    conn.execute(text(f"CREATE LOGIN {target_user} WITH PASSWORD = '{target_password}'"))
-                    print(f"Login '{target_user}' created.")
-                
+                    logger.info("Uygulama veritabanı giriş hesabı oluşturuluyor")
+                    escaped_password = _escape_literal(target_password or "")
+                    conn.execute(
+                        text(f"CREATE LOGIN [{target_user}] WITH PASSWORD = '{escaped_password}'")
+                    )
+                    logger.info("Uygulama veritabanı giriş hesabı oluşturuldu")
+
                 # Switch to target database to create User and assign roles
-                conn.execute(text(f"USE {target_db}"))
-                
-                # Check if User exists in DB
-                user_check = conn.execute(text(f"SELECT 1 FROM sys.database_principals WHERE name = '{target_user}'"))
+                conn.execute(text(f"USE [{target_db}]"))
+
+                user_check = conn.execute(
+                    text("SELECT 1 FROM sys.database_principals WHERE name = :name"),
+                    {"name": target_user},
+                )
                 if not user_check.scalar():
-                    print(f"User '{target_user}' does not exist in database '{target_db}'. Creating...")
-                    conn.execute(text(f"CREATE USER {target_user} FOR LOGIN {target_user}"))
-                    conn.execute(text(f"ALTER ROLE db_owner ADD MEMBER {target_user}"))
-                    print(f"User '{target_user}' created and added to db_owner role.")
+                    logger.info("Uygulama veritabanı kullanıcısı oluşturuluyor")
+                    conn.execute(text(f"CREATE USER [{target_user}] FOR LOGIN [{target_user}]"))
+                    # db_owner here is scoped to this one application database,
+                    # not to the server: the login has no sysadmin membership
+                    # and cannot touch any other database. Alembic migrations
+                    # run as this same user and need DDL rights (ALTER TABLE,
+                    # CREATE INDEX, ...) that a narrower fixed role would not
+                    # cover.
+                    conn.execute(text(f"ALTER ROLE db_owner ADD MEMBER [{target_user}]"))
+                    logger.info("Uygulama veritabanı kullanıcısı ve rolü oluşturuldu")
                 else:
-                    print(f"User '{target_user}' already exists in database.")
-
+                    logger.info("Uygulama veritabanı kullanıcısı zaten mevcut")
+    finally:
         engine.dispose()
-    except Exception as e:
-        print(f"Warning: Could not check/create database or user: {e}")
-        print("Proceeding to table creation (this might fail if user/db doesn't exist)...")
 
-async def init_models():
-    # First ensure the database and user exist
-    create_database_and_user_if_not_exists()
-
-    print("Creating database tables...")
-    engine = create_async_engine(DATABASE_URL, echo=True)
-    
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    
-    await engine.dispose()
-    print("Database tables created successfully.")
 
 if __name__ == "__main__":
-    asyncio.run(init_models())
+    create_database_and_user_if_not_exists()

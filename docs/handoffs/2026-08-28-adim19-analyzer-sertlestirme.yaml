@@ -1,0 +1,166 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "Claude Code (Opus 5)"
+  to: "WebQuery ekibi / review-agent"
+  created_at: "2026-08-28T20:15:00Z"
+  task: "Adım 19 · 3.2 — Analyzer sertleştirme"
+
+  context: |
+    Adım 19, uygulama planındaki 3.2 bloğudur ve 3.3 (sqlglot 30.14.0
+    yükseltmesi, commit c2edf4b) üzerine yazılmıştır.
+
+    Bloğun gerekçesi çift yönlüydü. Analizci bir yandan gerçekten tehlikeli
+    olanı kaçırıyordu: `_check_sql_injection` yalnız `exp.Command` düğümlerine
+    bakıyor, `SELECT pg_read_file('/etc/passwd')` gibi bir `exp.Anonymous`
+    fonksiyon çağrısı hiç incelenmiyordu; `EXPLAIN ANALYZE UPDATE ...` ise opak
+    bir komut olarak parse edildiği için içine bakılamıyordu. Öte yandan sıradan
+    olanı engelliyordu: `max_joins = 3` sabitti ve `>=` ile karşılaştırılıyordu,
+    yani üç tabloyu birleştiren normal bir raporlama sorgusu onay kuyruğuna
+    düşüyordu.
+
+    Üstüne, `if not query_analysis["return"] and not is_db_admin` koşulu
+    nedeniyle veritabanı admin'i bu kontrollerin tamamını atlıyordu.
+
+  scope:
+    completed:
+      - "3.2.1 — Tehlikeli fonksiyon blocklist'i: xp_cmdshell, pg_read_file,
+         dblink_exec, load_file, openrowset ve benzerleri engelleniyor.
+         Tırnaklı çağrı biçimi (\"pg_read_file\"(...)) de yakalanıyor."
+      - "3.2.1 — pg_sleep ve eşdeğerleri 5 saniye ile sınırlandı; argüman sabit
+         sayı değilse veya okunamıyorsa çağrı engelleniyor (fail-closed)."
+      - "3.2.2 — Kademe tutarlılığı DARALTILMIŞ biçimde uygulandı: yalnız DDL
+         ile veri ifadelerini karıştıran batch reddediliyor. SELECT; UPDATE
+         batch'i kabul ediliyor (planın orijinal hâlinden sapma; aşağıya bakınız)."
+      - "3.2.3 — EXPLAIN ANALYZE ve İngiliz yazımı EXPLAIN ANALYSE engellendi;
+         düz EXPLAIN serbest. Kontrol ayrıştırmadan önce yapılıyor."
+      - "3.2.4 — MAX_JOINS env ayarı eklendi (varsayılan 8), karşılaştırma > oldu,
+         PERFORMANCE_BLOCKS ile eski engelleme davranışı açılabilir bırakıldı.
+         Performans riski varsayılan olarak yalnız işaretleniyor."
+      - "3.2.5 — Admin bypass'ı daraltıldı: HARD_BLOCKED_RISKS kümesindeki
+         riskler hiçbir rol tarafından atlanamıyor; diğer riskleri atlayan admin
+         logger.warning ile loglanıyor."
+      - "Planda olmayan ek: sert bloklar workspace tekrar çalıştırma ve admin
+         sorgu önizleme yollarında da uygulanıyor. Bu iki yol analyze() hiç
+         çağırmıyordu ve 3.2.5 onlarsız admin için kozmetik kalırdı."
+      - "SPEC-0019 ve ADR-0016 yazıldı."
+      - "Ertelenen işler için üç inbox kaydı yazıldı."
+      - "OQ-2026-009 açıldı: admin sorguları hangi engellere takılmalı."
+    excluded:
+      - "3.4 / Adım 20 — yıkıcı DML etki alanı teyidi ve PLATFORM_ADMINS."
+      - "Hedef veritabanı transaction'ının commit edilmesi. Bu değişiklik
+         sırasında tespit edilen ayrı bir hata; docs/inbox/TARGET-TRANSACTION-COMMIT.md."
+      - "Çoklu sonuç kümesi okuma (nextset); docs/inbox/MULTI-RESULT-SET-REPORTING.md."
+      - "Frontend değişikliği yok. risk_type alanına yeni bir değer eklendi ancak
+         arayüz bu alanı çözümlemeden rozet olarak gösteriyor
+         (frontend/components/app/admin/ApprovalsTab.tsx:55)."
+      - "webquery_implementasyon_sirasi.md içindeki kontrol listesi
+         işaretlenmedi; o listede tamamlanmış 16 ve 18 numaralı adımlar da
+         işaretsiz duruyor, tek maddeyi işaretlemek tutarsızlık yaratırdı."
+
+  changed_files:
+    created:
+      - "docs/specs/SPEC-0019-query-analyzer-hardening.md"
+      - "docs/adr/ADR-0016-analyzer-block-boundary.md"
+      - "docs/inbox/TARGET-TRANSACTION-COMMIT.md"
+      - "docs/inbox/MULTI-RESULT-SET-REPORTING.md"
+      - "docs/inbox/LEGACY-CENTRAL-CREDENTIAL-FALLBACK.md"
+      - "docs/handoffs/2026-08-28-adim19-analyzer-sertlestirme.yaml"
+    modified:
+      - "web_api/query_execution/query_analyzer.py — blocklist, sleep sınırı,
+         EXPLAIN kontrolü, _statement_tier/_mixed_ddl_batch, _dialect helper'ı,
+         HARD_BLOCKED_RISKS, hard_block_reason(); RiskLevel.BLOCKED_OPERATION."
+      - "web_api/query_execution/config.py — MAX_JOINS, PERFORMANCE_BLOCKS."
+      - "web_api/query_execution/services.py — sert blok kapısı ve admin atlama logu."
+      - "web_api/workspaces/services.py — onaylı tekrar çalıştırmada sert blok."
+      - "web_api/admin/services.py — sorgu önizlemede sert blok."
+      - "web_api/tests/unit/test_query_analyzer.py — 27 yeni/güncellenmiş test."
+      - "web_api/tests/integration/test_query_execution.py — admin sert blok testleri."
+      - ".env.example — MAX_JOINS ve PERFORMANCE_BLOCKS belgelendi."
+      - "docs/open-questions.md — OQ-2026-009."
+    deleted: []
+
+  decisions:
+    - decision: "Karma SELECT; UPDATE batch'leri REDDEDİLMİYOR. Kademe
+        tutarlılığı kontrolü yalnız DDL karışımına daraltıldı."
+      rationale: "Planın 3.2.2 kod örneği bütün karma kademeli batch'leri
+        reddediyordu. Bu batch tek bağlantıda, tek transaction'da, zaten hem
+        okuyup hem yazabilen rw hesabıyla çalışır; bölmek atomikliği bedelsiz
+        kaybettirir ve gündelik bir iş akışını bozar. Rol kontrolü ve kademe
+        seçimi zaten her ifadeyi ayrı ayrı değerlendirdiği için onaylayan
+        yanıltılmıyor. DDL karışımı ayrı: farklı ve daha yetkili bir hesapla
+        çalışır ve tek sınıflandırmayla incelenmesi güçtür."
+      recorded_in: "docs/adr/ADR-0016-analyzer-block-boundary.md"
+    - decision: "Riskler iki sınıfa ayrıldı; RiskLevel'a blocked_operation eklendi."
+      rationale: "WHERE'siz bir DELETE meşru olabilir ve insan kararı gerektirir;
+        xp_cmdshell için WebQuery'de desteklenen bir yol yoktur. İkisini aynı
+        mekanizmayla ele almak hem yasağı atlatılabilir kılıyor hem de onay
+        kuyruğunu sıradan sorgularla dolduruyordu."
+      recorded_in: "docs/adr/ADR-0016-analyzer-block-boundary.md"
+    - decision: "MAX_JOINS varsayılanı 8 ve karşılaştırma > yapıldı."
+      rationale: "Eski kod >= ile karşılaştırdığı için MAX_JOINS adı yanıltıcıydı:
+        3 ayarı üç JOIN'i de engelliyordu. Ayar adı artık izin verilen en yüksek
+        sayıyı ifade ediyor. Onay kuyruğunun sinyal kalitesi bir güvenlik
+        özelliğidir; sıradan raporlama sorguları kuyruğa düşmemeli."
+      recorded_in: "docs/specs/SPEC-0019-query-analyzer-hardening.md"
+    - decision: "Sert bloklar workspace ve admin önizleme yollarına da eklendi;
+        yalnız sert blok alt kümesi uygulanıyor, tam analyze() kapısı değil."
+      rationale: "Bu iki yol da hedef veritabanında ifade yürütüyor ve analyze()
+        çağırmıyordu; admin bu yollardan sert bloğu atlayabilirdi. Tam kapı
+        koymak, admin'in bilerek onayladığı riskli sorgunun tekrar
+        çalıştırılmasını kırardı."
+      recorded_in: "docs/adr/ADR-0016-analyzer-block-boundary.md"
+    - decision: "Hedef DB credential modeli DEĞİŞMİYOR: ro + rw, opsiyonel ddl."
+      rationale: "Oturum başında ro_rw + ddl birleştirmesi tartışıldı. Öne
+        sürülen üç gerekçeden ikisinin kodda karşılığı olmadığı görüldü: iki
+        aşamalı oku-sonra-yaz akışı yok (required_tier batch'in tamamını tek
+        kademeye çözüyor) ve sorgu başına ek round trip yok. Üçüncüsü, hesap
+        sayısı, ölçüldüğünde eşit çıktı: varsayılan kurulum her iki modelde de
+        iki hesap. OQ-2026-002 ve OQ-2026-007 Answered kalıyor; ADR-0005 ve
+        SPEC-0002 geçerli, superseding gerekmedi."
+      recorded_in: "docs/adr/ADR-0005-role-based-target-database-credentials.md (değişmedi)"
+
+  validation:
+    commands_run:
+      - command: "cd web_api && ../.venv/bin/python -m pytest -q"
+        result: "passed"
+        evidence: "179 passed, 1 warning in 106.74s. Değişiklik öncesi 177 test
+          vardı; 2'si bu değişiklikle eklenen entegrasyon testi. Birim testleri
+          ayrıca: tests/unit/test_query_analyzer.py 38 passed."
+      - command: "cd web_api && ../.venv/bin/python -m ruff check query_execution/query_analyzer.py"
+        result: "passed"
+        evidence: "All checks passed."
+      - command: "cd web_api && ../.venv/bin/python -m ruff check ."
+        result: "failed"
+        evidence: "48 hata; tamamı mevcut BLE001/S110 bulguları. Bu değişiklik
+          yeni bulgu eklemedi (eklenen tek S110 düzeltildi). ADR-0002 gereği
+          ruff CI'da bilgilendirme amaçlı çalışıyor, gate değil."
+      - command: "frontend: npm run build"
+        result: "not-run"
+        evidence: "Frontend dosyası değişmedi."
+
+  open_questions:
+    - id: "OQ-2026-009"
+      status: "Open"
+      question: "Admin sorguları hangi engellere takılmalı? Şu an yalnız
+        sql_injection_risk ve blocked_operation admin'i durduruyor; ddl_pattern,
+        risky_pattern ve performance_risk için onay gerekliliği atlanıyor.
+        Bu sınır Adım 20'nin kapsamını belirliyor."
+
+  known_risks:
+    - "Blocklist eksik kalabilir; listede olmayan tehlikeli bir yerleşik
+       fonksiyon geçer. Azaltma: hedef DB hesapları en düşük yetkiyle açılıyor
+       (SPEC-0002), fonksiyon çağrısı da o hesabın yetkisiyle sınırlı."
+    - "Analizci, hedef veritabanında tanımlı bir fonksiyonun gövdesindeki
+       yazma işlemini prensip olarak göremez. Bu, ro hesabının kapattığı risktir
+       ve bilinçli olarak analizciye devredilmedi."
+    - "EXPLAIN ANALYZE kontrolü metin üzerinde çalışır; içinde bu ifadeyi geçiren
+       bir string literal yanlış pozitif üretebilir. Fail-closed tercih edildi."
+    - "Admin bypass'ı değerlendirilebilir riskler için hâlâ açık. ADR-0016 bunu
+       ara durum olarak kaydediyor; Adım 20 uygulandığında güncellenmeli."
+    - "AĞIR: Hedef veritabanı transaction'ı hiç commit edilmiyor; yazma
+       işlemleri kalıcı olmuyor. Bu değişikliğin kapsamı dışında ama sıradaki
+       en yüksek öncelikli iş. docs/inbox/TARGET-TRANSACTION-COMMIT.md."
+
+  next_step: "docs/inbox/TARGET-TRANSACTION-COMMIT.md kaydını uygula: önce
+    yazmanın kalıcı olmadığını gösteren kırmızı regresyon testi, sonra
+    get_session içinde commit/rollback davranışı."

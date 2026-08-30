@@ -1,12 +1,18 @@
 """
 Integration tests for User Authentication, Registration, and Session management.
 Includes rate limiting bypass, password policy validations, JWT cookie handling,
-and clean engine shutdowns upon logout.
+and session invalidation upon logout.
 """
+import hashlib
+
 import pytest
-from unittest.mock import AsyncMock, patch
 from httpx import AsyncClient
+from sqlalchemy import select
+
 from app import app
+from app_database.models import AuditLog, User, UserSession
+from common.audit_actions import AuditAction
+
 
 @pytest.mark.asyncio
 async def test_register_and_login(async_client: AsyncClient):
@@ -35,14 +41,43 @@ async def test_register_and_login(async_client: AsyncClient):
     response = await async_client.post("/api/login", json=login_data)
     assert response.status_code == 200, f"Login failed: {response.text}"
     
-    data = response.json()
-    assert "access_token" in data
-    assert data["token_type"] == "bearer"
-    
-    # Verify cookie is set in response headers
+    assert response.json() == {"ok": True}
+
+    # Tokens are cookie-only: JavaScript must not receive an access JWT in JSON.
     assert "access_token" in response.cookies
-    cookie = response.cookies["access_token"]
-    assert cookie is not None
+    assert "refresh_token" in response.cookies
+    set_cookies = response.headers.get_list("set-cookie")
+    assert any(
+        header.startswith("refresh_token=") and "Path=/api/refresh" in header
+        for header in set_cookies
+    )
+
+    async with app.state.context.app_db.get_app_db() as db:
+        session = (
+            await db.execute(
+                select(UserSession)
+                .join(User, UserSession.user_id == User.id)
+                .where(User.email == login_data["email"])
+            )
+        ).scalars().one()
+        refresh_token = response.cookies["refresh_token"]
+        assert session.refresh_hash == hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
+        assert session.refresh_hash != refresh_token
+
+        audits = (
+            await db.execute(
+                select(AuditLog).where(
+                    AuditLog.action.in_(
+                        [AuditAction.USER_REGISTERED, AuditAction.LOGIN]
+                    )
+                )
+            )
+        ).scalars().all()
+        assert {row.action for row in audits} == {
+            AuditAction.USER_REGISTERED,
+            AuditAction.LOGIN,
+        }
+        assert all(row.client_ip == "127.0.0.1" for row in audits)
 
 
 @pytest.mark.asyncio
@@ -77,32 +112,51 @@ async def test_login_invalid_credentials(async_client: AsyncClient):
     assert response.status_code == 400
     assert "Invalid email or password" in response.text
 
+    async with app.state.context.app_db.get_app_db() as db:
+        failed_audits = (
+            await db.execute(
+                select(AuditLog).where(AuditLog.action == AuditAction.LOGIN_FAILED)
+            )
+        ).scalars().all()
+        assert len(failed_audits) == 2
+        assert all(row.client_ip == "127.0.0.1" for row in failed_audits)
+
 
 @pytest.mark.asyncio
-async def test_register_duplicate_email(async_client: AsyncClient):
-    """
-    Test that registering an email already in use yields a 400 bad request.
+async def test_register_duplicate_email_is_indistinguishable(async_client: AsyncClient):
+    """A taken address must answer exactly like a free one (P2-14).
+
+    Registration used to reply 400/USER_ALREADY_EXISTS for a known address,
+    which confirmed which corporate mailboxes exist. The account is never
+    replaced or its password changed; activation is an OWNER decision either
+    way, so the caller loses nothing and learns nothing.
     """
     register_data = {
         "username": "dup_user1",
         "email": "duplicate@example.com",
         "password": "StrongPassword123!"
     }
-    
-    response = await async_client.post("/api/register", json=register_data)
-    assert response.status_code == 200
 
-    # Attempt second registration with same email
-    register_data_2 = {
+    first = await async_client.post("/api/register", json=register_data)
+    assert first.status_code == 200
+
+    second = await async_client.post("/api/register", json={
         "username": "dup_user2",
         "email": "duplicate@example.com",
         "password": "DifferentPassword123!"
-    }
-    response = await async_client.post("/api/register", json=register_data_2)
-    assert response.status_code == 400
-    data = response.json()
-    assert data["error_code"] == "USER_ALREADY_EXISTS"
-    assert "Email already registered" in data["message"]
+    })
+    assert second.status_code == 200
+    assert second.json() == first.json()
+
+    # The existing account is untouched: the original password still works and
+    # no second row was created.
+    async with app.state.context.app_db.get_app_db() as db:
+        rows = (
+            await db.execute(select(User).where(User.email == "duplicate@example.com"))
+        ).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].username == "dup_user1"
+        assert rows[0].check_password("StrongPassword123!")
 
 
 @pytest.mark.asyncio
@@ -166,6 +220,7 @@ async def test_access_me_protected_route(async_client: AsyncClient):
     data = response.json()
     assert data["username"] == "profile_user"
     assert data["is_admin"] is False
+    assert data["is_platform_owner"] is False
 
 
 @pytest.mark.asyncio
@@ -182,7 +237,7 @@ async def test_access_me_invalid_token(async_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_logout_flow(async_client: AsyncClient):
     """
-    Test complete logout flow: clears cookie, logs session update, and closes user DB engines.
+    Test complete logout flow: clears cookies and writes the logout audit record.
     """
     # 1. Register and login
     register_data = {
@@ -201,19 +256,51 @@ async def test_logout_flow(async_client: AsyncClient):
     # Verify cookies contain token
     assert "access_token" in async_client.cookies
 
-    # 2. Mock db_provider.close_user_engines
-    db_provider = app.state.context.db_provider
-    with patch.object(db_provider, "close_user_engines", new_callable=AsyncMock) as mock_close:
-        # 3. Perform logout
-        response = await async_client.post("/api/logout")
-        assert response.status_code == 200
-        assert "Successfully logged out" in response.json()["message"]
+    # 2. Perform logout
+    response = await async_client.post("/api/logout")
+    assert response.status_code == 200
+    assert "Successfully logged out" in response.json()["message"]
 
-        # 4. Verify cookie was deleted
-        # Note: In HTTP clients, deleting a cookie sets it to empty or expires it immediately
-        assert "access_token" not in async_client.cookies or async_client.cookies.get("access_token") == ""
+    # 3. Verify cookie was deleted
+    # Note: In HTTP clients, deleting a cookie sets it to empty or expires it immediately
+    assert "access_token" not in async_client.cookies or async_client.cookies.get("access_token") == ""
 
-        # 5. Verify close_user_engines was called
-        mock_close.assert_called_once()
-        called_user_id = mock_close.call_args[0][0]
-        assert isinstance(called_user_id, int)
+    async with app.state.context.app_db.get_app_db() as db:
+        logout_audit = (
+            await db.execute(
+                select(AuditLog).where(AuditLog.action == AuditAction.LOGOUT)
+            )
+        ).scalar_one()
+        assert logout_audit.client_ip == "127.0.0.1"
+
+
+@pytest.mark.asyncio
+async def test_refresh_rotates_tokens_and_logout_revokes_session(async_client: AsyncClient):
+    register_data = {
+        "username": "refresh_user",
+        "email": "refresh@example.com",
+        "password": "StrongPassword123!",
+    }
+    await async_client.post("/api/register", json=register_data)
+    login = await async_client.post(
+        "/api/login",
+        json={"email": register_data["email"], "password": register_data["password"]},
+    )
+    assert login.status_code == 200
+    assert "refresh_token" in async_client.cookies
+    old_refresh = async_client.cookies["refresh_token"]
+
+    refreshed = await async_client.post("/api/refresh")
+    assert refreshed.status_code == 200
+    assert "refresh_token" in async_client.cookies
+    assert async_client.cookies["refresh_token"] != old_refresh
+    assert any(
+        header.startswith("refresh_token=") and "Path=/api/refresh" in header
+        for header in refreshed.headers.get_list("set-cookie")
+    )
+
+    logout = await async_client.post("/api/logout")
+    assert logout.status_code == 200
+
+    protected = await async_client.get("/api/me")
+    assert protected.status_code == 401

@@ -1,0 +1,47 @@
+handoff:
+  status: COMPLETE
+  from: "Codex"
+  to: "maintainer"
+  created_at: "2026-08-28T18:08:14+03:00"
+  task: "Adım 17: logout akışından kullanıcı bazlı engine-cache temizliğini kaldır"
+
+  scope:
+    completed:
+      - "Logout endpoint'inden kullanıcı bazlı engine-cache çağrısı ve bağımlılığı kaldırıldı."
+      - "Artık kullanılmayan close_user_engines API'leri ile eski test beklentileri silindi."
+      - "Hedef veritabanı ve kademe bazlı close_database_engines yaşam döngüsü korundu."
+    excluded:
+      - "Hedef veritabanı silme ve credential rotasyonunda close_database_engines çağrı noktaları bu adımın kapsamı dışındadır."
+
+  changed_files:
+    created:
+      - "docs/handoffs/2026-08-28-adim17-engine-cache-cleanup.yaml"
+    modified:
+      - "web_api/authentication/router.py"
+      - "web_api/database_provider/database.py"
+      - "web_api/database_provider/engine_cache.py"
+      - "web_api/tests/integration/test_auth_api.py"
+      - "web_api/tests/unit/test_engine_cache.py"
+    deleted: []
+
+  decisions:
+    - decision: "Logout bağlantı havuzlarını kapatmaz."
+      rationale: "Engine'ler kullanıcıya değil WebQuery'nin hedef veritabanına ve credential kademesine ait paylaşımlı havuzlardır."
+      recorded_in: "webquery_implementasyon_sirasi.md, Adım 17"
+
+  validation:
+    commands_run:
+      - command: "../.venv/bin/pytest tests/integration/test_auth_api.py tests/unit/test_engine_cache.py"
+        result: "passed"
+        evidence: "16 passed, 1 existing Pydantic deprecation warning"
+      - command: "../.venv/bin/ruff check --select F401 authentication/router.py database_provider/database.py database_provider/engine_cache.py tests/integration/test_auth_api.py tests/unit/test_engine_cache.py"
+        result: "passed"
+        evidence: "All checks passed"
+      - command: "git diff --check"
+        result: "passed"
+        evidence: "No whitespace errors"
+
+  open_questions: []
+  known_risks:
+    - "Tam Ruff kontrolü, bu değişiklikten önce mevcut olan iki BLE001 ve bir DTZ005 ihlali nedeniyle başarısızdır; bu adım onları değiştirmez."
+  next_step: "Hedef veritabanı silme ve credential rotasyonu akışları uygulandığında close_database_engines(db_uuid) çağrısını ilgili servislerde kullan."

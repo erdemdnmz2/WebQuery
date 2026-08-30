@@ -1,19 +1,21 @@
+from contextlib import asynccontextmanager
+from unittest.mock import MagicMock, patch
+
 import pytest
 from httpx import AsyncClient
-from app import app
-from app_database.models import Databases, User, UserDatabaseAssociation
 from sqlalchemy import select
-from unittest.mock import MagicMock, AsyncMock, patch
-from contextlib import asynccontextmanager
+
+from app import app
+from app_database.models import Databases, User
+from tests.conftest import make_target_session_mock
+
 
 @pytest.fixture
 def mock_db_session_auth():
-    mock_session = AsyncMock()
-    mock_result = MagicMock()
-    mock_session.execute.return_value = mock_result
+    mock_session, mock_result = make_target_session_mock()
     
     @asynccontextmanager
-    async def fake_get_session(user, db_uuid):
+    async def fake_get_session(user, db_uuid, tier="ro"):
         yield mock_session
         
     with patch("database_provider.DatabaseProvider.get_session", side_effect=fake_get_session):
@@ -24,7 +26,7 @@ async def test_admin_user_association_and_visibility(async_client: AsyncClient, 
     """
     Tests database visibility and query execution before and after admin associates user to database.
     """
-    mock_session, mock_result = mock_db_session_auth
+    _mock_session, mock_result = mock_db_session_auth
     mock_result.returns_rows = True
     mock_row = MagicMock()
     mock_row._mapping = {"id": 1}
@@ -66,12 +68,16 @@ async def test_admin_user_association_and_visibility(async_client: AsyncClient, 
     assert info_resp.status_code == 200
     assert "auth-server" not in info_resp.json()["db_info"]
 
-    # 4. Before association, executing query should fail (Permission Denied)
+    # 4. Before association, executing query should fail (Permission Denied).
+    # This is an authorization failure, not an analyzer rejection: it carries
+    # DATABASE_ACCESS_DENIED/403 so the client stops drawing "sent for approval"
+    # over a request that was never filed (P2-1).
     exec_resp = await reg_client.post("/api/execute_query", json={
         "query": "SELECT 1",
         "db_uuid": db_uuid
     })
-    assert exec_resp.status_code == 400
+    assert exec_resp.status_code == 403
+    assert exec_resp.json()["error_code"] == "DATABASE_ACCESS_DENIED"
     assert "permission to access this database" in exec_resp.text
 
     # 5. Login as admin and associate the user

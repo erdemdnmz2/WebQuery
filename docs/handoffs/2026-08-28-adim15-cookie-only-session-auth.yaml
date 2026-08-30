@@ -1,0 +1,71 @@
+handoff:
+  status: COMPLETE
+  from: "codex"
+  to: "user / next-session-agent"
+  created_at: "2026-08-28T12:04:11+03:00"
+  task: "Adım 15 (`2.3`) — cookie-only access/refresh token taşıma sözleşmesini tamamlama"
+
+  scope:
+    completed:
+      - "Login yanıt gövdesinden access JWT kaldırıldı; başarılı login yalnızca `{ok: true}` döndürüyor."
+      - "Refresh cookie path'i `/api/refresh` ile sınırlandırıldı; normal API çağrılarında tarayıcı refresh tokenı göndermez."
+      - "Eski `/api` path'li refresh cookie'leri login, refresh ve logout yanıtlarında silinerek güvenli geçiş sağlandı."
+      - "Access cookie TTL'i access JWT TTL'iyle tek ayardan hizalandı; örnek environment 20 dakika access ve 12 saat refresh varsayıyor."
+      - "Frontend login sözleşmesi cookie-only yanıtla hizalandı."
+      - "Refresh hash saklama ve cookie taşıma sözleşmesi entegrasyon testleriyle doğrulandı."
+    excluded:
+      - "Mevcut UserSessions şeması için yeni migration; gerekli session migration'ı zaten repoda bulunuyor."
+      - "Redis'i session kaynak doğrusu yapmak; Redis yalnız login throttle için kullanılmaya devam ediyor."
+      - "Çoklu bölge dağıtık oturum kilitlemesi."
+
+  changed_files:
+    created:
+      - "docs/handoffs/2026-08-28-adim15-cookie-only-session-auth.yaml"
+    modified:
+      - ".env.example"
+      - "docs/adr/ADR-0008-access-refresh-session-auth.md"
+      - "docs/specs/SPEC-0005-access-refresh-session-auth.md"
+      - "docs/specs/SPEC-0014-frontend-hardened-backend-alignment.md"
+      - "frontend/services/api.ts"
+      - "web_api/authentication/config.py"
+      - "web_api/authentication/router.py"
+      - "web_api/authentication/schemas.py"
+      - "web_api/tests/integration/test_auth_api.py"
+    deleted: []
+
+  decisions:
+    - decision: "Tokenlar yalnız HttpOnly cookie üzerinden taşınacak; login JSON gövdesi token içermeyecek."
+      rationale: "Access JWT'nin JavaScript tarafından okunabilen ikinci bir kopyasını kaldırarak cookie-only oturum sınırını korur."
+      recorded_in: "docs/specs/SPEC-0005-access-refresh-session-auth.md; docs/adr/ADR-0008-access-refresh-session-auth.md"
+    - decision: "Refresh cookie yalnız `/api/refresh` path'inde gönderilecek."
+      rationale: "Normal API çağrılarında refresh tokenın gereksiz taşınmasını önler."
+      recorded_in: "docs/specs/SPEC-0005-access-refresh-session-auth.md; docs/adr/ADR-0008-access-refresh-session-auth.md"
+    - decision: "Eski `/api` path'li refresh cookie'leri geçişte silinecek."
+      rationale: "Cookie kimliği path'i de içerdiğinden, yalnız yeni path'i set etmek eski geniş kapsamlı cookie'yi kaldırmaz."
+      recorded_in: "docs/specs/SPEC-0005-access-refresh-session-auth.md; docs/adr/ADR-0008-access-refresh-session-auth.md"
+
+  validation:
+    commands_run:
+      - command: "cd web_api && ../.venv/bin/pytest -q tests/integration/test_auth_api.py tests/integration/test_user_lifecycle.py tests/integration/test_login_throttle_api.py"
+        result: passed
+        evidence: "16 passed; yalnız Pydantic class-based config deprecation uyarısı var."
+      - command: "cd web_api && ../.venv/bin/ruff check --ignore BLE001 authentication/config.py authentication/router.py authentication/schemas.py tests/integration/test_auth_api.py"
+        result: passed
+        evidence: "All checks passed. BLE001, router'da bu işten önce bulunan iki geniş Exception yakalamasını dışlar."
+      - command: "cd frontend && npm run build"
+        result: passed
+        evidence: "Vite production build tamamlandı."
+      - command: "cd frontend && npm run audit:api"
+        result: passed
+        evidence: "26 frontend çağrısının tamamı backend rotasıyla eşleşti."
+      - command: "git diff --check"
+        result: passed
+        evidence: "Whitespace hatası yok."
+
+  open_questions: []
+
+  known_risks:
+    - "Tam backend test paketi ve staging migration bu değişiklik sırasında çalıştırılmadı; ilgili auth, lifecycle ve throttle entegrasyon kapsamı çalıştırıldı."
+    - "`web_api/authentication/router.py` içinde bu değişiklikten önce var olan iki BLE001 geniş Exception yakalaması bulunuyor; kapsam dışı tutuldu."
+
+  next_step: "Staging dağıtımında mevcut `/api` path'li refresh cookie'nin login veya refresh sonrası silindiğini ve normal API çağrılarında taşınmadığını tarayıcı geliştirici araçlarından doğrula."

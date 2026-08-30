@@ -2,8 +2,9 @@
 Workspace Schemas
 Pydantic models for workspace endpoints
 """
-from pydantic import BaseModel
-from typing import Optional, List
+
+from pydantic import BaseModel, ConfigDict
+
 
 class WorkspaceInfo(BaseModel):
     """
@@ -21,15 +22,15 @@ class WorkspaceInfo(BaseModel):
     """
     id: int
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     query: str
     servername: str
     database_name: str
     db_uuid: str
     status: str
-    show_results: Optional[bool] = None
+    show_results: bool | None = None
     owner_id: int
-    is_owner: Optional[bool] = None
+    is_owner: bool | None = None
 
 class WorkspaceCreate(BaseModel):
     """
@@ -42,26 +43,32 @@ class WorkspaceCreate(BaseModel):
         db_uuid: Target database unique identifier
     """
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     query: str
     db_uuid: str
 
 class WorkspaceList(BaseModel):
     """Workspace list response schema"""
-    workspaces: List[WorkspaceInfo]
+    workspaces: list[WorkspaceInfo]
 
 class WorkspaceUpdate(BaseModel):
     """
     Workspace update schema
-    
+
+    Only the SQL text is client-supplied. `status` was removed deliberately:
+    workspace state transitions belong to the approval decision and to the
+    execution flow, and accepting one here let an owner mark their own query
+    approved. Any unknown field is rejected rather than ignored, so a client
+    still sending `status` fails loudly instead of believing it took effect.
+
     Attributes:
         query: SQL query to update
-        status: Status to update (optional)
     """
+    model_config = ConfigDict(extra="forbid")
+
     query: str
-    status: Optional[str] = None
 
 
 class WorkspaceExecutionRequest(BaseModel):
     """Workspace execution request containing ad-hoc columns to mask"""
-    ad_hoc_mask_columns: Optional[List[str]] = None
+    ad_hoc_mask_columns: list[str] | None = None

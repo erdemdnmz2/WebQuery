@@ -1,0 +1,107 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "Claude Code (contract alignment session)"
+  to: "erdemdnmz2"
+  created_at: "2026-08-24T14:00:00Z"
+  task: "Arayüzün yürürlükteki backend sözleşmesine bağlanması (branch: redesign/frontend-design-system)"
+
+  finding:
+    summary: >
+      Arayüzde sabit kodlanmış sahte veri yoktu. Sorun, arayüzün backend'in
+      artık kullanmadığı bir API sözleşmesiyle konuşuyor olmasıydı. Backend
+      UUID tabanlı hedef erişimine geçmiş, arayüz eski servername/database_name
+      sözleşmesinde kalmıştı. Bu haliyle sorgu çalıştırma, maskeleme kuralı
+      okuma ve çalışma alanı oluşturma çağrılarının hepsi 422 alırdı.
+    drift:
+      - "POST /api/execute_query: db_uuid ister; arayüz servername + database_name gönderiyordu"
+      - "GET /api/masking_rules: db_uuid ister; arayüz servername + database_name gönderiyordu"
+      - "GET /api/database_information: databases artık {name, uuid} nesnesi; arayüz string bekliyordu"
+      - "POST /api/workspaces: {name, description?, query, db_uuid} ister ve {success, workspace_id} döndürür"
+      - "PUT /api/workspaces/{id}: yalnız {query, status?} kabul eder; diğer alanlar sessizce yok sayılıyordu"
+      - "GET /api/me: email döndürmez; arayüz hesap menüsünde gösteriyordu"
+      - "SQLResponse: row_count/truncated alanları yok; bilgi message metninin içinde"
+      - "Servis hatası zarfı: error_code ve trace_id kullanılmıyordu"
+
+  scope:
+    completed:
+      - "types.ts backend Pydantic şemalarına birebir hizalandı"
+      - "services/api.ts yürürlükteki endpoint sözleşmesine göre yeniden yazıldı"
+      - "lib/targets.ts: db_uuid <-> sunucu/veritabanı çözümlemesi"
+      - "lib/execution.ts: SQLResponse -> ExecutionOutcome adaptörü, message ayrıştırma"
+      - "ApiError artık error_code ve trace_id taşıyor"
+      - "QUERY_REJECTED_BY_ANALYZER hata değil, 'onaya gönderildi' bekleme durumu olarak gösteriliyor"
+      - "Yetkisiz kullanıcı ve erişilemeyen çalışma alanı hedefi için açık durum mesajları"
+      - "scripts/api-contract-audit.mjs ve npm run audit:api eklendi"
+      - "DESIGN.md'ye 'Backend sözleşmesi' bölümü eklendi"
+    excluded:
+      - "Backend: hiçbir dosya değiştirilmedi"
+      - "POST /api/multiple_query: arayüz ihtiyacı yok"
+      - "POST /api/admin/associate_user: aşağıdaki engel nedeniyle yapılmadı"
+
+  blocked:
+    - item: "Yönetici tarafından kullanıcıya veritabanı yetkisi verme ekranı"
+      endpoint: "POST /api/admin/associate_user"
+      reason: >
+        Endpoint sayısal user_id ister. Backend'de kullanıcı listeleyen veya
+        e-posta/kullanıcı adından kimlik çözen bir endpoint yok, dolayısıyla
+        arayüz bir kullanıcı seçici sunamaz. Yöneticinin sayısal kimlik yazdığı
+        bir form üretmek yerine akış dışarıda bırakıldı.
+      impact: >
+        Yetkilendirme olmadan GET /api/database_information her kullanıcı için
+        boş döner ve GET /api/me is_admin=false verir. Yeni kurulumda ilk
+        yetkilendirme hâlâ arayüz dışından yapılmalıdır.
+      unblocked_by: "Kullanıcıları listeleyen admin-only bir endpoint (örn. GET /api/admin/users)"
+
+  bug_fixed:
+    - "Tam ekran rotalarda (Studio, RunWorkspace) 1000 satırlık gerçek sonuç kümesi sayfa gövdesini 6616 px'e uzatıyordu. AppShell full-bleed durumunda h-dvh + overflow-hidden aldı; tablo artık kendi içinde kaydırılıyor."
+
+  changed_files:
+    created:
+      - "frontend/lib/targets.ts"
+      - "frontend/lib/execution.ts"
+      - "frontend/scripts/api-contract-audit.mjs"
+      - "frontend/DESIGN.md"
+      - "docs/specs/SPEC-0011-frontend-backend-contract-alignment.md"
+    modified:
+      - "frontend/types.ts"
+      - "frontend/services/api.ts"
+      - "frontend/pages/Studio.tsx"
+      - "frontend/pages/RunWorkspace.tsx"
+      - "frontend/components/app/ResultPanel.tsx"
+      - "frontend/components/app/AppShell.tsx"
+      - "frontend/components/app/admin/{ReviewDialog,MaskingTab,CredentialsDialog}.tsx"
+      - "frontend/components/ui/{DataGrid,Toast}.tsx"
+      - "frontend/lib/workspace-status.ts"
+      - "frontend/package.json"
+      - "frontend/README.md"
+      - "AGENTS.md"
+
+  validation:
+    - command: "npx tsc --noEmit"
+      result: PASS
+      evidence: "strict mod, 0 hata"
+    - command: "npm run audit:api"
+      result: PASS
+      evidence: "23 frontend çağrısının tamamı bir FastAPI rotasına karşılık geliyor"
+    - command: "npm run audit:contrast"
+      result: PASS
+      evidence: "64 kontrol (32 renk çifti x 2 tema)"
+    - command: "npm run build"
+      result: PASS
+      evidence: "ilk yük 150.31 kB gzip"
+    - command: "uçtan uca tarayıcı doğrulaması"
+      result: PASS
+      evidence: >
+        Backend çalışmadığı için, FastAPI router ve Pydantic şemalarına birebir
+        uyan geçici bir doğrulama sunucusu (scratchpad'de, repoya girmedi) ile
+        giriş, çalışma alanı listesi, sorgu çalıştırma, kırpılan sonuç,
+        risk reddi, hata + trace_id, çalışma alanı oluşturma, onay incelemesi,
+        önizleme, şema keşfi ve maskeleme ekranları tıklanarak doğrulandı.
+        Gönderilen her gövde sunucu günlüğünden şemaya karşı kontrol edildi.
+    - command: "pytest"
+      result: NOT_RUN
+      evidence: "Backend değiştirilmedi; frontend için proje bir test komutu tanımlamıyor."
+
+  notes:
+    - "Çalışma ağacında bu oturuma ait olmayan audit altyapısı çalışması var (web_api/common/audit*.py, models.py AuditLog, ADR-0009, SPEC-0006). Dokunulmadı ve commit edilmedi."
+    - "Doğrulama sunucusu bilinçli olarak repoya alınmadı; kalıcı sahte veri bırakmamak için silinen .env.local ile birlikte kullanıldı."

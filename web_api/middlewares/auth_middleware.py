@@ -2,15 +2,34 @@
 Authentication Middleware
 Her HTTP request için JWT token doğrulama ve session kontrolü yapar
 """
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.middleware.base import RequestResponseEndpoint
-from starlette.responses import Response as StarletteResponse
-from starlette.responses import RedirectResponse
-from fastapi import Request
+import logging
 import os
-from authentication.services import verify_token, get_user_id_from_payload
+
+from fastapi import Request
 from fastapi.exceptions import HTTPException
+from sqlalchemy import select
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import RedirectResponse
+from starlette.responses import Response as StarletteResponse
+
+from app_database.models import User
+from authentication.services import get_user_id_from_payload, verify_token
+from authentication.sessions import session_alive
 from common.logging_config import user_id_var
+
+logger = logging.getLogger(__name__)
+
+# Routes that must be reachable without a session. Compared for equality; see
+# the note in `dispatch`.
+SKIP_AUTH_PATHS: frozenset[str] = frozenset({
+    "/login",
+    "/register",
+    "/api/login",
+    "/api/register",
+    "/api/refresh",
+    "/health",
+})
+
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """
@@ -34,17 +53,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
         Returns:
             StarletteResponse: The HTTP response object.
         """
-        skip_auth_paths: list[str] = [
-            "/login", 
-            "/register", 
-            "/api/login", 
-            "/api/register",
-            "/health"
-        ]
-        
-        if any(request.url.path.startswith(path) for path in skip_auth_paths):
+        # Matched exactly, not by prefix. `startswith` meant any future route
+        # beginning with one of these strings — `/api/registered_databases`,
+        # `/login-history` — would silently become unauthenticated, and nothing
+        # about adding that route would reveal it.
+        if request.url.path in SKIP_AUTH_PATHS:
             return await call_next(request)
-        
+
         token: str | None = request.cookies.get("access_token")
         if not token:
             if request.url.path.startswith("/api/"):
@@ -62,15 +77,35 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if not user_id:
                 raise HTTPException(status_code=401, detail="Invalid token")
                 
-            # Check JTI blacklist
-            jti = payload.get("jti")
-            if jti:
+            session_id = payload.get("sid")
+            if session_id is not None:
                 app_db = request.app.state.context.app_db
-                is_blacklisted = await app_db.is_token_blacklisted(jti)
-                if is_blacklisted:
-                    raise HTTPException(status_code=401, detail="Token has been revoked")
-        except Exception as e:
-            print(f"Auth verification failed: {e}")
+                if not await session_alive(app_db, int(session_id), int(user_id)):
+                    raise HTTPException(status_code=401, detail="Session has been revoked")
+                # `get_current_user` used to repeat this exact query on every
+                # authenticated request — the same question, the same answer,
+                # a third of the per-request database load for nothing.
+                request.state.session_verified = True
+
+            # The middleware already has the user ID from the JWT. Load the
+            # complete user once so account disablement takes effect before
+            # any endpoint handler runs. The dependency reuses this object.
+            app_db = request.app.state.context.app_db
+            try:
+                user_id_int = int(user_id)
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(status_code=401, detail="Invalid token") from exc
+
+            async with app_db.get_app_db() as db:
+                result = await db.execute(select(User).where(User.id == user_id_int))
+                authenticated_user = result.scalars().first()
+
+            if authenticated_user is None or not authenticated_user.is_active:
+                raise HTTPException(status_code=401, detail="Invalid token")
+
+            request.state.authenticated_user = authenticated_user
+        except Exception as exc:
+            logger.warning("Kimlik doğrulama reddedildi: %s", type(exc).__name__)
             if request.url.path.startswith("/api/"):
                 return StarletteResponse(
                     content='{"detail":"Invalid token"}',

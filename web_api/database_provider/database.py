@@ -1,19 +1,26 @@
-"""
-Database Provider Module
-Manages database engines caching and session provisioning using centralized credentials.
-All functions and classes are strictly typed.
-"""
-from sqlalchemy.ext.asyncio import async_sessionmaker
-from typing import Dict, Any
-import app_database.models as models
-from database_provider.config import (
-    create_connection_string, 
-    get_driver_for_technology,
-    CENTRAL_DB_USER,
-    CENTRAL_DB_PASSWORD
-)
+"""Target database session provisioning with per-database role credentials."""
+import logging
 from contextlib import asynccontextmanager
+from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from app_database import models
+from database_provider.config import (
+    CENTRAL_DB_PASSWORD,
+    CENTRAL_DB_USER,
+    QUERY_TIMEOUT_SECONDS,
+    SESSION_INIT_SQL,
+    create_connection_string,
+    get_connect_args,
+    get_driver_for_technology,
+)
+
 from .engine_cache import EngineCache
+
+logger = logging.getLogger(__name__)
+
 
 class DatabaseProvider:
     """
@@ -23,38 +30,79 @@ class DatabaseProvider:
     def __init__(self):
         """Initializes DatabaseProvider."""
         self.engine_cache: EngineCache = EngineCache()
-        self.db_info: Dict[str, Dict[str, Any]] = {}
+        self.db_info: dict[str, dict[str, Any]] = {}
         # Flat dictionary mapping db_uuid -> database details for O(1) lookup
-        self.db_by_uuid: Dict[str, Dict[str, Any]] = {}
+        self.db_by_uuid: dict[str, dict[str, Any]] = {}
 
-    def set_db_info(self, info: Dict[str, Dict[str, Any]]) -> None:
+    def set_db_info(self, info: dict[str, dict[str, Any]]) -> None:
         """
         Sets database configuration information and builds UUID lookup dictionary.
         
         Args:
             info: Database configuration dictionary.
         """
-        print(f"[DEBUG set_db_info] Input info: {info}")
-        self.db_info = info
+        # Keep the public database catalogue separate from credential-bearing
+        # runtime entries. ``get_db_info_db`` feeds an API response.
+        self.db_info = {}
         self.db_by_uuid = {}
         for servername, server_data in info.items():
             tech = server_data.get("technology", "mssql")
+            public_databases = []
             for db_data in server_data.get("databases", []):
-                # db_data is {"name": "db_name", "uuid": "db_uuid"}
-                print(f"[DEBUG set_db_info] Processing db_data: {db_data}")
+                # db_data is {"name", "uuid", "connection_mode", "credentials"}
                 if isinstance(db_data, dict) and "uuid" in db_data:
-                    db_uuid = db_data["uuid"]
+                    # The ORM hands back uuid.UUID for MSSQL UNIQUEIDENTIFIER, while every
+                    # lookup arrives as a string from the request body. Normalise to str
+                    # so db_by_uuid stays keyed the way its Dict[str, ...] type declares.
+                    db_uuid = str(db_data["uuid"])
                     self.db_by_uuid[db_uuid] = {
                         "servername": servername,
                         "database_name": db_data["name"],
-                        "technology": tech
+                        "technology": tech,
+                        "credentials": db_data.get("credentials", {}),
                     }
-        print(f"[DEBUG set_db_info] Built db_by_uuid: {self.db_by_uuid}")
+                    # The connection mode is derived state, not a secret: it
+                    # says which tiers exist, never who they authenticate as.
+                    public_databases.append({
+                        "name": db_data["name"],
+                        "uuid": db_uuid,
+                        "connection_mode": db_data.get("connection_mode"),
+                    })
+            self.db_info[servername] = {
+                "databases": public_databases,
+                "technology": tech,
+            }
+
+        logger.debug(
+            "Hedef veritabanı kataloğu güncellendi: %d sunucu, %d veritabanı",
+            len(self.db_info),
+            len(self.db_by_uuid),
+        )
+
+    def _credentials_for(self, db_uuid: str, tier: str) -> tuple[str, str] | None:
+        """Resolve one selected tier without exposing credentials to callers."""
+        credentials = self.db_by_uuid[db_uuid].get("credentials", {})
+        tier_credentials = credentials.get(tier, {})
+        username = tier_credentials.get("username")
+        password = tier_credentials.get("password")
+        if username and password:
+            return username, password
+
+        # Existing registered databases are migrated incrementally. They have
+        # no tier credentials at all and retain the old central connection only
+        # until an administrator re-registers them with a supported mode.
+        has_any_tier_credential = any(
+            values.get("username") or values.get("password")
+            for values in credentials.values()
+        )
+        if not has_any_tier_credential and tier in {"ro", "rw"}:
+            return CENTRAL_DB_USER, CENTRAL_DB_PASSWORD
+        return None
     
     @asynccontextmanager
-    async def get_session(self, user: models.User, db_uuid: str):
+    async def get_session(self, user: models.User, db_uuid: str, tier: str = "ro"):
         """
-        Provides user-specific async database session using centralized credentials.
+        Provides an async target database session for the requested tier.
         
         Args:
             user: User model.
@@ -70,27 +118,63 @@ class DatabaseProvider:
                 f"Database with UUID '{db_uuid}' not found in configuration."
             )
         
+        if tier not in {"ro", "rw", "ddl"}:
+            raise ValueError(f"Unsupported credential tier '{tier}'.")
+
         db_entry = self.db_by_uuid[db_uuid]
         servername = db_entry["servername"]
         database_name = db_entry["database_name"]
         tech = db_entry["technology"]
         driver = get_driver_for_technology(tech)
  
+        credentials = self._credentials_for(db_uuid, tier)
+        if credentials is None:
+            raise ValueError(
+                f"Bu veritabanı için {tier.upper()} kademesinde kimlik bilgisi tanımlı değil."
+            )
+        username, password = credentials
         conn_str = create_connection_string(
             tech=tech,
             driver=driver,
             servername=servername,
             database=database_name,
-            username=CENTRAL_DB_USER,
-            password=CENTRAL_DB_PASSWORD,
+            username=username,
+            password=password,
         )
         
-        engine = await self.engine_cache.get_engine(conn_str, db_uuid=db_uuid)
+        engine = await self.engine_cache.get_engine(
+            conn_str,
+            db_uuid=db_uuid,
+            tier=tier,
+            connect_args=get_connect_args(tech, QUERY_TIMEOUT_SECONDS),
+            tech=tech,
+            query_timeout_seconds=QUERY_TIMEOUT_SECONDS,
+        )
 
         AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=engine)
         async with AsyncSessionLocal() as session:
             try:
+                init_sql = SESSION_INIT_SQL.get(tech.lower().strip())
+                if init_sql:
+                    await session.execute(
+                        text(init_sql.format(ms=QUERY_TIMEOUT_SECONDS * 1000))
+                    )
                 yield session
+            except BaseException:
+                # Any failure inside the caller's block discards the batch.
+                await session.rollback()
+                raise
+            else:
+                # SQLAlchemy rolls an open transaction back on close(), so a
+                # write that is never committed here runs, reports a rowcount,
+                # is audited as successful — and then disappears. The `ro` tier
+                # is read-only by construction and stays uncommitted.
+                #
+                # Callers must have consumed their rows before this point:
+                # the `async with` block they wrote around this session has
+                # already exited, so fetching after the commit is not possible.
+                if tier != "ro":
+                    await session.commit()
             finally:
                 await session.close()
 
@@ -108,17 +192,13 @@ class DatabaseProvider:
         """
         await self.engine_cache.stop_loop()
 
-    async def close_user_engines(self, user_id: int) -> None:
+    async def close_database_engines(self, db_uuid: str) -> int:
         """
-        Closes all database engines for a specific user.
-        Called when a user logs out.
-        
-        Args:
-            user_id: The ID of the user whose engines should be closed.
+        Closes all cached role-tier engines for one target database.
         """
-        await self.engine_cache.close_user_engines(user_id) 
-    
-    def get_db_info_db(self) -> Dict[str, Dict[str, Any]]:
+        return await self.engine_cache.close_database_engines(db_uuid)
+
+    def get_db_info_db(self) -> dict[str, dict[str, Any]]:
         """
         Returns database configuration information for all servers.
         

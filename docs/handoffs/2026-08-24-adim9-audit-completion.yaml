@@ -1,0 +1,76 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "Codex"
+  to: "WebQuery maintainer"
+  created_at: "2026-08-24T16:45:20+03:00"
+  task: "Adım 9 genel audit tablosu uygulamasını tamamlama"
+
+  scope:
+    completed:
+      - "Admin-only, action/target/limit doğrulamalı audit log endpoint'i eklendi."
+      - "Admin HTTP audit olaylarına doğrudan request peer IP bilgisi taşındı."
+      - "Slack approve/reject registry database ID ile atomik kaydediliyor ve başarı commit sonrasında bildiriliyor."
+      - "Admin, auth ve Slack audit davranışları entegrasyon testleriyle doğrulandı."
+      - "SPEC-0006, ADR-0009 ve audit takip listesi gerçek uygulama kapsamıyla eşitlendi."
+    excluded:
+      - "Henüz endpoint'i olmayan revoke/remove/enable/disable/password-change iş akışları."
+      - "Ertelenmiş hedef database credential modeli kararı."
+
+  changed_files:
+    created:
+      - "docs/handoffs/2026-08-24-adim9-audit-completion.yaml"
+    modified:
+      - "docs/adr/ADR-0009-audit-log-foundation.md"
+      - "docs/inbox/AUDIT-ACTION-FOLLOW-UPS.md"
+      - "docs/specs/SPEC-0006-audit-log-foundation.md"
+      - "web_api/admin/router.py"
+      - "web_api/admin/services.py"
+      - "web_api/slack_integration/listener.py"
+      - "web_api/tests/integration/test_admin_api.py"
+      - "web_api/tests/integration/test_auth_api.py"
+      - "web_api/tests/integration/test_notifications_and_slack.py"
+    deleted: []
+
+  decisions:
+    - decision: "Slack audit database_id alanı nullable yapılmadı; registry kimliği transaction içinde çözülüyor."
+      rationale: "Audit kaydının hangi kayıtlı database üzerinde verildiği belirsiz kalmamalı."
+      recorded_in: "docs/adr/ADR-0009-audit-log-foundation.md"
+    - decision: "Slack acknowledgement hemen, kullanıcıya görünür başarı cevabı database commit'inden sonra veriliyor."
+      rationale: "Başarısız veya rollback olmuş bir kararın başarılı gösterilmesini engeller."
+      recorded_in: "docs/adr/ADR-0009-audit-log-foundation.md"
+    - decision: "HTTP audit IP bilgisi yalnız request.client.host kaynağından alınıyor."
+      rationale: "Doğrulanmamış proxy header'larının actor kaynağını sahtelemesini önler."
+      recorded_in: "docs/specs/SPEC-0006-audit-log-foundation.md"
+
+  validation:
+    commands_run:
+      - command: ".venv/bin/pytest tests/integration/test_notifications_and_slack.py tests/integration/test_admin_api.py -q"
+        result: "failed"
+        evidence: "Regresyon testleri implementation öncesinde 6 failed, 4 passed ile eksikleri yeniden üretti."
+      - command: ".venv/bin/pytest tests/integration/test_notifications_and_slack.py tests/integration/test_admin_api.py -q"
+        result: "passed"
+        evidence: "10 passed, 1 warning."
+      - command: ".venv/bin/pytest tests/integration/test_admin_api.py tests/integration/test_auth_api.py tests/integration/test_notifications_and_slack.py -q"
+        result: "passed"
+        evidence: "19 passed, 1 warning."
+      - command: ".venv/bin/pytest -q"
+        result: "passed"
+        evidence: "82 passed, 1 warning in 64.73s."
+      - command: ".venv/bin/ruff check web_api/admin/router.py web_api/tests/integration/test_admin_api.py web_api/tests/integration/test_notifications_and_slack.py"
+        result: "passed"
+        evidence: "All checks passed."
+      - command: ".venv/bin/python -m compileall -q web_api/admin web_api/slack_integration web_api/common && git diff --check"
+        result: "passed"
+        evidence: "No syntax or whitespace errors."
+      - command: ".venv/bin/ruff check --ignore BLE001 web_api/admin/router.py web_api/admin/services.py web_api/slack_integration/listener.py web_api/tests/integration/test_admin_api.py web_api/tests/integration/test_auth_api.py web_api/tests/integration/test_notifications_and_slack.py"
+        result: "passed"
+        evidence: "All checks passed; existing broad-exception policy violations were excluded from this scoped validation."
+
+  open_questions:
+    - id: "OQ-2026-002"
+      status: "Deferred"
+      question: "Runtime target database bağlantılarında merkezi mi, database başına mı credential kullanılacağı."
+
+  known_risks:
+    - "Test paketi, bu değişiklikten bağımsız Pydantic V2 class-based config deprecation uyarısı üretmeye devam ediyor."
+  next_step: "Security-hardening branch değişikliğini inceleyip merge edin."

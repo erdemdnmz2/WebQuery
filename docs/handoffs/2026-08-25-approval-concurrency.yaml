@@ -1,0 +1,73 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "Codex"
+  to: "WebQuery reviewer"
+  created_at: "2026-08-25T12:30:00+03:00"
+  task: "Adım 10 ve 11: atomik ve birleşik approval karar akışı"
+
+  scope:
+    completed:
+      - "Web ve Slack kararları transport-bağımsız approval.service.decide() fonksiyonuna taşındı."
+      - "Koşullu QueryData UPDATE, hedef veritabanı ADMIN kontrolü, self-approval savunması ve tüm audit yan etkileri aynı transaction içine alındı."
+      - "Red gerekçesi web API'de zorunlu request body, Slack'te zorunlu modal alanı oldu."
+      - "QueryData için decision_reason, decided_by ve decided_at alanları ile idempotent Alembic migration eklendi."
+      - "Slack, eşleşmeyen e-posta için fallback aktör kullanmaz; yalnızca gerçek WebQuery User ile karar verir."
+      - "Web/Slack karar, self-approval ve migration senaryolarını kapsayan testler güncellendi/eklendi."
+    excluded:
+      - "Riskli sorgu çalıştırmadaki mevcut admin bypass davranışı değiştirilmedi."
+      - "Yeni bir approval rolü veya Slack kullanıcı eşleme kaynağı eklenmedi."
+
+  changed_files:
+    created:
+      - "web_api/approval/__init__.py"
+      - "web_api/approval/exceptions.py"
+      - "web_api/approval/service.py"
+      - "web_api/migrations/versions/f6d4a7b9c2e1_add_query_decision_metadata.py"
+    modified:
+      - "docs/specs/SPEC-0013-approval-concurrency.md"
+      - "docs/adr/ADR-0011-conditional-approval-update.md"
+      - "docs/handoffs/2026-08-25-approval-concurrency.yaml"
+      - "frontend/pages/Admin.tsx"
+      - "web_api/admin/exceptions.py"
+      - "web_api/admin/router.py"
+      - "web_api/admin/schemas.py"
+      - "web_api/admin/services.py"
+      - "web_api/app_database/models.py"
+      - "web_api/common/audit_details.py"
+      - "web_api/slack_integration/listener.py"
+      - "web_api/tests/integration/test_admin_api.py"
+      - "web_api/tests/integration/test_notifications_and_slack.py"
+      - "web_api/tests/unit/test_baseline_migration.py"
+    deleted: []
+
+  decisions:
+    - decision: "Tüm approval kararları tek ortak servisten geçer."
+      rationale: "Web ve Slack'in yetki, yarış ve audit kurallarının zamanla ayrışmasını önler."
+      recorded_in: "docs/adr/ADR-0011-conditional-approval-update.md"
+    - decision: "Red gerekçesi her iki taşıyıcıda zorunludur."
+      rationale: "Red kararının izlenebilirliği ve kullanıcının geri bildirim alabilmesi için gerekçe kalıcı olarak saklanır."
+      recorded_in: "docs/specs/SPEC-0013-approval-concurrency.md"
+
+  validation:
+    commands_run:
+      - command: "python3 -m compileall -q web_api/approval web_api/admin web_api/app_database web_api/common web_api/slack_integration web_api/tests"
+        result: "passed"
+        evidence: "Değiştirilen backend modülleri ve test dosyaları için sözdizimi kontrolü başarılı."
+      - command: "cd web_api && python3 -m pytest tests/unit/test_baseline_migration.py tests/integration/test_admin_api.py tests/integration/test_notifications_and_slack.py"
+        result: "not-run"
+        evidence: "Çalışma ortamının Python 3.13 yorumlayıcısında pytest kurulu değil: No module named pytest."
+      - command: "cd frontend && npm run build"
+        result: "passed"
+        evidence: "Vite build başarıyla tamamlandı; yalnızca mevcut büyük bundle uyarısı var."
+      - command: "git diff --check"
+        result: "passed"
+        evidence: "Whitespace hatası yok."
+
+  open_questions: []
+
+  known_risks:
+    - "Python test ortamı bu çalışma alanında kurulmadığından pytest suite'i yeniden çalıştırılamadı."
+    - "SQLite testleri üretimdeki SQL Server rowcount/NOCOUNT davranışını tam temsil etmez."
+    - "Slack modal submit sonrası chat_update ağ hatası alırsa karar kalıcı olur; mesaj güncellemesi yeniden denenmez."
+
+  next_step: "Proje sanal ortamında hedef pytest komutunu çalıştırıp Slack modal ve SQL Server eşzamanlılık senaryosunu doğrulayın."

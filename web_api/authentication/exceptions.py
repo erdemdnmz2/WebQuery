@@ -4,6 +4,7 @@ Custom exceptions for user authentication, registration, and session verificatio
 """
 from common.exceptions import BaseServiceException
 
+
 class UserAlreadyExistsError(BaseServiceException):
     """Raised when registering a new user with an email that is already taken."""
     status_code = 400

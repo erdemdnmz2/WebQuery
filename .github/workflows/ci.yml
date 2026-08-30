@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# The workflow only reads the repository: it checks out, installs, lints and
+# tests. Nothing writes back. Setting this explicitly stops a compromised
+# dependency in any step from using the default job token to push or comment.
+permissions:
+  contents: read
+
+# Every push to the long-lived branch used to keep its own runner alive even
+# after the next commit landed. This cancels superseded runs of the same ref.
+# `github.ref` differs between the push and the pull_request event, so the two
+# runs a PR triggers stay separate on purpose — ADR-0002 wants both.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    # Defense-in-depth: a background asyncio task (EngineCache cleanup
+    # loop) used to outlive test teardown and hang `pytest` after it had
+    # already printed its results (reproduced locally 3x, fixed in
+    # tests/conftest.py). Kept as a guard against a similar leak recurring
+    # silently. See ADR-0002.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11" # matches web_api/Dockerfile
+          cache: pip
+          cache-dependency-path: web_api/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r web_api/requirements.txt
+          pip install pytest-cov ruff pip-audit
+
+      # Blocking. `F` (pyflakes) and `E9` (syntax/IO errors) are the rules that
+      # find real defects rather than style: an undefined name, an unused
+      # import hiding a moved symbol, a file that does not parse. The audit
+      # found three live F821s in a dead module this way. The remaining
+      # informational rules stay in the step below. See ADR-0002.
+      - name: Lint (correctness rules — merge gate)
+        working-directory: web_api
+        run: ruff check --select F,E9 .
+
+      - name: Lint (style — informational, see ADR-0002)
+        working-directory: web_api
+        continue-on-error: true
+        run: ruff check .
+
+      - name: Tests
+        working-directory: web_api
+        env:
+          # CI-only values, unrelated to any real deployment secret.
+          SECRET_KEY: ci-test-key-for-github-actions-only-not-production
+          # Ephemeral CI data only; production must provide its own secret.
+          # CI_FERNET_KEY may override this value when configured in GitHub.
+          QUERY_ENCRYPTION_KEY: ${{ secrets.CI_FERNET_KEY || 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }}
+          APP_DATABASE_URL: sqlite+aiosqlite:///./test.db
+          CENTRAL_DB_USER: ci_user
+          CENTRAL_DB_PASSWORD: ci_pass
+        run: pytest -v --cov=. --cov-report=term-missing
+
+      - name: Secret leak scan
+        run: |
+          # Test fixtures use dummy credentials on purpose; only production
+          # code paths are scanned.
+          ! grep -rn --include='*.py' --exclude-dir=tests \
+              -E "(password|secret|api_key)\s*=\s*['\"][^'\"]{8,}" web_api/ \
+            || (echo "Hardcoded secret-looking value found in source" && exit 1)
+
+      # Informational for now, and it reports a lot: 85 advisories across 16
+      # pinned packages as of 2026-08-30, `aiohttp` 3.9.5 alone accounting for
+      # roughly a third. The fixes are version upgrades that need their own
+      # verification pass, so making this blocking would put a red CI in front
+      # of every unrelated change. Known cost of leaving it informational: the
+      # step has failed on every run since it was added, so a *new* advisory
+      # looks exactly like the standing backlog. Compare the counts, not the
+      # pass/fail. See docs/inbox/DEPENDENCY-ADVISORY-UPGRADES.md and ADR-0002.
+      - name: Dependency audit (informational)
+        continue-on-error: true
+        run: pip-audit -r web_api/requirements.txt
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24" # matches frontend/Dockerfile
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # All four are blocking: they pass locally today, so making them a gate
+      # costs nothing now and keeps the frontend from drifting the way the
+      # backend lint did. There is still no frontend unit-test command; do not
+      # add one here until the suite exists.
+      - name: Typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      # Fails when frontend/services/api.ts calls a route the backend does not
+      # expose - the contract drift class the audit found repeatedly.
+      - name: API contract audit
+        working-directory: frontend
+        run: npm run audit:api
+
+      - name: Contrast audit
+        working-directory: frontend
+        run: npm run audit:contrast
+
+      # Informational for the same reason as pip-audit, but the backlog here is
+      # down to one package: `xlsx` (SheetJS 0.18.5), whose upstream left npm,
+      # so the fix is a library replacement rather than a version bump. The
+      # other three highs this reported on 2026-08-30 (`nanoid`, `postcss`,
+      # `react-router`) were in-range patch bumps and were taken in the
+      # lockfile the same day, which is why the expected failure count is 1.
+      - name: Dependency audit (informational)
+        working-directory: frontend
+        continue-on-error: true
+        run: npm audit --audit-level=high

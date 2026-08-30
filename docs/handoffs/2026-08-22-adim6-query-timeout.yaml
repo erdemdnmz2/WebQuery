@@ -1,0 +1,64 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "Codex"
+  to: "WebQuery bakım ekibi"
+  created_at: "2026-08-22T00:00:00+03:00"
+  task: "Adım 6 — Hedef sorgu zaman aşımı implementasyonu"
+
+  scope:
+    completed:
+      - "QUERY_TIMEOUT_SECONDS ayarı eklendi; varsayılan değer 300 saniye."
+      - "MSSQL, PostgreSQL ve MySQL için teknolojiye uygun timeout ayarları eklendi."
+      - "EngineCache.get_engine() connect_args kabul edecek şekilde güncellendi."
+      - "MySQL için session başına SET SESSION max_execution_time uygulanması eklendi."
+      - "Timeout ayarları için config ve engine cache unit testleri eklendi."
+      - "Özellik spec'i ve teknik karar ADR'si oluşturuldu."
+    excluded:
+      - "Gerçek MSSQL/PostgreSQL/MySQL sunucularında uzun sorgu entegrasyon testi yapılmadı."
+      - "DatabaseProvider.get_session() içindeki MySQL init SQL çalıştırmasının doğrudan mock testi eklenmedi."
+      - "Kullanıcı bazlı farklı timeout politikası uygulanmadı."
+      - "MAX_ROW_COUNT_LIMIT davranışı değiştirilmedi."
+
+  changed_files:
+    created:
+      - "docs/specs/SPEC-0004-target-query-timeout.md"
+      - "docs/adr/ADR-0007-target-query-timeout.md"
+    modified:
+      - "web_api/database_provider/config.py"
+      - "web_api/database_provider/engine_cache.py"
+      - "web_api/database_provider/database.py"
+      - "web_api/tests/unit/test_database_config.py"
+      - "web_api/tests/unit/test_engine_cache.py"
+    deleted: []
+
+  decisions:
+    - decision: "Hedef sorgu timeout'u SQL metni değiştirilmeden bağlantı/session katmanında uygulanacak."
+      rationale: "Kullanıcı sorgusuna LIMIT/TOP gibi ifadeler eklemek her motor ve DML türü için doğru bir timeout mekanizması değildir."
+      recorded_in: "docs/adr/ADR-0007-target-query-timeout.md"
+    - decision: "MySQL için connect_timeout'a ek olarak session max_execution_time kullanılacak."
+      rationale: "connect_timeout yalnızca bağlantı kurulmasını sınırlar; sorgu çalışma süresi için MySQL session ayarı gerekir."
+      recorded_in: "docs/specs/SPEC-0004-target-query-timeout.md"
+    - decision: "Timeout değeri QUERY_TIMEOUT_SECONDS ortam değişkeninden okunacak ve varsayılanı 300 saniye olacak."
+      rationale: "Ortamlar arasında farklı süreler yapılandırılabilsin ve kod içine production değeri gömülmesin."
+      recorded_in: "docs/specs/SPEC-0004-target-query-timeout.md"
+
+  validation:
+    commands_run:
+      - command: "cd web_api && ../.venv/bin/pytest -q tests/unit/test_database_config.py tests/unit/test_engine_cache.py"
+        result: "passed"
+        evidence: "12 passed, 1 warning"
+      - command: "cd web_api && ../.venv/bin/pytest -q"
+        result: "passed"
+        evidence: "62 passed, 1 warning in 53.06s"
+      - command: "git diff --check -- docs/specs/SPEC-0004-target-query-timeout.md docs/adr/ADR-0007-target-query-timeout.md web_api/database_provider/config.py web_api/database_provider/engine_cache.py web_api/database_provider/database.py web_api/tests/unit/test_database_config.py web_api/tests/unit/test_engine_cache.py"
+        result: "passed"
+        evidence: "Değiştirilen dosyalarda whitespace hatası bulunmadı."
+
+  open_questions: []
+
+  known_risks:
+    - "Gerçek hedef veritabanı driver davranışları henüz canlı MSSQL/PostgreSQL/MySQL sorgularıyla doğrulanmadı."
+    - "Engine cache mevcut engine'i yeniden kullandığı için QUERY_TIMEOUT_SECONDS değişikliği yeni engine oluşturulana kadar mevcut bağlantılara yansımayabilir."
+    - "MSSQL driver timeout'unun server-side statement'ı her durumda PostgreSQL statement_timeout kadar kesin sonlandırdığı ayrıca gözlemlenmelidir."
+
+  next_step: "Gerçek hedef veritabanlarından en az biriyle düşük timeout değerinde uzun sorgu entegrasyon testi çalıştırıp timeout ve bağlantı temizliğini doğrula."

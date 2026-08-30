@@ -1,0 +1,65 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "codex"
+  to: "user / next-session-agent"
+  created_at: "2026-08-21T20:10:00+03:00"
+  task: "webquery_implementasyon_sirasi.md — Blok 0, Adım 4 (`0.4`) `sa` varsayılanını kaldır"
+
+  scope:
+    completed:
+      - "`web_api/database_provider/config.py` içindeki `DB_USER=sa` varsayılanı kaldırıldı."
+      - "`web_api/app_database/config.py` içindeki ikinci `DB_USER=sa` varsayılanı kaldırıldı."
+      - "Eksik DB kullanıcı ayarının sessizce yüksek yetkili `sa` hesabına dönüşmesi engellendi."
+      - "`CENTRAL_DB_USER` açıkça `sa`, `root`, `postgres` veya `admin` ise startup sırasında warning loglanıyor."
+      - "Config guard ve DB config davranışı için unit testler eklendi."
+      - "Adım 16 için geçiş notu kaydedildi: role bazlı credential modeline geçildiğinde `CENTRAL_DB_USER` ve `CENTRAL_DB_PASSWORD` hedef DB runtime sorguları için zorunlu olmaktan çıkarılmalı; bağlantı bilgileri `Databases` kaydındaki `ro/rw/ddl` alanlarından okunmalı."
+    excluded:
+      - "Adım 16 (`3.1`) henüz uygulanmadı; runtime bağlantıları hâlâ merkezi credential akışını kullanıyor."
+      - "Hedef DB'de `ro`, `rw` veya `ddl` hesaplarının oluşturulması yapılmadı; bu hesaplar DBA tarafından manuel provision edilecek."
+      - "Secret manager ve credential rotasyonu yapılmadı."
+
+  changed_files:
+    created:
+      - "web_api/tests/unit/test_database_config.py"
+      - "docs/handoffs/2026-08-21-adim4-sa-varsayilani-kaldir.yaml"
+    modified:
+      - "web_api/database_provider/config.py"
+      - "web_api/app_database/config.py"
+      - "web_api/common/config_guard.py"
+      - "web_api/tests/unit/test_config_guard.py"
+      - "docs/specs/SPEC-0001-startup-security-config-guard.md"
+      - "docs/adr/ADR-0004-startup-security-config-fail-closed.md"
+      - "webquery_implementasyon_sirasi.md"
+    deleted: []
+
+  decisions:
+    - decision: "DB kullanıcı ayarında sessiz `sa` fallback'i kullanılmayacak."
+      rationale: "Eksik konfigürasyonun yüksek yetkili hesapla çalışmaya devam etmesi güvenli değildir."
+      recorded_in: "docs/specs/SPEC-0001-startup-security-config-guard.md"
+    - decision: "Merkezi credential modeli yalnızca 16. adıma kadar geçiş durumudur; nihai runtime modeli veritabanı başına role credential'larıdır."
+      rationale: "Kullanıcının seçtiği `ro/rw`, gerekirse `ddl`, modeli hedef DB seviyesinde ikinci yetki sınırı sağlar."
+      recorded_in: "docs/specs/SPEC-0002-role-based-target-database-credentials.md, docs/adr/ADR-0005-role-based-target-database-credentials.md"
+    - decision: "16. adım uygulanırken `config_guard` içindeki `CENTRAL_DB_USER`/`CENTRAL_DB_PASSWORD` zorunluluğu hedef DB runtime bağlantıları için kaldırılacak."
+      rationale: "Runtime sorguları merkezi hesap yerine `Databases` tablosundaki kademe credential'larıyla çalışacak."
+      recorded_in: "docs/specs/SPEC-0002-role-based-target-database-credentials.md"
+
+  validation:
+    commands_run:
+      - command: "cd web_api && ../.venv/bin/python -m pytest -q tests/unit/test_config_guard.py tests/unit/test_database_config.py"
+        result: "passed"
+        evidence: "10 passed, 1 Pydantic deprecation warning."
+      - command: "cd web_api && ../.venv/bin/ruff check database_provider/config.py app_database/config.py common/config_guard.py tests/unit/test_config_guard.py tests/unit/test_database_config.py"
+        result: "passed"
+        evidence: "All checks passed."
+      - command: "git diff --check -- <Adım 4 kapsamındaki dosyalar>"
+        result: "passed"
+        evidence: "Adım 4 kapsamındaki değişikliklerde whitespace hatası bulunmadı."
+
+  open_questions: []
+
+  known_risks:
+    - "16. adım uygulanana kadar production runtime hedef DB bağlantıları için CENTRAL_DB_USER/CENTRAL_DB_PASSWORD hâlâ gereklidir."
+    - "16. adımda config guard, DatabaseProvider ve admin veritabanı ekleme akışı birlikte güncellenmezse uygulama merkezi credential aramaya devam eder veya startup'ta gereksiz yere kapanır."
+    - "`DB_USER` ve `DB_PASSWORD` boşken APP_DATABASE_URL verilmezse uygulama DB bağlantı URL'si geçersiz olabilir; deploy ortamında APP_DATABASE_URL açıkça sağlanmalıdır."
+
+  next_step: "Adım 16'yı uygularken Databases modeline gerçek DBA-provisioned `ro/rw/ddl` credential girişini ekle, DatabaseProvider'ı kademe credential'larıyla bağla ve ardından CENTRAL_DB_* startup zorunluluğunu kaldır."

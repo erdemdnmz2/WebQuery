@@ -1,7 +1,12 @@
-from notification.config import message_format, approval_message_format, SLACK_URL
-from slack_integration.schemas import create_approval_message
+import logging
+from typing import Any
+
 import httpx
-from typing import List, Dict, Any, Optional
+
+from notification.config import SLACK_URL, approval_message_format, message_format
+from slack_integration.schemas import create_approval_message
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationService:
@@ -31,13 +36,13 @@ class NotificationService:
 
         return await self._send_message_to_slack(blocks=blocks)
 
-    async def _send_message_to_slack(self, text: str = None, blocks: List[Dict[str, Any]] = None) -> bool:
+    async def _send_message_to_slack(self, text: str | None = None, blocks: list[dict[str, Any]] | None = None) -> bool:
         """
         Send a message to Slack using httpx.AsyncClient.
         Returns True on success, False on failure.
         """
         if not self.slack_url:
-            print("[Notification] SLACK_URL tanımlı değil. Mesaj gönderilmedi.")
+            logger.warning("Slack webhook yapılandırılmamış; bildirim gönderilmedi")
             return False
 
         headers = {"Content-Type": "application/json; charset=utf-8"}
@@ -58,10 +63,9 @@ class NotificationService:
             async with httpx.AsyncClient(timeout=8.0) as client:
                 resp = await client.post(self.slack_url, headers=headers, json=payload)
                 if resp.status_code >= 400:
-                    print(f"[Notification] Slack webhook hatası: {resp.status_code} - {resp.text}")
+                    logger.warning("Slack webhook isteği başarısız oldu: HTTP %d", resp.status_code)
                     return False
                 return True
-        except httpx.RequestError as e:
-            print(f"[Notification] Slack isteği başarısız: {type(e).__name__}: {e}")
+        except httpx.RequestError as exc:
+            logger.warning("Slack webhook isteği başarısız oldu: %s", type(exc).__name__)
             return False
-

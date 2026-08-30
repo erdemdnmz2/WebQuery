@@ -1,7 +1,4 @@
 """
 Admin Module
-Handles query approvals and database registrations by administrators.
+Handles database-scoped query approvals, masking, and access grants.
 """
-from .exceptions import DatabaseAlreadyExistsError
-
-__all__ = ["DatabaseAlreadyExistsError"]

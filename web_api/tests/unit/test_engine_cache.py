@@ -1,14 +1,16 @@
-import pytest
 import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime, timedelta
-import sys
 import os
+import sys
+from datetime import timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Add the web_api directory to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from database_provider.engine_cache import EngineCache
+from database_provider.engine_cache import EngineCache, _now
+
 
 # Helper to mock AsyncEngine
 def get_mock_engine():
@@ -40,6 +42,19 @@ async def test_engine_reusability(mock_create_engine):
     assert engine1 is engine2
     assert cache._stats["engine_count"] == 1
     assert cache._stats["request_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_engine_forwards_connect_args(mock_create_engine):
+    cache = EngineCache(max_engines=5)
+    connect_args = {"timeout": 120}
+
+    await cache.get_engine(
+        "mssql+aioodbc://fake:fake@host/db",
+        connect_args=connect_args,
+    )
+
+    assert mock_create_engine.call_args.kwargs["connect_args"] == connect_args
 
 @pytest.mark.asyncio
 async def test_lru_eviction(mock_create_engine):
@@ -83,7 +98,10 @@ async def test_ttl_cleanup(mock_create_engine):
     
     # Artificially age the entry to bypass wait time
     key = cache._hash_key(url)
-    cache._cache[key].last_accessed = datetime.now() - timedelta(seconds=10)
+    # Must use the cache's own clock: `datetime.now()` is local time, so on a
+    # non-UTC server this "aged" value can land in the future and the entry
+    # never expires.
+    cache._cache[key].engines["ro"].last_accessed = _now() - timedelta(seconds=10)
     
     # Start loop and wait for it to process
     await cache.start_loop()
@@ -95,25 +113,36 @@ async def test_ttl_cleanup(mock_create_engine):
     assert cache._stats["engine_count"] == 0
 
 @pytest.mark.asyncio
-async def test_close_user_engines(mock_create_engine):
-    """Test that close_user_engines clears engines for a specific database UUID."""
+async def test_database_tiers_receive_distinct_engines(mock_create_engine):
     cache = EngineCache(max_engines=5)
-    
-    url1 = "mssql+aioodbc://fake:fake@host/db1"
-    url2 = "mssql+aioodbc://fake:fake@host/db2"
-    
-    # Database 1 has engine 1 (UUID: "uuid1")
-    engine1 = await cache.get_engine(url1, db_uuid="uuid1")
-    
-    # Database 2 has engine 2 (UUID: "uuid2")
-    engine2 = await cache.get_engine(url2, db_uuid="uuid2")
-    
-    assert cache._stats["engine_count"] == 2
-    
-    await cache.close_user_engines(db_uuid="uuid1")
-    
-    # Engine 1 should be disposed, engine 2 should remain
-    engine1.dispose.assert_awaited_once()
-    engine2.dispose.assert_not_awaited()
-    
-    assert cache._stats["engine_count"] == 1
+
+    ro = await cache.get_engine("postgresql+asyncpg://ro:p@host/db", db_uuid="db-1", tier="ro")
+    rw = await cache.get_engine("postgresql+asyncpg://rw:p@host/db", db_uuid="db-1", tier="rw")
+
+    assert ro is not rw
+    assert set(cache._cache["db-1"].engines) == {"ro", "rw"}
+
+
+@pytest.mark.asyncio
+async def test_password_rotation_replaces_only_matching_tier_engine(mock_create_engine):
+    cache = EngineCache(max_engines=5)
+    old_ro = await cache.get_engine("postgresql+asyncpg://ro:old@host/db", db_uuid="db-1", tier="ro")
+    rw = await cache.get_engine("postgresql+asyncpg://rw:stable@host/db", db_uuid="db-1", tier="rw")
+
+    new_ro = await cache.get_engine("postgresql+asyncpg://ro:new@host/db", db_uuid="db-1", tier="ro")
+
+    assert old_ro is not new_ro
+    old_ro.dispose.assert_awaited_once()
+    assert cache._cache["db-1"].engines["rw"].engine is rw
+
+
+@pytest.mark.asyncio
+async def test_close_database_engines_disposes_all_tiers(mock_create_engine):
+    cache = EngineCache(max_engines=5)
+    ro = await cache.get_engine("postgresql+asyncpg://ro:p@host/db", db_uuid="db-1", tier="ro")
+    rw = await cache.get_engine("postgresql+asyncpg://rw:p@host/db", db_uuid="db-1", tier="rw")
+
+    assert await cache.close_database_engines("db-1") == 2
+    ro.dispose.assert_awaited_once()
+    rw.dispose.assert_awaited_once()
+    assert cache.get_cache_stats()["engine_count"] == 0

@@ -1,96 +1,98 @@
-
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { authenticatedFetch } from '../services/api';
+import { Link, useNavigate } from 'react-router-dom';
+import { EyeIcon, EyeSlashIcon, WarningCircleIcon } from '@phosphor-icons/react';
+import { api, errorMessage } from '../services/api';
+import { useSession } from '../lib/session';
+import { AuthLayout } from '../components/app/AuthLayout';
+import { Button, IconButton } from '../components/ui/Button';
+import { Field } from '../components/ui/Field';
+import { Input } from '../components/ui/Input';
 
 const Login: React.FC = () => {
+  const navigate = useNavigate();
+  const { refresh } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    setSubmitting(true);
     try {
-      const response = await authenticatedFetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-
-      if (response && response.ok) {
-        navigate('/');
-      } else {
-        const data = await response?.json();
-        setError(data?.detail || data?.error || "Connection refused. Ensure the backend is running.");
-      }
-    } catch (err) {
-      setError("Network error occurred while attempting to establish connection.");
+      await api.login(email, password);
+      await refresh();
+      navigate('/');
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950 p-4 relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-600 rounded-full blur-[120px]"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-600 rounded-full blur-[120px]"></div>
-      </div>
-
-      <div className="w-full max-w-md bg-gray-900/50 backdrop-blur-xl rounded-3xl shadow-2xl p-10 border border-gray-800 relative z-10">
-        <div className="flex flex-col items-center mb-8">
-          <h2 className="text-4xl font-black text-white tracking-tighter uppercase">WebQuery</h2>
-          <p className="text-gray-500 text-[10px] font-bold mt-1 tracking-[0.3em] uppercase">Data Infrastructure</p>
-        </div>
-        
+    <AuthLayout
+      title="Oturum açın"
+      subtitle="Kayıtlı veritabanlarına sorgu çalıştırmak için hesabınızla giriş yapın."
+      footer={
+        <p>
+          Hesabınız yok mu?{' '}
+          <Link to="/register" className="font-medium text-accent underline-offset-4 hover:underline">
+            Hesap oluşturun
+          </Link>
+        </p>
+      }
+    >
+      <form onSubmit={handleSubmit} noValidate={false} className="flex flex-col gap-4">
         {error && (
-          <div className="mb-4 p-3 bg-red-900/20 border border-red-900/50 text-red-400 text-[10px] font-bold uppercase rounded-lg text-center tracking-widest">
-            {error}
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-sm border border-danger-line bg-danger-soft px-3 py-2.5 text-[13px] text-danger"
+          >
+            <WarningCircleIcon size={15} weight="fill" className="mt-px shrink-0" />
+            <span>{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Identity (Email)</label>
-            <input 
-              type="email" 
-              className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl p-3.5 focus:ring-1 focus:ring-indigo-500 outline-none transition-all placeholder:text-gray-700 font-medium"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="operator@webquery.io"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Secure Code (Password)</label>
-            <input 
-              type="password" 
-              className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl p-3.5 focus:ring-1 focus:ring-indigo-500 outline-none transition-all placeholder:text-gray-700 font-medium"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-            />
-          </div>
-          
-          <div className="pt-4 flex flex-col gap-4">
-            <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 px-4 rounded-xl transition-all shadow-xl shadow-indigo-600/20 active:scale-95 uppercase tracking-widest text-xs">
-              Establish Connection
-            </button>
-            
-            <div className="flex flex-col gap-2 items-center">
-              <Link to="/register" className="text-[10px] text-gray-400 hover:text-indigo-400 font-black uppercase tracking-widest transition-colors">
-                Create New Identity
-              </Link>
-              <div className="text-center text-[9px] text-gray-700 font-bold uppercase tracking-tighter mt-2">
-                Authorized personnel only beyond this point.
-              </div>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
+        <Field label="E-posta" required>
+          <Input
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            autoComplete="email"
+            autoFocus
+            required
+            placeholder="ad.soyad@sirket.com"
+          />
+        </Field>
+
+        <Field label="Parola" required>
+          <Input
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="current-password"
+            required
+            addon={
+              <IconButton
+                label={showPassword ? 'Parolayı gizle' : 'Parolayı göster'}
+                size="sm"
+                className="size-6"
+                onClick={() => setShowPassword((visible) => !visible)}
+              >
+                {showPassword ? <EyeSlashIcon size={14} /> : <EyeIcon size={14} />}
+              </IconButton>
+            }
+          />
+        </Field>
+
+        <Button type="submit" variant="primary" size="lg" fullWidth loading={submitting} className="mt-1">
+          Giriş yap
+        </Button>
+      </form>
+    </AuthLayout>
   );
 };
 

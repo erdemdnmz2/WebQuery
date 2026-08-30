@@ -14,6 +14,11 @@ annotated-types==0.7.0
 # SQLAlchemy & Database
 SQLAlchemy==2.0.41
 
+# Schema migrations (see docs/adr/ADR-0001-schema-migrations-alembic.md).
+# Alembic runs synchronously; env.py rewrites the async URL to the sync
+# driver below for each technology.
+alembic==1.17.0
+
 # MSSQL Support
 aioodbc==0.5.0
 pyodbc==5.2.0
@@ -24,13 +29,15 @@ PyMySQL==1.1.0
 
 # PostgreSQL Support
 asyncpg==0.30.0
+psycopg2-binary==2.9.9  # sync driver, used only by Alembic migrations
 
 # SQLAlchemy dependencies
 greenlet==3.2.3
 
 # Authentication & Security
+# passlib was dropped: password hashing calls bcrypt directly
+# (app_database/models.py), so the wrapper had no call site.
 python-jose==3.5.0
-passlib==1.7.4
 bcrypt==4.2.0
 cryptography==45.0.5
 ecdsa==0.19.1
@@ -40,9 +47,10 @@ rsa==4.9.1
 # Rate Limiting
 slowapi==0.1.9
 limits==5.5.0
+redis==7.2.0
 
-# Templates
-Jinja2==3.1.6
+# Alembic template rendering (Mako). Jinja2 was dropped with the server-side
+# HTML routes; the frontend is a separate Vite build and renders no templates.
 MarkupSafe==3.0.2
 
 # Email validation
@@ -81,4 +89,4 @@ slack-sdk==3.35.0
 pytest==8.1.1
 pytest-asyncio==0.23.6
 aiosqlite==0.20.0
-sqlglot==23.6.3
+sqlglot==30.14.0

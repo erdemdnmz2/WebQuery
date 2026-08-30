@@ -2,40 +2,29 @@
 Query Execution Schemas
 Pydantic models for query execution endpoints
 """
+from typing import Any
+
 from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
 
 
 class SQLQuery(BaseModel):
     """Single SQL query request"""
     db_uuid: str
     query: str
-    ad_hoc_mask_columns: Optional[List[str]] = None
+    ad_hoc_mask_columns: list[str] | None = None
 
 
 class SQLResponse(BaseModel):
     """SQL query response"""
     response_type: str  # "data" or "error"
-    data: List[Dict[str, Any]]
-    message: Optional[str] = None
-    error: Optional[str] = None
-
-
-class ExecutionInfo(BaseModel):
-    """Execution information for multiple queries"""
-    db_uuid: str
-    query: str
-    ad_hoc_mask_columns: Optional[List[str]] = None
-
-
-class MultipleQueryRequest(BaseModel):
-    """Multiple query execution request"""
-    execution_info: List[ExecutionInfo]
-
-
-class MultipleQueryResponse(BaseModel):
-    """Multiple query execution response"""
-    results: List[SQLResponse]
+    data: list[dict[str, Any]]
+    message: str | None = None
+    error: str | None = None
+    # Columns actually masked in `data`, spelled as they appear in the result
+    # rows. Empty when no masking was applied - including when the caller is a
+    # database admin and masking is deliberately bypassed. Clients must drive
+    # any "masked" affordance from this, never from what they requested.
+    masked_columns: list[str] = []
 
 
 class DatabaseInformationResponse(BaseModel):
@@ -50,4 +39,4 @@ class DatabaseInformationResponse(BaseModel):
             }
         }
     """
-    db_info: Dict[str, Dict[str, Any]]
+    db_info: dict[str, dict[str, Any]]

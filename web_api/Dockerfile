@@ -25,6 +25,14 @@ COPY . .
 # Make entrypoint executable
 RUN chmod +x entrypoint.sh
 
+# Run as a dedicated non-root user. A process escaping the application
+# (a dependency RCE, a path traversal in a library) inherited root inside the
+# container by default, which is a needless privilege to hand it — the app
+# writes nothing outside /app and needs no elevated capability at runtime.
+RUN groupadd --system webquery && useradd --system --gid webquery --home-dir /app webquery \
+    && chown -R webquery:webquery /app
+USER webquery
+
 EXPOSE 8080
 
 ENTRYPOINT ["/bin/bash", "./entrypoint.sh"]

@@ -2,9 +2,9 @@
 Application Database Schemas
 Pydantic models for app database operations
 """
-from pydantic import BaseModel, Field, EmailStr
-from typing import Optional, List, Dict
-from datetime import datetime
+
+from pydantic import BaseModel, EmailStr
+
 
 class UserCreate(BaseModel):
     """Kullanıcı oluşturma şeması"""

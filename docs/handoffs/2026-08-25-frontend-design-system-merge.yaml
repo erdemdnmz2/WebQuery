@@ -1,0 +1,130 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "claude-code"
+  to: "WebQuery"
+  created_at: "2026-08-25T00:00:00Z"
+  task: "redesign/frontend-design-system'i güvenlik sertleştirme branch'ine almak ve arayüzü bu branch'in sözleşmesine hizalamak"
+
+  scope:
+    completed:
+      - "redesign/frontend-design-system, feature/security-hardening-implementation içine merge edildi (5 çakışma elle çözüldü)"
+      - "Yeni arayüzün okuduğu backend değişiklikleri de geldi: masked_columns, QuerySyntaxError, uuid string normalizasyonu, NVARCHAR workspace adı/açıklaması"
+      - "Bu branch'in eski Admin.tsx üzerine eklediği red gerekçesi, yeni tasarımda ReviewDialog içine Field + Textarea olarak yeniden üretildi"
+      - "401 alan istekler giriş ekranına düşmeden önce POST /api/refresh ile bir kez yenileniyor; eşzamanlı 401'ler tek yenileme paylaşıyor"
+      - "APPROVAL_CONFLICT (409) uyarı + liste yenileme olarak ele alınıyor, sessiz hata değil"
+      - "QUERY_SYNTAX_ERROR, onay bekleyen durumdan ayrıldı ve Türkçe mesaja bağlandı"
+      - "Merge sonrası SPEC-0012 numara çakışması çözüldü"
+      - "Merge'ün ORM ile migration arasında açtığı şema kayması kapatıldı: Workspaces.name/description için VARCHAR -> NVARCHAR migration'ı ve regresyon testi eklendi"
+      - "Merge'ün getirdiği 4 ruff regresyonu giderildi (53 bulgu; merge öncesi taban 54)"
+    excluded:
+      - "GET /api/admin/audit_log için arayüz üretilmedi; bu iş yeni ekran değil sözleşme hizalaması kapsamındadır"
+      - "POST /api/multiple_query için arayüz (SPEC-0011'de de kapsam dışıydı)"
+      - "Backend davranışında değişiklik yok; merge çakışmaları dışında backend'e dokunulmadı"
+
+  changed_files:
+    created:
+      - "docs/specs/SPEC-0014-frontend-hardened-backend-alignment.md"
+      - "web_api/migrations/versions/a3f5c81b9d24_workspace_text_to_nvarchar.py"
+      - "docs/handoffs/2026-08-25-frontend-design-system-merge.yaml"
+      - "frontend/ altındaki tasarım sistemi dosyaları (merge ile, ~45 dosya)"
+    modified:
+      - "frontend/services/api.ts"
+      - "frontend/components/app/admin/ReviewDialog.tsx"
+      - "frontend/lib/execution.ts"
+      - "frontend/DESIGN.md"
+      - "web_api/common/security.py"
+      - "web_api/query_execution/schemas.py"
+      - "web_api/query_execution/services.py"
+      - "web_api/workspaces/services.py"
+      - "web_api/tests/unit/test_query_analyzer.py"
+      - "web_api/tests/unit/test_masked_columns.py"
+      - "web_api/tests/unit/test_database_provider_uuid.py"
+      - "web_api/tests/unit/test_baseline_migration.py"
+      - "docs/adr/ADR-0011-conditional-approval-update.md"
+      - "docs/handoffs/2026-08-25-approval-concurrency.yaml"
+    deleted:
+      - "frontend/components/AceEditor.tsx"
+      - "frontend/components/Layout.tsx"
+      - "frontend/components/Modal.tsx"
+      - "frontend/pages/Home.tsx"
+      - "frontend/pages/SqlEditor.tsx"
+      - "frontend/pages/ConnectDb.tsx"
+      - "frontend/pages/WorkspaceExecute.tsx"
+    renamed:
+      - "docs/specs/SPEC-0012-approval-concurrency.md -> docs/specs/SPEC-0013-approval-concurrency.md"
+
+  decisions:
+    - decision: "Yalnız frontend/ dizinini kopyalamak yerine redesign branch'i merge edildi"
+      rationale: >-
+        Yeni arayüz masked_columns, QUERY_SYNTAX_ERROR ve string uuid'lere göre
+        yazılmıştı. Sadece frontend alınsaydı maskeleme rozeti hiç görünmez,
+        sözdizimi hatası "onaya gönderildi" olarak gösterilirdi. Merge ayrıca
+        çakışmaları sessiz üzerine yazma yerine açığa çıkarır.
+      recorded_in: "docs/specs/SPEC-0014-frontend-hardened-backend-alignment.md"
+    - decision: "docs/open-questions.md çakışmasında HEAD korundu"
+      rationale: >-
+        OQ-2026-002 bu branch'te tam yanıtıyla Answered; redesign branch'i onu
+        yalnızca Deferred olarak işaretlemişti. Answered olan kayıt daha yenidir.
+      recorded_in: ""
+    - decision: "Numara çakışmasında SPEC-0012 masking-truthfulness'a bırakıldı, approval-concurrency SPEC-0013 oldu"
+      rationale: >-
+        Masking spec'i daha erken tarihli (2026-08-24) ve koda gömülü altı
+        referansı var (models.py, workspaces/services.py, types.ts, DESIGN.md,
+        iki test dosyası). Approval spec'inin yalnız iki doküman referansı vardı.
+      recorded_in: "docs/specs/SPEC-0013-approval-concurrency.md"
+    - decision: "NVARCHAR migration'ı yalnız MSSQL'de çalışıyor, diğer dialect'lerde no-op"
+      rationale: >-
+        VARCHAR/NVARCHAR ayrımı yalnız MSSQL'de anlamlıdır; SQLite ve
+        PostgreSQL zaten VARCHAR sütunlarında Unicode saklar. Diğer
+        dialect'lerde tabloyu yeniden yazmanın karşılığı yok. Testler SQLite
+        üzerinde koştuğu için migration orada no-op olarak geçer ve zincirde
+        kaldığı ayrıca doğrulanır.
+      recorded_in: "docs/specs/SPEC-0012-masking-truthfulness-and-uuid-normalisation.md"
+    - decision: "Red gerekçesi istemcide de doğrulanıyor"
+      rationale: >-
+        Sunucu kuralın kaynağıdır, ama gövde 422 ile dönerse kullanıcı yazdığı
+        gerekçeyi kaybeder. İstemci doğrulaması sunucununkinin yerine geçmez,
+        önüne geçer.
+      recorded_in: "docs/specs/SPEC-0014-frontend-hardened-backend-alignment.md"
+    - decision: "Merge çakışmalarında bu branch'in modern tiplemesi ve ruff sıralı importları korundu"
+      rationale: >-
+        Redesign branch'i main'in eski typing.List/Optional biçimini taşıyordu.
+        Redesign'ın sembolleri bu branch'in biçimine taşındı; tersi ruff
+        temizliğini geri alırdı.
+      recorded_in: ""
+
+  validation:
+    commands_run:
+      - command: "cd web_api && python -m pytest -q"
+        result: "passed"
+        evidence: "100 passed, 1 warning in 66.39s"
+      - command: "cd web_api && python -m ruff check ."
+        result: "failed"
+        evidence: >-
+          53 bulgu. Merge öncesi taban 54 idi (aynı komut 3e56c65 ağacında);
+          merge'ün getirdiği 4 yeni bulgu giderildi. Ruff bu projede CI'da
+          bilgilendirme amaçlıdır, merge kapısı değildir (ADR-0002).
+      - command: "npm --prefix frontend run typecheck"
+        result: "passed"
+        evidence: "tsc --noEmit, çıktı yok"
+      - command: "npm --prefix frontend run audit:api"
+        result: "passed"
+        evidence: >-
+          24 frontend çağrısının 24'ü bir backend rotasına karşılık geliyor
+          (POST /api/refresh dâhil). Arayüzü olmayan rotalar: GET
+          /api/admin/audit_log, POST /api/multiple_query.
+      - command: "npm --prefix frontend run audit:contrast"
+        result: "passed"
+        evidence: "Tüm kontrast hedefleri karşılandı"
+      - command: "npm --prefix frontend run build"
+        result: "passed"
+        evidence: "built in 2.92s; index 150.42 kB gzip"
+
+  open_questions: []
+
+  known_risks:
+    - "Bu projede frontend için otomatik test komutu yok. Oturum yenileme ve red akışı tip kontrolü, endpoint denetimi ve derleme ile doğrulandı; canlı backend'e karşı tarayıcıda çalıştırılmadı."
+    - "NVARCHAR migration'ı üretim benzeri bir MSSQL örneğine karşı çalıştırılmadı; doğrulama SQLite (no-op yolu) ve modelin MSSQL derlemesi üzerinden yapıldı. Büyük Workspaces tablolarında ALTER COLUMN tabloyu kilitleyebilir."
+    - "Red gerekçesi 500 karaktere kadar kabul edilir ama çalışma alanı açıklamasına 'Rejected by <ad>: ' önekiyle 255 karaktere kırpılarak yazılır; uzun gerekçeler talep sahibine kırpılmış görünür."
+
+  next_step: "Merge, canlı backend'e karşı tarayıcıda doğrulansın: oturum yenileme (erişim jetonu dolduktan sonra), gerekçeli red ve karar çakışması akışları."

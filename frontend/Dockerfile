@@ -1,11 +1,15 @@
 # Build stage
-FROM node:20-alpine as build
+FROM node:24-alpine AS build
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+# The lockfile is required, not optional: `npm ci` installs exactly the tree
+# CI resolved and audited. `npm install` re-resolved every caret range at
+# image build time, so the image could ship dependency versions no CI run
+# ever saw — including ones an advisory fix had just moved past.
+COPY package.json package-lock.json ./
 
-RUN npm install
+RUN npm ci
 
 COPY . .
 

@@ -1,0 +1,81 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "Codex"
+  to: "WebQuery team"
+  created_at: "2026-08-29T12:03:59+03:00"
+  task: "Adım 21 (`4.3`) — print() → merkezi ve güvenli logging"
+
+  scope:
+    completed:
+      - "Production Python modüllerindeki tüm print() çağrıları merkezi logging kullanımına taşındı."
+      - "LOG_LEVEL desteği eklendi; geçersiz değer INFO'ya düşer ve uyarı kaydı üretilir."
+      - "DatabaseProvider katalog güncellemesi yalnız sunucu ve veritabanı sayılarını DEBUG seviyesinde kaydeder; sunucu, veritabanı, UUID ve credential değerlerini kaydetmez."
+      - "DB bootstrap'ta SQLAlchemy echo kapatıldı; CREATE LOGIN parola literalinin loglanma riski kaldırıldı."
+      - "Trace ve authentication hata kayıtları ham exception/traceback yerine güvenli işlem özeti ve exception türünü kullanır."
+      - "SPEC-0020 ve print/loglama davranışını koruyan regresyon testleri eklendi; eski stdout bekleyen şema koruma testi log sözleşmesine uyarlandı."
+    excluded:
+      - "Hedef DB yürütme hata temizleme sözleşmesi (SPEC-0003 ve ADR-0006) değiştirilmedi."
+      - "AuditLog şeması, saklama politikası ve shell scriptlerdeki operatör odaklı echo çıktıları kapsam dışıdır."
+      - "docs/open-questions.md, webquery_implementasyon_sirasi.md ve docs/inbox/OPTIONAL-DESTRUCTIVE-DML-CONFIRMATION.md üzerindeki mevcut kullanıcı değişiklikleri korunmuş, bu adıma dahil edilmemiştir."
+
+  changed_files:
+    created:
+      - "docs/specs/SPEC-0020-centralized-safe-logging.md"
+      - "web_api/tests/unit/test_logging_hardening.py"
+      - "docs/handoffs/2026-08-29-adim21-guvenli-merkezi-loglama.yaml"
+    modified:
+      - "web_api/admin/services.py"
+      - "web_api/app.py"
+      - "web_api/app_database/app_database.py"
+      - "web_api/authentication/router.py"
+      - "web_api/authentication/services.py"
+      - "web_api/common/config_guard.py"
+      - "web_api/common/logging_config.py"
+      - "web_api/common/schema_guard.py"
+      - "web_api/create_db.py"
+      - "web_api/database_provider/database.py"
+      - "web_api/middlewares/auth_middleware.py"
+      - "web_api/middlewares/trace_middleware.py"
+      - "web_api/notification/services.py"
+      - "web_api/slack_integration/config.py"
+      - "web_api/slack_integration/listener.py"
+      - "web_api/tests/unit/test_schema_guard.py"
+    deleted: []
+
+  decisions:
+    - decision: "Mevcut Python stdlib logging altyapısı üzerinden seviyeye duyarlı merkezi kayıt kullanılacak."
+      rationale: "Yeni bağımlılık veya mimari/sınır kararı gerektirmeden TraceMiddleware bağlamını korur; LOG_LEVEL ile tanılama açılıp kapatılabilir."
+      recorded_in: "docs/specs/SPEC-0020-centralized-safe-logging.md"
+    - decision: "Hassas olabilecek hata bağlamlarında exception metni yerine exception türü kaydedilecek."
+      rationale: "Bağlantı dizeleri, parolalar, tokenlar, SQL veya Slack yanıt gövdeleri hata metnine girebilir; teşhis için trace ID ve hata türü korunur."
+      recorded_in: "docs/specs/SPEC-0020-centralized-safe-logging.md"
+    - decision: "Yeni ADR oluşturulmadı."
+      rationale: "Mevcut logging altyapısının güvenli ve tutarlı kullanımı sağlandı; kalıcı bir mimari, veri veya güvenlik sınırı değişmedi."
+      recorded_in: "docs/specs/SPEC-0020-centralized-safe-logging.md"
+
+  validation:
+    commands_run:
+      - command: "cd web_api && python3 -m pytest -q tests/unit/test_logging_hardening.py tests/unit/test_database_provider_uuid.py tests/unit/test_config_guard.py tests/integration/test_error_handling_and_trace.py"
+        result: "passed"
+        evidence: "22 passed, 1 mevcut Pydantic deprecation uyarısı."
+      - command: "cd web_api && python3 -m pytest -q tests/unit"
+        result: "passed"
+        evidence: "130 passed, 1 mevcut Pydantic deprecation uyarısı."
+      - command: "cd web_api && python3 -m pytest -q tests/integration/test_error_handling_and_trace.py tests/integration/test_notifications_and_slack.py tests/integration/test_auth_api.py"
+        result: "passed"
+        evidence: "16 passed, 1 mevcut Pydantic deprecation uyarısı."
+      - command: "cd web_api && python3 -m pytest -q"
+        result: "not-run"
+        evidence: "Araç yaklaşık 30 saniye sonra yalnız kısmi ilerleme döndürdü; tamamlanmış sonuç üretmediği için başarılı sayılmadı."
+      - command: "cd web_api && rg -n '\\bprint\\(' . --glob '*.py' -g '!tests/**' -g '!migrations/**'"
+        result: "passed"
+        evidence: "Production Python modüllerinde print() çağrısı bulunmadı."
+      - command: "git diff --check"
+        result: "passed"
+        evidence: "Boşluk veya patch biçim hatası yok."
+
+  open_questions: []
+  known_risks:
+    - "Tam backend pytest paketi araç süre sınırı nedeniyle uçtan uca tamamlanamadı; unit paketi ve logginge temas eden integration yolları geçti."
+    - "Test ortamında requirements.txt'nin tamamını Python 3.13 ile kurmak, psycopg2-binary==2.9.9 için pg_config eksikliği nedeniyle tamamlanamadı. İlgili testler için redis==7.2.0 ve sqlglot==30.14.0 ortamda eşitlendi."
+  next_step: "Code review'da SPEC-0020 acceptance criteria ile diff'i karşılaştırın; CI ortamında tam `cd web_api && python -m pytest -q` paketini çalıştırın."

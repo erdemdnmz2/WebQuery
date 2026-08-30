@@ -1,0 +1,73 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "codex"
+  to: "user / next-session-agent"
+  created_at: "2026-08-22T00:00:00+03:00"
+  task: "webquery_implementasyon_sirasi.md — Blok 2, Adım 8 (`4.4`) Rol split mantığını tek yere toplama"
+
+  scope:
+    completed:
+      - "Virgülle ayrılmış UserDatabaseAssociation.role değerlerini ortaklaştırmak için web_api/common/roles.py oluşturuldu."
+      - "parse(), is_admin(), max_tier() ve any_admin() yardımcıları eklendi; rol isimleri boşluk/küçük harf/boş parça farklarından arındırılıyor."
+      - "dependencies.py, authentication/router.py ve static_files/router.py içindeki ADMIN kontrolleri any_admin() kullanacak şekilde merkezileştirildi."
+      - "query_execution/query_analyzer.py içindeki rol ayrıştırması parse() kullanacak şekilde değiştirildi; mevcut sorgu yetki kuralları bu adımda değiştirilmedi."
+      - "query_execution/services.py ve workspaces/services.py içindeki ADMIN kontrolleri is_admin() kullanacak şekilde merkezileştirildi."
+      - "admin/services.py içindeki veritabanı kapsamlı ADMIN kontrolleri is_admin() kullanacak şekilde merkezileştirildi."
+      - "Admin kullanıcı-veritabanı ilişkilendirme doğrulaması parse() kullanacak şekilde değiştirildi; boş ve geçersiz roller reddedilmeye devam ediyor."
+      - "parse(), is_admin(), max_tier() ve any_admin() için unit testleri eklendi."
+    excluded:
+      - "ADMIN rolünün DDL ve tüm SQL sorgularına izin verme davranışı değiştirilmedi; bu ayrım 3.1 kapsamındadır."
+      - "Admin endpoint'inin DDL rolünü kabul etmesi bu adımda eklenmedi; mevcut kabul edilen roller READER, WRITER ve ADMIN olarak bırakıldı."
+      - "ro/rw/ddl credential seçiminin DatabaseProvider'a bağlanması yapılmadı; bu 3.1 kapsamındadır."
+      - "UserDatabaseAssociation için ayrı revoke/delete endpoint'i eklenmedi."
+      - "OWNER/bootstrap rolü ve UI değişiklikleri bu adımın kapsamı dışında bırakıldı."
+
+  changed_files:
+    created:
+      - "web_api/common/roles.py"
+      - "web_api/tests/unit/test_roles.py"
+    modified:
+      - "web_api/admin/services.py"
+      - "web_api/authentication/router.py"
+      - "web_api/dependencies.py"
+      - "web_api/query_execution/query_analyzer.py"
+      - "web_api/query_execution/services.py"
+      - "web_api/static_files/router.py"
+      - "web_api/workspaces/services.py"
+    deleted: []
+
+  decisions:
+    - decision: "Rol metni tüm yetki kontrollerinde common.roles.parse() üzerinden çözümlenecek."
+      rationale: "Aynı role.split(',') mantığının farklı dosyalarda farklı davranma riskini ortadan kaldırmak ve 3.1'deki tier kararına ortak zemin sağlamak."
+      recorded_in: "webquery_implementasyon_sirasi.md — Adım 8 (`4.4`)"
+    - decision: "ADMIN yönetişim rolü olarak parse edilecek; max_tier() içinde veri erişim kademesi üretmeyecek."
+      rationale: "ADMIN tek başına ro/rw/ddl hedef DB credential'ı vermemeli; yönetişim ile veri erişimi ayrımı korunmalı."
+      recorded_in: "webquery_implementasyon_sirasi.md — Adım 8 (`4.4`); docs/specs/SPEC-0002-role-based-target-database-credentials.md"
+    - decision: "Bu adımda mevcut ADMIN sorgu davranışı korunacak."
+      rationale: "Rol ayrıştırma refaktörünü SQL yetki modeli ve credential seçimi değişikliğinden ayırmak; bu davranış değişikliği 3.1'de test edilerek yapılmalı."
+      recorded_in: "webquery_implementasyon_sirasi.md — Adım 8 (`4.4`)"
+
+  validation:
+    commands_run:
+      - command: "../.venv/bin/pytest -q tests/unit/test_roles.py tests/integration/test_admin_auth.py tests/integration/test_query_execution.py tests/integration/test_admin_api.py"
+        result: "passed"
+        evidence: "14 passed, 1 Pydantic deprecation warning; command web_api/ çalışma dizininden çalıştırıldı."
+      - command: "../.venv/bin/ruff check common/roles.py tests/unit/test_roles.py"
+        result: "passed"
+        evidence: "All checks passed."
+      - command: "git diff --check -- web_api"
+        result: "passed"
+        evidence: "Adım 8 kapsamındaki dosyalarda whitespace/diff format hatası bulunmadı."
+      - command: "../.venv/bin/ruff check common/roles.py dependencies.py authentication/router.py static_files/router.py query_execution/query_analyzer.py query_execution/services.py workspaces/services.py admin/services.py tests/unit/test_roles.py"
+        result: "failed"
+        evidence: "Mevcut repository lint sorunları devam ediyor: çoğunlukla BLE001 broad Exception yakalamaları ve static_files/router.py içindeki önceden var olan get_current_user F821 hatası; yeni common.roles.py ve test dosyasında hata yok."
+
+  open_questions: []
+
+  known_risks:
+    - "UserDatabaseAssociation.role kaynak değer olarak tutuluyor; is_admin kolonu hâlâ denormalize bir alan ve mevcut atama kodu ADMIN,WRITER gibi birleşik roller için is_admin_val = (role_upper == 'ADMIN') kullandığından sonraki adımda is_admin(role) ile düzeltilmeli veya kolon kaldırılmalı."
+    - "UserDatabaseAssociation için mevcut API create/update yapıyor, ancak ayrı bir revoke/delete endpoint'i bulunmuyor; üretim yetki yönetimi tamamlanmadan önce ele alınmalı."
+    - "max_tier() hazırlandı ancak henüz DatabaseProvider credential seçimine bağlanmadı; 3.1 uygulanana kadar ro/rw/ddl çalışma zamanı izolasyonu tamamlanmış sayılmamalı."
+    - "Geniş Ruff taraması bu handoff'ta listelenen önceden var olan lint hataları nedeniyle temiz değil."
+
+  next_step: "Adım 3.1'e geçmeden önce UserDatabaseAssociation.is_admin alanının birleşik rollerle uyumlu hâle getirilmesini kararlaştır; ardından sorgu kademesini max_tier() ve ro/rw/ddl hedef DB credential seçimine bağla."

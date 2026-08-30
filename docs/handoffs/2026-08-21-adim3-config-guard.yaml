@@ -1,0 +1,81 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "codex"
+  to: "user / next-session-agent"
+  created_at: "2026-08-21T19:50:00+03:00"
+  task: "webquery_implementasyon_sirasi.md — Blok 0, Adım 3 (`0.1`) sessiz fail-open sırları kapat"
+
+  scope:
+    completed:
+      - "Startup güvenlik konfigürasyonunu doğrulayan `web_api/common/config_guard.py` eklendi."
+      - "`SECRET_KEY`, `QUERY_ENCRYPTION_KEY`, `APP_DATABASE_URL`, `CENTRAL_DB_USER` ve `CENTRAL_DB_PASSWORD` zorunlu hale getirildi."
+      - "`SECRET_KEY` için bilinen varsayılan değer ve 32 karakterden kısa değerler reddediliyor."
+      - "`QUERY_ENCRYPTION_KEY` geçerli bir Fernet anahtarı olarak doğrulanıyor."
+      - "Config guard, `app.py` lifespan'ının veritabanı bağlantısından önce çalışacak şekilde eklendi."
+      - "`EncryptedText` içindeki sabit fallback anahtar kaldırıldı; anahtar yoksa açık `RuntimeError` oluşuyor."
+      - "Authentication config içindeki bilinen JWT fallback değeri kaldırıldı."
+      - "Test fixture'larına gerçek olmayan, biçimsel olarak geçerli güvenlik değerleri eklendi."
+      - "Config guard ve fail-closed şifreleme davranışı için unit testler eklendi."
+      - "`web_api/.env.example` oluşturuldu."
+      - "Uygulama davranışı için spec ve kalıcı güvenlik kararı için ADR oluşturuldu."
+    excluded:
+      - "Hedef DB credential modelinin merkezi kimlik bilgileri mi yoksa veritabanı başına kimlik bilgileri mi olacağı — OQ-2026-002 ertelendi."
+      - "Secret manager entegrasyonu ve anahtar rotasyonu."
+      - "Adım 4 kapsamındaki `database_provider` varsayılanlarının kaldırılması."
+
+  changed_files:
+    created:
+      - web_api/common/config_guard.py
+      - web_api/.env.example
+      - web_api/tests/unit/test_config_guard.py
+      - docs/specs/SPEC-0001-startup-security-config-guard.md
+      - docs/adr/ADR-0004-startup-security-config-fail-closed.md
+      - docs/handoffs/2026-08-21-adim3-config-guard.yaml
+    modified:
+      - web_api/app.py
+      - web_api/app_database/models.py
+      - web_api/authentication/config.py
+      - web_api/tests/conftest.py
+    deleted: []
+
+  decisions:
+    - decision: "Kritik startup sırları fail-closed doğrulanacak; eksik veya geçersiz konfigürasyonda servis başlamayacak."
+      rationale: "Bilinen JWT anahtarı sahte token üretimine, sabit Fernet fallback'i ise şifreli verinin repo'yu gören kişilerce çözülmesine yol açabilir."
+      recorded_in: "docs/adr/ADR-0004-startup-security-config-fail-closed.md"
+    - decision: "Authentication config eksik secret'ta import sırasında KeyError üretmek yerine değeri guard'a bırakacak; guard lifespan'ın ilk adımı olarak çalışacak."
+      rationale: "Startup hatası merkezi, anlaşılır ve veritabanı bağlantısından önce gözlemlenebilir olmalı."
+      recorded_in: "docs/specs/SPEC-0001-startup-security-config-guard.md"
+    - decision: "Hedef DB credential modeli bu adımda seçilmeyecek."
+      rationale: "Kullanıcı kararıyla OQ-2026-002 ertelendi; config guard yalnızca mevcut merkezi credential değişkenlerini zorunlu kılıyor."
+      recorded_in: "docs/open-questions.md"
+
+  validation:
+    commands_run:
+      - command: "cd web_api && pytest -q tests/unit/test_config_guard.py tests/unit/test_baseline_migration.py"
+        result: "passed"
+        evidence: "Proje `.venv` ortamında 10 passed, 1 warning."
+      - command: "/Users/alierdemdonmez/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m pytest -q tests/unit/test_config_guard.py tests/unit/test_baseline_migration.py"
+        result: "not-run"
+        evidence: "Bündled Python ortamında `pytest` modülü kurulu değil."
+      - command: "cd web_api && python3 -m compileall -q common app_database authentication app.py tests/unit/test_config_guard.py"
+        result: "passed"
+        evidence: "Python kaynakları ve yeni test dosyası derleme kontrolünden geçti."
+      - command: "cd web_api && ../.venv/bin/python -m pytest -q"
+        result: "passed"
+        evidence: "Tam backend test süiti: 56 passed, 1 warning in 55.38s."
+      - command: "cd web_api && python3 doğrudan config guard kontrolü"
+        result: "passed"
+        evidence: "Geçerli config kabul edildi; kısa SECRET_KEY reddedildi; eksik QUERY_ENCRYPTION_KEY fallback üretmeden RuntimeError verdi."
+      - command: "cd web_api && python3 uygulama lifespan import/startup kontrolü"
+        result: "not-run"
+        evidence: "Ortamda `aiohttp` eksik olduğu için `app` import'u Slack bağımlılığında durdu."
+
+  open_questions:
+    - id: "OQ-2026-002"
+      status: "Deferred"
+      question: "Hedef DB sorgu bağlantısında yalnızca CENTRAL_DB_USER/CENTRAL_DB_PASSWORD mı, yoksa veritabanı başına db_username/db_password mı kullanılacak?"
+
+  known_risks:
+    - "Production deploy'larında artık SECRET_KEY ve QUERY_ENCRYPTION_KEY zorunlu; deploy secret'ları doldurulmadan servis başlamaz."
+
+  next_step: "Değişiklikleri push et ve GitHub Actions CI run'ında aynı `pytest -v --cov=. --cov-report=term-missing` adımının yeşil olduğunu doğrula."

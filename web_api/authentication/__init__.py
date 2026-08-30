@@ -1,3 +1,3 @@
-from .exceptions import UserAlreadyExistsError, InvalidCredentialsError
+from .exceptions import InvalidCredentialsError, UserAlreadyExistsError
 
-__all__ = ["UserAlreadyExistsError", "InvalidCredentialsError"]
+__all__ = ["InvalidCredentialsError", "UserAlreadyExistsError"]

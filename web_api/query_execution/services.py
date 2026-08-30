@@ -3,27 +3,42 @@ Query Execution Service Module
 Contains the core QueryService responsible for analyzing, executing, and logging SQL queries.
 Strictly typed and documented.
 """
-from sqlalchemy.sql import text
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from datetime import datetime, timezone
-from typing import Dict, Any, List
 import json
-
-import uuid
-
-from query_execution import config
-from database_provider import DatabaseProvider
-from app_database.app_database import AppDatabase
-from app_database.models import User, QueryData, Workspace, Databases, UserDatabaseAssociation, ApprovalStatus
-from common.security import mask_result_set
-
-from query_execution.query_analyzer import QueryAnalyzer
-from notification import NotificationService
-
 import logging
+import uuid
+from datetime import datetime, timezone
+from typing import Any
+
+import sqlglot.errors
+from sqlalchemy.future import select
+
+from app_database.app_database import AppDatabase
+from app_database.models import (
+    ApprovalStatus,
+    Databases,
+    QueryData,
+    User,
+    UserDatabaseAssociation,
+    Workspace,
+)
+from common.constants import QUERY_STATUS_WAITING_FOR_APPROVAL
+from common.errors import redact_passwords, scrub
 from common.exceptions import BaseServiceException
-from query_execution.exceptions import QueryExecutionError, QueryAnalysisRejectedError
+from common.roles import is_admin
+from common.security import columns_to_mask, mask_result_set, masked_columns_in
+from database_provider import DatabaseProvider
+from notification import NotificationService
+from query_execution import config
+from query_execution.exceptions import (
+    DatabaseAccessDeniedError,
+    QueryAnalysisRejectedError,
+    QueryBlockedError,
+    QueryExecutionError,
+    QueryRoleDeniedError,
+    QuerySyntaxError,
+)
+from query_execution.query_analyzer import HARD_BLOCKED_RISKS, QueryAnalyzer
+from query_execution.runner import run_statement
 
 logger = logging.getLogger(__name__)
 
@@ -57,9 +72,9 @@ class QueryService:
         query: str,
         user: User,
         db_uuid: str,
-        ad_hoc_mask_columns: List[str] = None,
-        client_ip: str = None,
-    ) -> Dict[str, Any]:
+        ad_hoc_mask_columns: list[str] | None = None,
+        client_ip: str | None = None,
+    ) -> dict[str, Any]:
         """
         Analyzes, logs, and executes the SQL query against the target database.
         If the query is identified as risky, it is routed for admin approval.
@@ -108,26 +123,38 @@ class QueryService:
                 )
                 assoc = assoc_result.scalars().first()
                 if not assoc:
-                    raise QueryAnalysisRejectedError("You do not have permission to access this database.")
+                    raise DatabaseAccessDeniedError(
+                        "You do not have permission to access this database."
+                    )
                 user_role = assoc.role
 
+            # One parse feeds the role check, the tier decision, the risk
+            # analysis and the execution strategy. This used to re-parse the
+            # same SQL three times, synchronously, on the event loop.
+            try:
+                plan = self.analyzer.plan(query, technology=technology)
+            except sqlglot.errors.ParseError as exc:
+                raise QuerySyntaxError('Query blocked: the statement could not be parsed. Check the SQL syntax.', original_exception=exc)
+
             # Role capability verification using SQLGlot AST analyzer
-            if not self.analyzer.check_permissions_match_role(query, user_role, technology=technology):
-                raise QueryAnalysisRejectedError(
+            if not self.analyzer.permits_role(plan, user_role):
+                raise QueryRoleDeniedError(
                     message=f"Query blocked: Your role '{user_role}' is not authorized to execute this query."
                 )
-            
+
+            required_tier = plan.tier
             if db_id:
                 rules = await self.app_db.get_masking_rules(db_id)
-                for rule in rules:
-                    masking_cols.add(rule.column_name.lower())
-            
+                # Scoped to the tables this query actually reads, so a rule for
+                # `Customers.email` no longer blanks `Suppliers.email`.
+                masking_cols |= columns_to_mask(rules, plan.tables)
+
             if ad_hoc_mask_columns:
                 for col in ad_hoc_mask_columns:
                     masking_cols.add(col.lower())
 
-            is_db_admin = "ADMIN" in [r.strip().upper() for r in user_role.split(",")]
-            query_analysis: Dict[str, Any] = self.analyzer.analyze(query, technology=technology)
+            is_db_admin = is_admin(user_role)
+            query_analysis: dict[str, Any] = self.analyzer.analyze_plan(plan)
             risk_level: str | None = query_analysis.get("risk_type")
 
             # Create the initial audit log now that we have all context
@@ -141,6 +168,33 @@ class QueryService:
                 client_ip=client_ip,
                 risk_level=risk_level,
             )
+
+            # Some risks are nobody's to skip. Shell execution, filesystem
+            # access, remote SQL and EXPLAIN ANALYZE are not a question of
+            # authority - WebQuery has no supported path for them, so the
+            # administrator bypass below must not reach them.
+            if risk_level in HARD_BLOCKED_RISKS:
+                await self.app_db.update_log(
+                    log_id=log_id,
+                    successfull=False,
+                    error=f"Hard block: {risk_level}",
+                )
+                raise QueryBlockedError(
+                    message=query_analysis.get("reason")
+                    or "Bu sorgu güvenlik politikası gereği engellendi."
+                )
+
+            # An administrator skips the approval requirement, not the security
+            # check. This is an interim state: step 3.4 replaces the bypass with
+            # a confirmation that applies to everyone, at which point the role
+            # stops being part of the decision. Until then the skip is logged.
+            if not query_analysis["return"] and is_db_admin:
+                logger.warning(
+                    "Admin riskli sorgu çalıştırıyor: user=%s risk=%s db=%s",
+                    getattr(user, "username", user.id),
+                    risk_level,
+                    database_name,
+                )
 
             if not query_analysis["return"] and not is_db_admin:
                 error_msg: str = f"Query rejected: {query_analysis['risk_type']}"
@@ -159,7 +213,7 @@ class QueryService:
                             database_name=database_name,
                             query=query,
                             uuid=query_uuid,
-                            status="waiting_for_approval",
+                            status=QUERY_STATUS_WAITING_FOR_APPROVAL,
                             risk_type=query_analysis.get('risk_type')
                         )
                         db_session.add(query_data)
@@ -206,41 +260,30 @@ class QueryService:
                 
             async with self.database_provider.get_session(
                 user=user,
-                db_uuid=db_uuid
+                db_uuid=db_uuid,
+                tier=required_tier,
             ) as session:
-                sql_query = text(query)
-                result = await session.execute(sql_query)
-                
-                row_count: int = 0
-                message: str = ""
-                result_data: Dict[str, Any] = {}
-                
-                if result.returns_rows:
-                    rows = result.fetchmany(size=config.MAX_ROW_COUNT_LIMIT)
-                    row_count = len(rows)
-                    if row_count >= config.MAX_ROW_COUNT_LIMIT:
-                        message = f"Truncated to MAX_ROW_COUNT_LIMIT ({config.MAX_ROW_COUNT_LIMIT})"
-                    else:
-                        message = f"{row_count} rows returned"
-                    
-                    raw_data = [dict(row._mapping) for row in rows]
-                    if not is_db_admin and masking_cols:
-                        raw_data = mask_result_set(raw_data, masking_cols)
-                        
-                    result_data = {
-                        "response_type": "data",
-                        "data": raw_data,
-                        "message": message
-                    }
-                else:
-                    row_count = result.rowcount if result.rowcount is not None else 0
-                    message = f"{row_count} rows affected"
-                    result_data = {
-                        "response_type": "data",
-                        "data": [],
-                        "message": message
-                    }
-                
+                outcome = await run_statement(session, plan, config.MAX_ROW_COUNT_LIMIT)
+
+                row_count: int = outcome.row_count
+                message: str = outcome.message
+                raw_data = outcome.rows
+
+                # Report what was masked, not what was asked for: a database
+                # admin bypasses masking entirely, and the client must not
+                # claim otherwise.
+                masked_now: list[str] = []
+                if outcome.returns_rows and not is_db_admin and masking_cols:
+                    masked_now = masked_columns_in(raw_data, masking_cols)
+                    raw_data = mask_result_set(raw_data, masking_cols)
+
+                result_data: dict[str, Any] = {
+                    "response_type": "data",
+                    "data": raw_data,
+                    "message": message,
+                    "masked_columns": masked_now,
+                }
+
                 applied_rules_str = json.dumps(list(masking_cols)) if masking_cols else None
                 await self.app_db.update_log(
                     log_id=log_id,
@@ -260,18 +303,30 @@ class QueryService:
             raise
         except Exception as e:
             error_msg: str = str(e)
-            logger.error(f"Query execution failed: {error_msg}")
+            safe_log_error = redact_passwords(error_msg)
+            logger.error(
+                "Query execution failed [%s]: %s",
+                type(e).__name__,
+                safe_log_error,
+            )
             if log_id:
                 await self.app_db.update_log(
                     log_id=log_id,
                     successfull=False,
-                    error=error_msg
+                    error=safe_log_error
                 )
-            raise QueryExecutionError(error_msg, original_exception=e)
+            raise QueryExecutionError(scrub(error_msg), original_exception=e)
 
-    async def get_active_masking_rules(self, db_uuid: str) -> list[str]:
+    async def get_active_masking_rules(self, db_uuid: str, user: User) -> list[str]:
         """
         Retrieves column names that are persistently masked for a given database UUID.
+
+        Args:
+            db_uuid: Target database unique identifier.
+            user: The authenticated caller; must hold an association with the database.
+
+        Raises:
+            DatabaseAccessDeniedError: The caller has no association with this database.
         """
         async with self.app_db.get_app_db() as db:
             db_result = await db.execute(
@@ -280,7 +335,21 @@ class QueryService:
             db_entry = db_result.scalars().first()
             if not db_entry:
                 return []
-            
+
+            # Masked column names describe the sensitive parts of a schema. The
+            # same association gate `execute_query` applies is required here;
+            # a missing association is refused rather than answered with [],
+            # which would leave "no rules" and "no access" indistinguishable.
+            assoc_result = await db.execute(
+                select(UserDatabaseAssociation).where(
+                    UserDatabaseAssociation.user_id == user.id,
+                    UserDatabaseAssociation.database_id == db_entry.id,
+                )
+            )
+            if assoc_result.scalars().first() is None:
+                raise DatabaseAccessDeniedError(
+                    "You do not have permission to access this database."
+                )
+
             rules = await self.app_db.get_masking_rules(db_entry.id)
             return [r.column_name.lower() for r in rules]
- 

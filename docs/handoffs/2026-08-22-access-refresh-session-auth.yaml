@@ -1,0 +1,74 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "codex"
+  to: "user / next-session-agent"
+  created_at: "2026-08-22T00:00:00+03:00"
+  task: "Adım 15 (`2.3`) — kısa access token + rotasyonlu refresh token ve oturum iptali"
+
+  scope:
+    completed:
+      - "20 dakikalık JWT access token üretimi ve session ID (`sid`) claim'i eklendi"
+      - "12 saatlik opak refresh token üretimi; veritabanında yalnızca SHA-256 özeti tutuluyor"
+      - "UserSessions modeli ve Alembic migration'ı eklendi"
+      - "Refresh token rotasyonu, 30 saniyelik grace penceresi ve tekrar kullanım tespiti eklendi"
+      - "Korumalı isteklerde session aktiflik, kullanıcı eşleşmesi ve session süresi kontrol ediliyor"
+      - "`/api/refresh` endpoint'i eklendi; aktif kullanıcı yeniden doğrulanıyor"
+      - "Logout, ilgili session'ı revoke ediyor ve access/refresh cookie'lerini siliyor"
+      - "Mevcut BlacklistedTokens akışı geriye dönük uyumluluk için korundu"
+      - "Feature spec, ADR ve refresh/logout entegrasyon testi eklendi"
+    excluded:
+      - "BlacklistedTokens tablosunun tamamen kaldırılması; geçiş ve eski token uyumluluğu için korundu"
+      - "Gerçek production veritabanında migration çalıştırılması"
+      - "Pytest bağımlılıklarının kurulması veya CI ortamının değiştirilmesi"
+      - "Bu oturumdan önce mevcut olan README ve analiz dokümanı değişiklikleri"
+
+  changed_files:
+    created:
+      - "web_api/authentication/sessions.py"
+      - "web_api/migrations/versions/8c7b2d1f4a10_add_user_sessions.py"
+      - "docs/specs/SPEC-0005-access-refresh-session-auth.md"
+      - "docs/adr/ADR-0008-access-refresh-session-auth.md"
+    modified:
+      - "web_api/app_database/models.py"
+      - "web_api/authentication/config.py"
+      - "web_api/authentication/router.py"
+      - "web_api/authentication/services.py"
+      - "web_api/middlewares/auth_middleware.py"
+      - "web_api/tests/integration/test_auth_api.py"
+    deleted: []
+
+  decisions:
+    - decision: "Access token kısa ömürlü JWT, refresh token opak ve rotasyonlu olacak"
+      rationale: "Çalınan access token'ın kullanım penceresi kısalır; refresh token sunucu tarafında iptal edilebilir"
+      recorded_in: "docs/specs/SPEC-0005-access-refresh-session-auth.md; docs/adr/ADR-0008-access-refresh-session-auth.md"
+    - decision: "Refresh token'ın ham değeri yerine SHA-256 özeti saklanacak"
+      rationale: "Veritabanı sızıntısında ham refresh token doğrudan kullanılmamalı"
+      recorded_in: "docs/adr/ADR-0008-access-refresh-session-auth.md"
+    - decision: "Mevcut BlacklistedTokens mekanizması şimdilik korunacak"
+      rationale: "Eski access token'larla geriye dönük uyumluluk sağlamak ve geçişte mevcut logout davranışını kaybetmemek"
+      recorded_in: "docs/specs/SPEC-0005-access-refresh-session-auth.md; docs/adr/ADR-0008-access-refresh-session-auth.md"
+
+  validation:
+    commands_run:
+      - command: "cd web_api && python3 -m compileall -q authentication app_database middlewares migrations"
+        result: passed
+        evidence: "Python kaynakları derleme kontrolünden geçti"
+      - command: "cd web_api && python -m pytest -q tests/integration/test_auth_api.py tests/integration/test_advanced_security.py"
+        result: failed
+        evidence: "Ortamda `python` komutu bulunamadı"
+      - command: "cd web_api && python3 -m pytest -q tests/integration/test_auth_api.py tests/integration/test_advanced_security.py"
+        result: failed
+        evidence: "Sistem Python'ında pytest modülü kurulu değil"
+      - command: "git diff --check"
+        result: failed
+        evidence: "Sadece bu çalışmadan önce mevcut README.md içindeki bir trailing whitespace bildirildi; yeni dosyalarda diff-check doğrulaması yapılamadı"
+
+  open_questions: []
+
+  known_risks:
+    - "Entegrasyon testleri pytest eksikliği nedeniyle çalıştırılamadı; refresh, rotation ve logout akışları CI veya proje sanal ortamında doğrulanmalı"
+    - "UserSessions migration'ı production veritabanına uygulanmadı; deploy öncesi `cd web_api && alembic upgrade head` çalıştırılmalı"
+    - "Her korumalı istekte session_alive sorgusu ek bir merkezi veritabanı okuması oluşturuyor"
+    - "BlacklistedTokens ile UserSessions birlikte tutuluyor; geçiş tamamlandıktan sonra blacklist'in kaldırılıp kaldırılmayacağı ayrıca değerlendirilmelidir"
+
+  next_step: "Proje sanal ortamında pytest'i çalıştır, başarısız auth testlerini düzelt ve migration'ı staging veritabanında `alembic upgrade head` ile doğrula."

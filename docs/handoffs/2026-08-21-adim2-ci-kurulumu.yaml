@@ -1,0 +1,68 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "claude-code"
+  to: "user / next-session-agent"
+  created_at: "2026-08-21T16:05:00+03:00"
+  task: "webquery_implementasyon_sirasi.md — Blok 0, Adım 2 (`4.2` CI kurun)"
+
+  scope:
+    completed:
+      - "`.github/workflows/ci.yml` oluşturuldu: her push/pull_request'te tetikleniyor, Python 3.11 (Dockerfile ile aynı)"
+      - "Mevcut koda karşı ruff çalıştırıldı: 383 önceden var olan hata bulundu (204'ü otomatik düzeltilebilir)"
+      - "Karar: pytest blocking, ruff bilgilendirici (continue-on-error) — kullanıcıyla üç seçenek arasından teyit edildi"
+      - "Plandaki sır sızıntısı taraması test edildi; tests/ dizini hariç tutulunca yanlış pozitif (db_password=\"password\" test fixture'ı) ortadan kalktı, blocking bırakıldı"
+      - "Bu politikayı belgeleyen ADR-0002 (Proposed) yazıldı"
+      - "CI env değişkenleriyle (boş QUERY_ENCRYPTION_KEY, sabit SECRET_KEY vb.) pytest 2 kez lokal olarak simüle edildi: 38 passed, 2 failed — başarısızlıklar CI env'iyle ilgisiz (gerçek slack.com bağlantısı gerektiren, ağ/SSL kaynaklı, önceden var olan hatalar)"
+      - "Yan bulgu ve düzeltme: pytest testleri bitirip sonucu yazdıktan SONRA kapanmıyordu (3 kez tekrarlandı) — kaynağı EngineCache'in arka plan temizlik döngüsünün tests/conftest.py'de hiç iptal edilmemesiydi. Kullanıcıyla teyit edilip kapsam içine alındı: async_client fixture'ına finally bloğunda db_provider.close_engines() + app_db.app_engine.dispose() eklendi (app.py'nin kendi shutdown deseniyle aynı). Doğrulama: aynı 38 passed/2 failed sonucu, process artık ~64 saniyede temiz çıkıyor. timeout-minutes: 15 yine de savunma amaçlı CI'da kaldı."
+    excluded:
+      - "383 pre-existing ruff hatasının düzeltilmesi — kapsam dışı, ayrı bir işe bırakıldı"
+      - "CI_FERNET_KEY GitHub Actions secret'ının oluşturulması — bu ortamdan GitHub secret yönetimine erişim yok, operatör tarafından elle eklenmeli"
+
+  changed_files:
+    created:
+      - .github/workflows/ci.yml
+      - docs/adr/ADR-0002-ci-merge-gate-policy.md
+      - docs/handoffs/2026-08-21-adim2-ci-kurulumu.yaml
+    modified:
+      - web_api/tests/conftest.py
+    deleted: []
+
+  decisions:
+    - decision: "CI'da pytest blocking, ruff check bilgilendirici (continue-on-error) olacak"
+      rationale: "Mevcut kod tabanında 383 önceden var olan ruff hatası var; bunları şimdi blocking yapmak Adım 2'nin kapsamını ilgisiz bir refactor'e genişletirdi. Kullanıcı üç seçenek arasından bu tercihi onayladı."
+      recorded_in: "docs/adr/ADR-0002-ci-merge-gate-policy.md"
+    - decision: "Sır sızıntısı taraması tests/ dizinini hariç tutacak şekilde daraltıldı, blocking kaldı"
+      rationale: "Test fixture'larındaki kasıtlı sahte parolalar (db_password=\"password\") gerçek sır değil; hariç tutulunca tarama tamamen temiz çıktı"
+      recorded_in: "docs/adr/ADR-0002-ci-merge-gate-policy.md"
+    - decision: "CI job'una timeout-minutes: 15 eklendi (savunma amaçlı, kök neden ayrıca düzeltildi)"
+      rationale: "pytest, testler bittikten sonra asılı kalıyordu (EngineCache temizlik task'ı iptal edilmiyordu) — bu olmadan CI job'u GitHub'ın varsayılan 6 saatlik limitine kadar asılı kalırdı. Kök neden tests/conftest.py'de düzeltildi; timeout ileride benzer bir sızıntıya karşı ek güvence olarak kaldı"
+      recorded_in: ".github/workflows/ci.yml, docs/adr/ADR-0002-ci-merge-gate-policy.md"
+    - decision: "tests/conftest.py'deki async_client fixture'ı artık teardown'da db_provider.close_engines() ve app_db.app_engine.dispose() çağırıyor"
+      rationale: "EngineCache'in arka plan temizlik task'ı hiç iptal edilmiyordu; bu, CI job'unun testler geçse bile hep timeout'la kapanması anlamına gelirdi. Kullanıcı bu düzeltmenin şimdi yapılmasını onayladı (Adım 2'nin kapsamına dahil edildi, çünkü çalışan bir CI'nin ön koşulu)"
+      recorded_in: "web_api/tests/conftest.py, docs/adr/ADR-0002-ci-merge-gate-policy.md"
+
+  validation:
+    commands_run:
+      - command: "ruff check web_api/ (mevcut koda karşı, referans için)"
+        result: "not-run olarak CI'da blocking değil"
+        evidence: "383 errors, 204 fixable — sonuç ADR-0002'ye kaydedildi"
+      - command: "grep -rn --include='*.py' --exclude-dir=tests -E \"(password|secret|api_key)\\s*=\\s*['\\\"][^'\\\"]{8,}\" web_api/"
+        result: passed
+        evidence: "Eşleşme yok (exit 1) — tests/ hariç tutulunca temiz"
+      - command: "python3 -c \"import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))\""
+        result: passed
+        evidence: "YAML sözdizimi geçerli"
+      - command: "cd web_api && SECRET_KEY=... QUERY_ENCRYPTION_KEY='' APP_DATABASE_URL=sqlite+aiosqlite:///./test_ci.db CENTRAL_DB_USER=ci_user CENTRAL_DB_PASSWORD=ci_pass python -m pytest -q (düzeltme öncesi 2 kez, düzeltme sonrası 1 kez, toplam 3 çalıştırma)"
+        result: passed
+        evidence: "Üçünde de 38 passed, 2 failed (gerçek slack.com bağlantısı gerektiren, CI env'iyle ilgisiz 2 test). İlk 2 çalıştırmada process sonuç yazdıktan sonra asılı kaldı (elle kill edildi) — conftest.py düzeltmesi sonrası 3. çalıştırmada process ~64 saniyede temiz çıktı (real 64.16s, exit code 0)."
+
+  open_questions:
+    - id: "OQ-2026-002"
+      status: "Deferred"
+      question: "Hedef DB sorgu bağlantısında yalnızca CENTRAL_DB_USER mı, yoksa veritabanı-başına db_username/db_password mi kullanılacak? Blok 4 / Adım 16 (`3.1`) öncesi cevaplanmalı."
+
+  known_risks:
+    - "CI_FERNET_KEY GitHub Actions secret'ı henüz oluşturulmadı. Şu an testler bunsuz da geçiyor (fail-open fallback), ama Adım 3 (config guard) sonrası zorunlu olacak."
+    - "383 ruff hatası CI tarafından zorunlu kılınmıyor; zamanla artabilir. Azaltma: ruff çıktısı her çalışmada görünür kalıyor."
+
+  next_step: "Operatör CI_FERNET_KEY secret'ını GitHub repo ayarlarına eklesin; ardından Adım 3 (`0.1` — sessiz fail-open sırları kapat) ile devam et."

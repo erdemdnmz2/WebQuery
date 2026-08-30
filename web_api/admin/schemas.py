@@ -2,9 +2,10 @@
 Admin Schemas
 Pydantic models for admin approval endpoints
 """
-from pydantic import BaseModel
-from typing import Optional, List
-from typing import Dict, Any
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
+
 
 class AdminApprovals(BaseModel):
     """
@@ -26,12 +27,12 @@ class AdminApprovals(BaseModel):
     query: str
     database: str
     status: str
-    risk_type: Optional[str] = None
-    servername: Optional[str] = None
+    risk_type: str | None = None
+    servername: str | None = None
 
 class AdminApprovalsList(BaseModel):
     """Admin approval list response schema"""
-    waiting_approvals: List[AdminApprovals]
+    waiting_approvals: list[AdminApprovals]
 
 
 class AdminPreviewResponse(BaseModel):
@@ -47,11 +48,11 @@ class AdminPreviewResponse(BaseModel):
         error: Error message (if any)
     """
     response_type: str  # "data" or "error"
-    data: List[Dict[str, Any]]
-    columns: Optional[List[str]] = None
-    row_count: Optional[int] = None
-    message: Optional[str] = None
-    error: Optional[str] = None
+    data: list[dict[str, Any]]
+    columns: list[str] | None = None
+    row_count: int | None = None
+    message: str | None = None
+    error: str | None = None
 
 
 class ApprovalRequest(BaseModel):
@@ -63,29 +64,33 @@ class ApprovalRequest(BaseModel):
     """
     show_results: bool
 
-class DatabaseAddRequest(BaseModel):
-    """
-    Schema for adding a new database.
-    
-    Attributes:
-        servername: Server instance name
-        database_name: Database name
-        tech_name: Technology name (e.g., mssql)
-    """
-    servername: str
-    database_name: str
-    tech_name: str
 
+class RejectRequest(BaseModel):
+    """Required explanation for a rejected risky query."""
+
+    reason: str = Field(min_length=3, max_length=500)
 
 class MaskingRuleSchema(BaseModel):
-    table_name: str
-    column_name: str
-    masking_type: str = "default"
+    """One persisted masking rule.
+
+    `table_name` is now enforced (OQ-2026-013): a rule applies only to the
+    tables a query actually reads, so `Customers.email` no longer blanks
+    `Suppliers.email`.
+
+    `masking_type` is constrained to the single strategy the engine implements.
+    It was previously free text defaulting to `"default"` and was never read at
+    all, so the admin screen offered a choice that had no effect. Validating it
+    here keeps the stored rule and the applied behaviour the same thing.
+    """
+
+    table_name: str = Field(min_length=1, max_length=256)
+    column_name: str = Field(min_length=1, max_length=256)
+    masking_type: Literal["full"] = "full"
     is_active: bool = True
 
 
 class MaskingRulesSaveRequest(BaseModel):
-    rules: List[MaskingRuleSchema]
+    rules: list[MaskingRuleSchema]
 
 
 class DatabaseResponseSchema(BaseModel):
@@ -93,14 +98,45 @@ class DatabaseResponseSchema(BaseModel):
     servername: str
     database_name: str
     technology: str
-    db_username: Optional[str] = None
+    connection_mode: Literal["ro", "ro_rw", "ro_rw_ddl"] | None = None
 
 
 class DatabaseListResponse(BaseModel):
-    databases: List[DatabaseResponseSchema]
+    databases: list[DatabaseResponseSchema]
 
 
 class UserAssociationRequest(BaseModel):
     user_id: int
     database_id: int
-    role: str # "READER", "WRITER", "ADMIN"
+    role: str # "READER", "WRITER", "DDL"; DB ADMIN is OWNER-managed.
+
+
+class DatabaseMemberSchema(BaseModel):
+    """A user who currently holds access to a database."""
+
+    user_id: int
+    username: str
+    email: str
+    role: str
+    is_admin: bool
+    is_active: bool
+
+
+class DatabaseCandidateSchema(BaseModel):
+    """An active user who could be granted access.
+
+    Username and email only: enough to name a colleague, nothing about their
+    lifecycle, platform role, or access elsewhere.
+    """
+
+    user_id: int
+    username: str
+    email: str
+
+
+class DatabaseUsersResponse(BaseModel):
+    database_id: int
+    #: What the registration provisions, so the UI offers only grantable tiers.
+    connection_mode: Literal["ro", "ro_rw", "ro_rw_ddl"] | None = None
+    members: list[DatabaseMemberSchema]
+    candidates: list[DatabaseCandidateSchema]

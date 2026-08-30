@@ -1,40 +1,66 @@
-version: '3.8'
+# Production-safe baseline (OQ-2026-015). This file alone is what a deploy
+# runs, and `docker compose up` with no flags resolves to exactly this — the
+# safe topology is the default one.
+#
+# Local development conveniences (live code reload, direct database access)
+# are in docker-compose.dev.yml and must be asked for explicitly:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# That file was named docker-compose.override.yml until 2026-08-30, which
+# made Compose load it automatically — so the short command everyone types
+# produced the *development* topology, and deploying by habit silently
+# published the database to the host. Forgetting the flag now costs a lost
+# bind mount, which is noticed immediately, instead of a silent exposure.
 
 services:
   web:
     build: ./web_api
-    ports:
-      - "${PORT:-8080}:${PORT:-8080}"
     env_file:
       - .env
     environment:
       - DB_HOST=db
-      - APP_DATABASE_URL=mssql+aioodbc://${DB_USER:-sa}:${DB_PASSWORD}@db/dba_application_db?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes&connection timeout=30
+      - APP_DATABASE_URL=mssql+aioodbc://${DB_USER}:${DB_PASSWORD}@db/dba_application_db?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes&connection timeout=30
       - HOST=${HOST:-0.0.0.0}
       - PORT=${PORT:-8080}
-      - REDIS_HOST=redis
+      - REDIS_URL=redis://redis:6379/0
+      # nginx is the only container talking to `web` directly; trust it and
+      # nothing else so X-Forwarded-For cannot be forged from outside the
+      # compose network. See web_api/middlewares/proxy_middleware.py.
+      - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-172.16.0.0/12}
     depends_on:
-      - db
-      - redis
-    volumes:
-      - ./web_api:/app
+      db:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    # No bind mount: the image built above is what runs, so what was tested
+    # is what ships. No direct host port publish either — nginx is the only
+    # ingress; reach the API through it, not around it.
     restart: always
 
   redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
+    image: redis:7.2-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     restart: always
 
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
       - ACCEPT_EULA=Y
+      # The mssql container bootstraps its own `sa` account from this value;
+      # create_db.py then uses it once to provision the application's own
+      # login and database (see web_api/create_db.py). DB_USER has no
+      # fallback: an unset value must fail config_guard's startup check
+      # instead of silently becoming `sa`.
       - MSSQL_SA_PASSWORD=${DB_PASSWORD}
-    ports:
-      - "1433:1433"
     volumes:
       - sql_data:/var/opt/mssql
+    # No host port publish: reachable only from other containers on this
+    # compose network, not from the host or beyond it.
     restart: always
 
   frontend:
