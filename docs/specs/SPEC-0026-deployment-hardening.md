@@ -2,8 +2,8 @@
 
 ## 1. Spec Kartı
 
-- Özellik: Üretim-güvenli Compose tabanı, geliştirme kolaylıklarının override
-  dosyasına taşınması, imaj ve nginx sertleştirmesi
+- Özellik: Üretim-güvenli Compose tabanı, geliştirme kolaylıklarının ayrı ve
+  otomatik yüklenmeyen bir dosyaya taşınması, imaj ve nginx sertleştirmesi
 - Durum: Implemented
 - Versiyon: 2026-08-30
 - Tarih: 2026-08-30
@@ -27,9 +27,9 @@ güvenlik başlığı ya da istek limiti uygulamıyordu.
 
 ### Başarı Sinyali
 
-- `docker compose -f docker-compose.yml up` bind mount ve yayımlanmış
-  veritabanı portu olmadan çalışır.
-- `docker compose up` (override otomatik yüklenir) yerel akışı değiştirmeden
+- `docker compose up` — bayraksız, yani bir dağıtımın yazacağı komut — bind
+  mount ve yayımlanmış veritabanı portu olmadan çalışır.
+- `make up` (taban + `docker-compose.dev.yml`) yerel akışı değiştirmeden
   çalışmaya devam eder.
 - Konteyner içinde uygulama süreci `root` değildir.
 - `DEBUG=false` ile `COOKIE_SECURE=true` olmadan uygulama açılmaz.
@@ -41,7 +41,7 @@ güvenlik başlığı ya da istek limiti uygulamıyordu.
 - `docker-compose.yml`: bind mount ve `web`/`db` host port publish'lerinin
   kaldırılması, `TRUSTED_PROXY_IPS` tanımı, `DB_USER` için sessiz `sa`
   fallback'inin kaldırılması.
-- `docker-compose.override.yml`: bind mount, `web` ve `db` port publish'leri,
+- `docker-compose.dev.yml`: bind mount, `web` ve `db` port publish'leri,
   gevşetilmiş `TRUSTED_PROXY_IPS`.
 - `web_api/Dockerfile`: root olmayan kullanıcı.
 - `nginx.conf`: güvenlik başlıkları, `/api/login` ve `/api` için
@@ -64,8 +64,14 @@ Compose dosyaları, çalıştırma biçimine göre iki farklı topoloji üretir:
 
 | Komut | Sonuç |
 | --- | --- |
-| `docker compose up` | Taban + override. Kod bind mount'lu, `web` ve `db` host'tan erişilebilir. Yerel geliştirme. |
-| `docker compose -f docker-compose.yml up` | Yalnız taban. Bind mount yok, `web`/`db` host portu yok; tek giriş nginx. |
+| `docker compose up` | Yalnız taban. Bind mount yok, `web`/`db` host portu yok; tek giriş nginx. **Varsayılan bu.** |
+| `docker compose -f docker-compose.yml -f docker-compose.dev.yml up` (veya `make up`) | Taban + geliştirme. Kod bind mount'lu, `web` ve `db` host'tan erişilebilir. |
+
+2026-08-30 düzeltmesi: dosya `docker-compose.override.yml` adıyla otomatik
+yükleniyordu, yani yukarıdaki iki satır terstiydi — kısa komut geliştirme
+topolojisini veriyordu. `docker-compose.dev.yml` adı otomatik yüklemeyi
+kaldırıyor. Doğrulama komutu: `make prod-config`, yayımlanmış tek port `80`
+ve `nginx.conf` dışında bind mount olmadığını göstermeli.
 
 Yeni ortam değişkeni: `TRUSTED_PROXY_IPS` (virgülle ayrılmış CIDR listesi).
 Boş bırakılırsa hiçbir `X-Forwarded-For` başlığı okunmaz.
@@ -75,11 +81,11 @@ Boş bırakılırsa hiçbir `X-Forwarded-For` başlığı okunmaz.
 ### BR-01: Taban dosya üretim varsayılanıdır
 
 `docker-compose.yml` hiçbir geliştirme kolaylığı içermez. Yeni bir kolaylık
-override dosyasına eklenir; taban dosyaya değil.
+`docker-compose.dev.yml` dosyasına eklenir; taban dosyaya değil.
 
-### BR-02: Override yalnız erişilebilirlik ve iterasyon hızını değiştirir
+### BR-02: Geliştirme dosyası yalnız erişilebilirlik ve iterasyon hızını değiştirir
 
-Override dosyası uygulama **davranışını** değiştiren hiçbir ayar içermez.
+`docker-compose.dev.yml` uygulama **davranışını** değiştiren hiçbir ayar içermez.
 Yerelde geçen bir davranış, üretimde de aynı olmalıdır.
 
 ### BR-03: `DB_USER` sessizce `sa` olmaz
@@ -100,12 +106,17 @@ sessizce en yetkili hesapla çalıştırıyordu.
 
 ## 6. Acceptance Criteria
 
-- AC-01: Given yalnız `docker-compose.yml`, when `docker compose config`
-  çalıştırılır, then `web` servisinde `volumes` ve host `ports` yoktur.
+- AC-01: Given hiçbir bayrak verilmemiş, when `docker compose config`
+  çalıştırılır, then `web` servisinde `volumes` ve host `ports` yoktur —
+  yani taban dosya varsayılan olarak çözülür.
 - AC-02: Given yalnız `docker-compose.yml`, when yapılandırma incelenir,
   then `db` servisi host'a port yayımlamaz.
-- AC-03: Given her iki dosya, when `docker compose up` çalıştırılır, then
-  bind mount ve `1433` publish geri gelir.
+- AC-03: Given `-f docker-compose.yml -f docker-compose.dev.yml` (veya
+  `make up`), when yapılandırma çözülür, then bind mount ve `1433` publish
+  geri gelir.
+- AC-07: Given `docker-compose.dev.yml` diskte duruyor, when bayraksız
+  `docker compose config` çalıştırılır, then çıktıda `1433` ve `./web_api`
+  bind mount **yoktur** — dosya adı otomatik yüklenmeyi engellemelidir.
 - AC-04: Given `DEBUG=false` ve `COOKIE_SECURE=false`, when uygulama
   başlatılır, then `SystemExit(1)` ile durur ve neden loglanır.
 - AC-05: Given `DB_USER` tanımsız, when uygulama başlatılır, then
@@ -131,7 +142,8 @@ web_api/entrypoint.sh`.
 ## 8. Open Questions
 
 - OQ-2026-015: Yanıtlandı — taban dosya üretim-güvenli olacak, geliştirme
-  kolaylıkları `docker-compose.override.yml` dosyasına taşınacak.
+  kolaylıkları ayrı bir dosyaya taşınacak. 2026-08-30'da düzeltildi: dosya
+  `docker-compose.dev.yml`, otomatik yüklenmiyor; varsayılan üretim-güvenli.
 
 ## 9. Done Kontrolü
 

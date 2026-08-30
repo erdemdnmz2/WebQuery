@@ -2,9 +2,12 @@
 
 ## Status
 
-Amended (2026-08-30) — özgün karar korunuyor; ruff'ın `F`/`E9` kuralları
-blocking hâle getirildi ve bir frontend job'ı eklendi. Bkz. "2026-08-30
-Güncellemesi".
+Amended (2026-08-30, iki kez) — özgün karar korunuyor. Birinci güncelleme
+ruff'ın `F`/`E9` kurallarını blocking yaptı ve bir frontend job'ı ekledi;
+ikincisi iş akışının kendi hijyenini (least-privilege token, concurrency,
+action sürümleri, imaj/CI bağımlılık paritesi) ele aldı ve birinci
+güncellemedeki hatalı bağımlılık kaydını düzeltti. Bkz. her iki "2026-08-30
+Güncellemesi" bölümü.
 
 ## Context
 
@@ -133,17 +136,83 @@ ve `audit:contrast` yalnızca yerelde çalışıyordu.
    (SheetJS 0.18.5) upstream npm'i terk ettiği için kütüphane değişimi
    istiyor. Bunlar kendi doğrulama turlarını hak eden işler; tamamlanmadan
    kapı yapmak, ilgisiz her değişikliğin önüne kırmızı CI koyardı.
+   **Düzeltme:** bu maddedeki paket listesi taramanın çıktısından değil
+   denetim raporundan alınmıştı ve yanlış. Gerçek tablo 16 paket / 75
+   advisory; `httpx` 0.24.1 `pip-audit` çıktısında hiç geçmiyor. Kararın
+   kendisi (tarama eklensin, `continue-on-error` olsun) geçerli kalıyor.
+   Bkz. aşağıdaki ikinci güncelleme.
 
 ### Kabul edilen riskler (güncel)
 
 - Bağımlılık taraması bilgilendirici olduğu sürece bilinen açıklar merge'ü
   engellemez. Azaltma: çıktı her çalışmada görünür ve yükseltme işi ayrı bir
-  kalem olarak izleniyor.
+  kalem olarak izleniyor. **2026-08-30 akşamı düzeltildi:** bu azaltma
+  çalışmadı — bkz. aşağıdaki ikinci güncelleme.
 - Testler hâlâ yalnız SQLite'a karşı çalışıyor. MSSQL'e özgü davranış
   (`NVARCHAR`, `DATETIME2`, `UNIQUEIDENTIFIER`, statement timeout, satır
   değerli `IN` desteğinin yokluğu) CI'da doğrulanmıyor. Bu, denetimin de
   işaret ettiği kalıcı boşluk; MSSQL servis konteynerli bir nightly job
   ayrı bir karar olarak duruyor ve bu güncellemeyle kapatılmadı.
+
+## 2026-08-30 (ikinci) Güncellemesi — iş akışının kendi hijyeni
+
+### Bağlam
+
+Yukarıdaki güncelleme taramaları ekledi ama **çıktılarını okumadı**. Okununca
+iki şey çıktı.
+
+Birincisi, kayıt yanlıştı: bu ADR ve `docs/inbox/DEPENDENCY-ADVISORY-UPGRADES.md`
+açık bulguyu dört pakete indirgiyordu. `pip-audit` gerçekte **16 pakette 75
+ayrı advisory** raporluyor ve bu ADR'nin adıyla andığı `httpx` 0.24.1 çıktıda
+hiç geçmiyor. Kayıt, taramanın söylediğini değil denetim raporunun söylediğini
+yansıtıyordu.
+
+İkincisi, "çıktı her çalışmada görünür" azaltması işlemiyor: üç
+`continue-on-error` adımı da eklendiklerinden beri her çalışmada kırmızı, yani
+yeni bir advisory duran backlog'dan ayırt edilemiyor. İlk sorunun bir gün fark
+edilmemesinin sebebi bu.
+
+Ayrıca iş akışının kendisinde, bulgularla ilgisiz üç eksik vardı:
+`actions/checkout@v4`, `setup-python@v5` ve `setup-node@v4` Node 20 hedefliyor
+ve runner her çalışmada deprecation uyarısı basıyor; `permissions` bloğu yok,
+yani her adım varsayılan yazma yetkili job token'ıyla çalışıyor; `concurrency`
+grubu yok, yani üzerine commit atılmış çalışmalar runner'ı sonuna kadar
+tutuyor.
+
+### Karar
+
+1. **`permissions: contents: read` iş akışı seviyesinde.** Hiçbir adım
+   repoya yazmıyor; en az yetki varsayılan olmalı.
+2. **`concurrency` grubu + `cancel-in-progress`.** Anahtar
+   `workflow + event_name + ref`. `event_name` bilerek içeride: `push` ve
+   `pull_request` ayrı çalışmalar olarak kalsın, çünkü özgün karar ikisini de
+   istiyor.
+3. **Action sürümleri `@v7`.** Üçü de Node 24'e geçiyor; kırıcı değişikliklerin
+   hiçbiri bu iş akışını etkilemiyor (`setup-python` v7 `pip-install`
+   girdisini kaldırdı — kullanılmıyor; `setup-node` v6 otomatik cache'i npm'e
+   daralttı — zaten `cache: npm`).
+4. **Node sürümü `24`, `frontend/Dockerfile` ile eşleştirilerek.** Backend
+   job'unun Python 3.11'i `web_api/Dockerfile` ile eşleştirmesindeki gerekçe
+   aynen geçerli. Node 20 ayrıca EOL.
+5. **`frontend/Dockerfile` `npm install` yerine `npm ci`.** Bu bir CI kararı
+   olduğu kadar bir üretim kararı: `npm install` her caret aralığını imaj
+   derleme anında yeniden çözüyordu, yani üretim imajı hiçbir CI çalışmasının
+   görmediği bağımlılık sürümleri taşıyabilirdi. Lockfile artık zorunlu
+   (`package-lock.json*` glob'u da kaldırıldı).
+6. **Taramaların beklenen bulgu sayısı `ci.yml` yorumlarına yazıldı.** Adım
+   kırmızı/yeşil sinyali vermediği sürece okunacak tek şey sayı.
+
+`continue-on-error`'lar bu güncellemeyle kalkmadı; kaldırma koşulu
+`docs/inbox/DEPENDENCY-ADVISORY-UPGRADES.md` 8. maddesinde.
+
+### Kabul edilen riskler
+
+- Bilinen advisory'ler hâlâ merge'ü engellemiyor ve tarama adımları hâlâ
+  sürekli kırmızı. Bu güncelleme bunu çözmedi, yalnızca **görünür** ve
+  **sayılabilir** hâle getirdi. Kalıcı çözüm (`--ignore-vuln` allowlist'i ile
+  blocking'e geçmek) ayrı bir karar olarak duruyor.
+- `@v7` action'ları runner v2.327.1+ istiyor. GitHub-hosted runner'lar bunun
+  çok üstünde; self-hosted runner'a geçilirse bu kısıt kontrol edilmeli.
 
 ## References
 

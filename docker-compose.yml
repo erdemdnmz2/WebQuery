@@ -1,9 +1,17 @@
-version: '3.8'
-
-# Production-safe baseline (OQ-2026-015). Local development conveniences —
-# live code reload and direct database access — live in
-# docker-compose.override.yml, which Compose loads automatically alongside
-# this file; nothing here needs to change to get them back for local work.
+# Production-safe baseline (OQ-2026-015). This file alone is what a deploy
+# runs, and `docker compose up` with no flags resolves to exactly this — the
+# safe topology is the default one.
+#
+# Local development conveniences (live code reload, direct database access)
+# are in docker-compose.dev.yml and must be asked for explicitly:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# That file was named docker-compose.override.yml until 2026-08-30, which
+# made Compose load it automatically — so the short command everyone types
+# produced the *development* topology, and deploying by habit silently
+# published the database to the host. Forgetting the flag now costs a lost
+# bind mount, which is noticed immediately, instead of a silent exposure.
 
 services:
   web:

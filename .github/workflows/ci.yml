@@ -4,6 +4,20 @@ on:
   push:
   pull_request:
 
+# The workflow only reads the repository: it checks out, installs, lints and
+# tests. Nothing writes back. Setting this explicitly stops a compromised
+# dependency in any step from using the default job token to push or comment.
+permissions:
+  contents: read
+
+# Every push to the long-lived branch used to keep its own runner alive even
+# after the next commit landed. This cancels superseded runs of the same ref.
+# `github.ref` differs between the push and the pull_request event, so the two
+# runs a PR triggers stay separate on purpose — ADR-0002 wants both.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -14,9 +28,9 @@ jobs:
     # silently. See ADR-0002.
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11" # matches web_api/Dockerfile
           cache: pip
@@ -62,11 +76,14 @@ jobs:
               -E "(password|secret|api_key)\s*=\s*['\"][^'\"]{8,}" web_api/ \
             || (echo "Hardcoded secret-looking value found in source" && exit 1)
 
-      # Informational for now: this reports against the pinned versions in
-      # requirements.txt, and the fixes are upgrades that need their own
-      # verification pass (aiohttp and httpx in particular). Making it blocking
-      # before those upgrades land would put a red CI in front of every
-      # unrelated change. See ADR-0002.
+      # Informational for now, and it reports a lot: 85 advisories across 16
+      # pinned packages as of 2026-08-30, `aiohttp` 3.9.5 alone accounting for
+      # roughly a third. The fixes are version upgrades that need their own
+      # verification pass, so making this blocking would put a red CI in front
+      # of every unrelated change. Known cost of leaving it informational: the
+      # step has failed on every run since it was added, so a *new* advisory
+      # looks exactly like the standing backlog. Compare the counts, not the
+      # pass/fail. See docs/inbox/DEPENDENCY-ADVISORY-UPGRADES.md and ADR-0002.
       - name: Dependency audit (informational)
         continue-on-error: true
         run: pip-audit -r web_api/requirements.txt
@@ -75,11 +92,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24" # matches frontend/Dockerfile
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -109,9 +126,12 @@ jobs:
         working-directory: frontend
         run: npm run audit:contrast
 
-      # Informational for the same reason as pip-audit: the outstanding advisory
-      # is `xlsx` (SheetJS 0.18.5), whose upstream left npm, so the fix is a
-      # library replacement rather than a version bump.
+      # Informational for the same reason as pip-audit, but the backlog here is
+      # down to one package: `xlsx` (SheetJS 0.18.5), whose upstream left npm,
+      # so the fix is a library replacement rather than a version bump. The
+      # other three highs this reported on 2026-08-30 (`nanoid`, `postcss`,
+      # `react-router`) were in-range patch bumps and were taken in the
+      # lockfile the same day, which is why the expected failure count is 1.
       - name: Dependency audit (informational)
         working-directory: frontend
         continue-on-error: true

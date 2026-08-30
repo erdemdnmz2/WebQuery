@@ -1,8 +1,9 @@
 # `TRUSTED_PROXY_IPS` varsayılanı doğrulanmadı
 
-**Durum:** Inbox / deploy öncesi doğrulanmalı
+**Durum:** Inbox / deploy öncesi doğrulanmalı — **tetiklendi**, bkz.
+`GCP-STAGING-DEPLOYMENT-READINESS.md` §3
 **Kaydedildi:** 2026-08-30
-**Kapsam:** `docker-compose.yml:22`, `docker-compose.override.yml`,
+**Kapsam:** `docker-compose.yml`, `docker-compose.dev.yml`,
 `web_api/middlewares/proxy_middleware.py`
 **Kaynak:** `webquery_denetim_raporu.md` P0-4 düzeltmesinin artık riski;
 `docs/specs/SPEC-0026-deployment-hardening.md` §10
@@ -84,7 +85,7 @@ Hiçbiri log üretmez; ikisi de ancak aranırsa görülür.
 
 ## Not
 
-`docker-compose.override.yml` bu değeri bilinçli olarak boşaltıyor: yerelde
+`docker-compose.dev.yml` bu değeri bilinçli olarak boşaltıyor: yerelde
 `web`'e çoğu zaman nginx üzerinden değil doğrudan (curl, tarayıcı) gidiliyor,
 yani isteğin eşi bir compose servisi olmuyor. Yerel davranış bu kaydın
 kapsamı dışında; sorun yalnız üretim tabanındaki değerdedir.

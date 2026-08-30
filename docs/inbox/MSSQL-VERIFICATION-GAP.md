@@ -6,6 +6,8 @@
 `.github/workflows/ci.yml`
 **Kaynak:** `webquery_denetim_raporu.md` P2-16; `docs/adr/ADR-0002` 2026-08-30
 güncellemesi
+**Kardeş kayıt:** `CI-SIGNAL-AND-VERIFICATION-GAPS.md` — aynı "CI'nın
+doğrulamadığı davranış" sınıfının frontend ve tarama-sinyali tarafı
 
 WebQuery'nin birincil hedefi ve varsayılan metadata veritabanı MSSQL. Tüm
 otomatik doğrulama ise SQLite'a karşı çalışıyor

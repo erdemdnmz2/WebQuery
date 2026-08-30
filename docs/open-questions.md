@@ -215,7 +215,14 @@ with status `Open` before doing task work; see `AGENTS.md`.
   geliştirme akışının parçası. Tek dosyada kaldırmak yerel akışı bozar.
 - Answer: `docker-compose.yml` üretim-güvenli taban olacak; geliştirme
   kolaylıkları Compose'un otomatik yüklediği `docker-compose.override.yml`
-  dosyasına taşınacak.
+  dosyasına taşınacak. **Düzeltme (2026-08-30):** iki dosya kararı korunuyor,
+  ancak otomatik yükleme geri alındı. Dosya `docker-compose.dev.yml` olarak
+  yeniden adlandırıldı; `docker compose up` artık üretim-güvenli tabanı
+  çözüyor, geliştirme topolojisi açık bayrak (ya da `make up`) istiyor.
+  Gerekçe: bayrağı geliştirmede unutmanın bedeli fark edilir (bind mount
+  gitmiş olur), üretimde unutmanın bedeli sessizdir (1433 host'a açılır ve
+  imaj bind mount'la ezilir). Asimetri güvenli tarafın varsayılan olmasını
+  gerektiriyor.
 - Recorded in: `docs/specs/SPEC-0026-deployment-hardening.md`
 
 ### OQ-2026-016: Hedef veritabanı kaydı silinirken bağlı veriye ne olur?
@@ -279,6 +286,65 @@ with status `Open` before doing task work; see `AGENTS.md`.
   kaldırmak `connection_mode` daraltmasıyla yapılır, böylece eksik alan tek
   anlama gelir.
 - Recorded in: `docs/specs/SPEC-0027-target-database-lifecycle.md`
+
+### OQ-2026-020: GCP staging'de TLS nerede sonlandırılacak?
+
+- Status: Open
+- Raised: 2026-08-30
+- Scope: `nginx.conf`, `docker-compose.yml`,
+  `docs/inbox/GCP-STAGING-DEPLOYMENT-READINESS.md` §1
+- Question: Hafta içi planlanan GCP denemesinde HTTPS'i ne sonlandıracak:
+  compose ağının dışında bir katman (Cloudflare Tunnel, GCP HTTPS Load
+  Balancer, önde bir Caddy) mı, yoksa `nginx.conf`'taki yorumlu 443 bloğu
+  gerçek sertifikayla açılıp nginx'in kendisi mi?
+- Why it matters: TLS olmadan deneme **sessizce** başarısız olur.
+  `config_guard` üretim modunda `COOKIE_SECURE=true` dayatıyor, oturum
+  çerezleri `Secure` işaretli çıkıyor ve tarayıcı bunları düz HTTP üzerinde
+  saklamıyor — login `200` döner ama oturum tutmaz, hiçbir hata logu oluşmaz.
+  Seçim ayrıca `TRUSTED_PROXY_IPS`'i etkiliyor: dışarıda sonlandırılırsa
+  `web`'in komşusu hâlâ `nginx` olduğu için mevcut değer doğru kalır;
+  nginx'in kendisine alınırsa compose'da `443` publish'i ve sertifika mount'u
+  gerekir.
+- Answer:
+- Recorded in:
+
+### OQ-2026-021: Bağımlılık yükseltmeleri GCP denemesinden önce nereye kadar yapılacak?
+
+- Status: Open
+- Raised: 2026-08-30
+- Scope: `web_api/requirements.txt`,
+  `docs/inbox/DEPENDENCY-ADVISORY-UPGRADES.md`
+- Question: `pip-audit`'in raporladığı 16 paketten hangileri GCP denemesinden
+  önce yükseltilecek: (a) yalnız aynı majör içinde kalan 10 paketlik yama
+  partisi (24 advisory; doğrulaması `pytest`), (b) davranış değiştirenler de
+  dahil hepsi (`aiohttp`, `cryptography`, `aiomysql`, `pytest` 9), yoksa
+  (c) hiçbiri — deneme mevcut pinlerle yapılıp yükseltme sonraya mı bırakılacak?
+- Why it matters: Deneme WebQuery'yi ilk kez yerel makine dışına, erişilebilir
+  bir ağa koyuyor. `cryptography` beş majör geride ve `EncryptedText` ile
+  Fernet yolunun altında; `aiohttp` tek başına 34 advisory taşıyor ve Slack
+  onay akışının altında. Buna karşılık (b), Slack socket-mode'un manuel
+  doğrulanmasını ve şifreli mevcut verinin okunabilirliğinin sınanmasını
+  gerektirir, yani denemeyi geciktirir. (c) denemeyi hızlandırır ama bilinen
+  açıklarla açık bir kurulum bırakır.
+- Answer:
+- Recorded in:
+
+### OQ-2026-022: CI'da `cancel-in-progress` korunacak mı?
+
+- Status: Open
+- Raised: 2026-08-30
+- Scope: `.github/workflows/ci.yml`,
+  `docs/inbox/CI-SIGNAL-AND-VERIFICATION-GAPS.md` §3
+- Question: 2026-08-30'da eklenen `concurrency` grubu
+  `cancel-in-progress: true` ile çalışıyor. Bu korunsun mu, `false` mu
+  yapılsın, yoksa yalnız default branch dışında mı iptal etsin?
+- Why it matters: Proje tüm işi tek uzun ömürlü branch'te yürütüyor ve arka
+  arkaya push yapıldığında aradaki commit'lerin çalışması "cancelled" olarak
+  kapanır — yani her commit'in tamamlanmış bir CI kaydı olmaz. "CI yeşil"
+  ifadesi bu projede bir geçiş kontrolü olarak kullanıldığı için bu, runner
+  tasarrufuna karşılık kanıt izinden vazgeçmek demek.
+- Answer:
+- Recorded in:
 
 ## Entry Format
 

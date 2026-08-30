@@ -207,14 +207,22 @@ The API will be accessible at `http://localhost:8080` with interactive Swagger d
 
 ### Docker
 `docker-compose.yml` is the **production-safe** base: no source bind mount, no
-published database port, and a non-root application user.
-`docker-compose.override.yml` holds the development conveniences and is loaded
-automatically:
+published database port, and a non-root application user. It is also what the
+bare command resolves to, so a deploy cannot get the development topology by
+forgetting a flag.
+
+`docker-compose.dev.yml` holds the development conveniences — a `./web_api`
+bind mount for live reload, plus `8080` and `1433` published to the host — and
+must be requested explicitly. The `Makefile` keeps that short:
 
 ```bash
-docker compose up                      # development (base + override)
-docker compose -f docker-compose.yml up   # hardened, no dev conveniences
+docker compose up   # production-safe topology (the default)
+make up             # development: base + docker-compose.dev.yml
+make prod-config    # print what a deploy will actually run, before deploying
 ```
+
+Before deploying, `make prod-config` should show exactly one published port
+(`80`, nginx) and no bind mount other than `nginx.conf`.
 
 Behind a reverse proxy, set `TRUSTED_PROXY_IPS` to the proxy's address range.
 Client IPs are taken from `X-Forwarded-For` only when the immediate peer is in
