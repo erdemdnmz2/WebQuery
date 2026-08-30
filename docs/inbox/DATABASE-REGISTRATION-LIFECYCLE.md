@@ -1,6 +1,12 @@
 # Hedef veritabanı kaydının yaşam döngüsü: güncelleme ve silme
 
-**Durum:** Inbox / uygulanacak iş
+**Durum:** Kapandı (2026-08-30). Dört iş kaleminin hepsi uygulandı:
+`PATCH`/`DELETE /api/owner/databases/{id}`, yumuşak silme ve audit
+action'ları. Yürürlükteki sözleşme
+`docs/specs/SPEC-0027-target-database-lifecycle.md` ve
+`docs/adr/ADR-0021-target-database-soft-delete.md` içinde; bu dosya
+sorunun ve alınan kararların kaydı olarak duruyor.
+**Kapanmadan önceki durum:** Inbox / uygulanacak iş
 **Kaydedildi:** 2026-08-28
 **Kapsam:** `web_api/admin/router.py`, `web_api/admin/services.py`,
 `web_api/admin/schemas.py`, `web_api/database_provider/`,

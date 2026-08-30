@@ -378,7 +378,7 @@ bir kullanıcı listeleme ucu gerekiyor. `audit:api` betiğine "tanımlı ama
 ### P1-8 · Erişim iptali (revoke) akışı hiç yok
 
 **Yer:** `web_api/common/audit_actions.py:5-7`, `web_api/admin/`
-**Durum:** `docs/inbox/AUDIT-ACTION-FOLLOW-UPS.md` içinde kayıtlı.
+**Durum:** Kapandı (2026-08-30); kısıtlar `docs/specs/SPEC-0006-audit-log-foundation.md` §8'de.
 
 `AuditAction.REVOKE_DATABASE_ACCESS` tanımlı, hiçbir yerde kullanılmıyor —
 çünkü bir kullanıcının veritabanı erişimini **kaldıran endpoint yok**.

@@ -43,9 +43,6 @@
 - AC-01: Given `<başlangıç durumu>`, when `<eylem>`, then `<doğrulanabilir sonuç>`.
 - AC-02: `<Hata, yetki veya sınır durumu>`.
 
-Yalnızca bu senaryolar bir BDD runner tarafından çalıştırılacaksa eşdeğerlerini
-`docs/features/` altında `.feature` dosyası olarak oluşturun.
-
 ## 7. Teknik ve Güvenlik Kısıtları
 
 - `<Performans, uyumluluk, veri, kimlik doğrulama, audit veya masking kısıtı>`

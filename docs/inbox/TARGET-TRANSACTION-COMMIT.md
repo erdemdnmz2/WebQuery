@@ -1,6 +1,11 @@
 # Hedef veritabanı transaction'ı commit edilmiyor
 
-**Durum:** Inbox / uygulanacak iş — **en yüksek öncelik**
+**Durum:** Kapandı (2026-08-30). Uygulandı: `525aeef`,
+`web_api/database_provider/database.py` — `ro` dışındaki kademeler commit
+ediyor, istisnada rollback. Yürürlükteki davranış
+`docs/specs/SPEC-0022-audit-remediation-p0.md` §BR-01'de; bu dosya sorunun
+ve seçeneklerin kaydı olarak duruyor.
+**Kapanmadan önceki durum:** Inbox / uygulanacak iş — en yüksek öncelik
 **Kaydedildi:** 2026-08-28
 **Kapsam:** `web_api/database_provider/database.py`,
 `web_api/query_execution/services.py`, `web_api/workspaces/services.py`,

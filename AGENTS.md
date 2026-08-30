@@ -32,7 +32,6 @@ the choice.
   erişilebilirlik sözleşmesi oradadır.
 - `docs/specs/`: feature specifications and acceptance criteria.
 - `docs/adr/`: accepted and superseded architecture decisions.
-- `docs/features/`: executable Gherkin scenarios only.
 - `docs/handoffs/`: session or agent handoff records.
 - `docs/ai/playbooks/`: reusable, provider-neutral work procedures.
 - `.agents/skills/`: Agent Skills open-standard entries. Gemini CLI and
@@ -47,13 +46,12 @@ Use the smallest workflow that preserves clarity and evidence.
 | --- | --- |
 | New or changed user-visible behavior, API contract, business rule, or security behavior | A spec based on `docs/specs/SPEC-TEMPLATE.md` before implementation |
 | Durable architectural choice, external dependency, security boundary, data model, or non-trivial trade-off | An ADR based on `docs/adr/ADR-TEMPLATE.md` before implementation |
-| Critical business rule that will be executed by a BDD runner | A `.feature` file based on `docs/features/FEATURE-TEMPLATE.feature` |
 | Bug fix with no contract change | A regression test; use a mini-spec only if behavior is ambiguous |
 | Handoff, review, long-running task, or delegated work | A YAML record based on `docs/handoffs/HANDOFF-TEMPLATE.yaml` |
 
-Do not create an ADR for a routine implementation detail. Do not create a
-`.feature` file that will not be executed; keep non-executable acceptance
-criteria in the feature spec instead.
+Do not create an ADR for a routine implementation detail. This project has no
+BDD runner, so acceptance criteria belong in the feature spec, not in a
+`.feature` file.
 
 ## Delivery Rules
 

@@ -16,7 +16,8 @@ is only honoured when the *immediate peer* is a trusted proxy, so a client that
 sends its own `X-Forwarded-For` directly to the application cannot forge an
 address. `*` is rejected: it would make the header trivially spoofable.
 
-See SPEC-0023 / ADR-0020.
+See `docs/specs/SPEC-0022-audit-remediation-p0.md` (P0-4) and
+`docs/inbox/TRUSTED-PROXY-SUBNET-VERIFICATION.md`.
 """
 import ipaddress
 import logging

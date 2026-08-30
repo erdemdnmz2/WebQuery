@@ -146,11 +146,28 @@ veya target type boş sonuç gibi davranmaz; HTTP 400 ile reddedilir.
 - Slack `database_id` alanı nullable yapılarak veri kalitesi düşürülemez; gerçek
   registry kimliği çözülmelidir.
 
-## 8. Open Questions
+## 8. Yeni bir action eklenirken
+
+`AuditAction` genişletildiğinde uyulacak kısıtlar. (2026-08-30'da kapatılan
+`docs/inbox/AUDIT-ACTION-FOLLOW-UPS.md` kaydından buraya taşındı; o kaydın tüm
+maddeleri tamamlanmıştı ve `AuditAction` içindeki her action'ın artık en az bir
+üretim çağrı noktası var.)
+
+- Spec ve ADR'deki action kapsamını güncelle.
+- State-changing action için aynı transaction'da `log_in` kullan.
+- Details modeli ekle veya mevcut modeli genişlet
+  (`web_api/common/audit_details.py`); bilinmeyen alanları reddet.
+- Credential, parola ve connection string details'e girmez.
+- Normal ve rollback/error path testleri ekle.
+- `tests/unit/test_audit_log.py` içindeki `FROZEN_ACTIONS` sözlüğünü güncelle;
+  bu sözlük action değerlerinin sessizce değişmesini engelliyor.
+- Backend testlerini `web_api/` dizininden çalıştır.
+
+## 9. Open Questions
 
 - Yok.
 
-## 9. Done Kontrolü
+## 10. Done Kontrolü
 
 - [x] Acceptance criteria için test eklendi veya güncellendi
 - [x] İlgili güvenlik ve hata davranışları doğrulandı
