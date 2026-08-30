@@ -155,6 +155,6 @@ ama allowlist bakım ister), ya da eşik tabanlı bir kontrol yazmak. Şimdilik
 
 ## İlgili kayıtlar
 
-- Yükseltmelerin GCP denemesinden önce nereye kadar yapılacağı **OQ-2026-021**
-  ile karar bekliyor; bağlam `GCP-STAGING-DEPLOYMENT-READINESS.md`.
+- Yükseltmelerin GCP denemesinden önce nereye kadar yapılacağı hâlâ
+  seçilmedi; bağlam `GCP-STAGING-DEPLOYMENT-READINESS.md`.
 - Taramaların sinyal vermemesi `CI-SIGNAL-AND-VERIFICATION-GAPS.md` §1'de.

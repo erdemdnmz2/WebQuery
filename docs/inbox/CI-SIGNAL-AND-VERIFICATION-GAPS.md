@@ -68,7 +68,9 @@ yani **her commit'in tamamlanmış bir CI kaydı olmayacak.** Bu, "CI yeşil"
 ifadesini bir geçiş kontrolü olarak kullanan bir projede kayda değer bir
 takas.
 
-Karar gerektiriyor: **OQ-2026-022**.
+Karar gerektiriyor; seçim yapılmadı. Bu soru `docs/open-questions.md`
+içinden kaldırıldı, karar bu kayıtta izleniyor. Şu anki ayar
+`cancel-in-progress: true` olarak duruyor.
 
 ## İlgili kayıtlar
 

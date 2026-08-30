@@ -35,7 +35,8 @@ Bu yüzden bloklayıcı olarak işaretlendi: sessiz başarısızlık.
 modunda çalışırsınız; ayrıca çerezler düz HTTP üzerinde korumasız gider —
 `config_guard`'ın engellemek için var olduğu şey tam olarak budur.
 
-Karar gerektiriyor: **OQ-2026-020**.
+Karar gerektiriyor; seçim yapılmadı. Bu soru `docs/open-questions.md`
+içinden kaldırıldı, karar bu kayıtta izleniyor.
 
 Hangi seçenek seçilirse seçilsin, TLS compose ağının **dışında**
 sonlandırıldığı sürece `TRUSTED_PROXY_IPS=172.16.0.0/12` doğru kalır, çünkü
@@ -91,7 +92,7 @@ olarak `80` ve `nginx.conf` dışında bind mount olmadığını göstermeli.
 
 ## Deploy öncesi kontrol listesi
 
-- [ ] OQ-2026-020 cevaplandı ve TLS sonlandırma kuruldu; `https://` üzerinden
+- [ ] TLS sonlandırma seçildi (madde 1) ve kuruldu; `https://` üzerinden
       login sonrası ikinci bir isteğin kimlikli gittiği doğrulandı
 - [ ] `make build` yerelde geçti (madde 2)
 - [ ] `TRUSTED-PROXY-SUBNET-VERIFICATION.md` komutları GCP'de çalıştırıldı
