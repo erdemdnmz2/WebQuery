@@ -220,3 +220,15 @@ tutuyor.
 - Kaynak plan: `webquery_implementasyon_sirasi.md`, Adım 2 (`4.2`).
 - Denetim: `webquery_denetim_raporu.md` P2-15, P2-16.
 - Supersedes / Superseded by: yok.
+
+## 2026-09-24 Güncellemesi (SPEC-0029 bağımlılık remediation)
+
+Bilinen backend ve frontend dependency advisory backlog'u giderildi. CI'daki
+`pip-audit -r web_api/requirements.txt` ve `npm audit --audit-level=high`
+adımları artık blocking; `continue-on-error` kaldırıldı. Frontend job'u,
+dinamik XLSX dışa aktarmasının gerçek çalışma kitabı ürettiğini doğrulayan
+`npm run verify:export` adımını da build öncesi çalıştırır.
+
+Bu değişiklik sırasında `xlsx`, bakımlı `write-excel-file` ile değiştirildi;
+`python-jose`, PyJWT ile aynı HS256 token sözleşmesini koruyacak biçimde
+değiştirildi. Ayrıntılı kabul kriterleri ve doğrulama kaydı SPEC-0029'dadır.

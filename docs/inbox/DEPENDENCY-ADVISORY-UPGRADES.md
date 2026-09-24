@@ -1,12 +1,31 @@
 # Bilinen açığı olan bağımlılıkların yükseltilmesi
 
-**Durum:** Inbox / uygulanacak iş
+**Durum:** Implemented
 **Kaydedildi:** 2026-08-30
 **Güncellendi:** 2026-08-30 (CI çıktısı okunarak; ilk sürüm eksikti — aşağıya bkz.)
 **Kapsam:** `web_api/requirements.txt`, `frontend/package.json`,
 `.github/workflows/ci.yml`
 **Kaynak:** `webquery_denetim_raporu.md` P2-15 + CI run 33280496747 tarama
 çıktısı
+
+## 2026-09-24 uygulama sonucu
+
+Bu backlog uygulandı. Güncel sabitler `web_api/requirements.txt` ve
+`frontend/package-lock.json` içindedir; ayrıntılı sözleşme SPEC-0029'da,
+XLSX bağımlılık kararı ADR-0024'tedir.
+
+- Backend açıkları; FastAPI/Starlette, AnyIO, aiohttp, cryptography, HTTP
+  istemci ve sürücü güncellemeleriyle kapatıldı.
+- `python-jose`, aynı HS256 claim sözleşmesini koruyan PyJWT ile değiştirildi;
+  eski Fernet şifreli hedef credential'ları ve saved query değerleri için
+  regresyon testi eklendi.
+- Slack Socket Mode korunarak Bolt/SDK/aiohttp zinciri güncellendi.
+- `xlsx`, tarayıcıda dinamik yüklenen `write-excel-file` ile değiştirildi.
+- `pip-audit` ve `npm audit --audit-level=high` artık blocking CI kapıları;
+  uygulama sonunda iki audit de sıfır bulgu verdi.
+
+Bu kaydın aşağıdaki sürüm/advisory tabloları 2026-08-30 tarihli başlangıç
+envanterini korur; güncel durum yerine tarihsel bağlam olarak okunmalıdır.
 
 ## Bu notun ilk sürümü yanlıştı
 

@@ -9,7 +9,8 @@ from typing import Any
 
 import anyio.to_thread
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import PyJWTError
 from sqlalchemy import update
 from sqlalchemy.future import select
 
@@ -88,7 +89,7 @@ def _current_session_id(request: Request) -> int | None:
         payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
         session_id = payload.get("sid")
         return int(session_id) if session_id is not None else None
-    except (JWTError, TypeError, ValueError):
+    except (PyJWTError, TypeError, ValueError):
         return None
 
 

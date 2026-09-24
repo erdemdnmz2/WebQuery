@@ -5,7 +5,8 @@ JWT token generation, verification, and user authorization operations.
 import logging
 
 from fastapi import HTTPException, Request, status
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import PyJWTError
 from sqlalchemy.future import select
 
 from app_database.app_database import AppDatabase
@@ -34,7 +35,7 @@ def verify_token(token: str) -> dict | None:
     try:
         payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
         return payload
-    except JWTError:
+    except PyJWTError:
         return None
 
 
@@ -91,7 +92,7 @@ async def get_current_user(
         if user_id is None:
             raise credentials_exception
         token_data = TokenData(sub=user_id)
-    except JWTError:
+    except PyJWTError:
         logger.warning("Geçersiz JWT reddedildi")
         raise credentials_exception
 

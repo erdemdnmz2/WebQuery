@@ -16,11 +16,20 @@ function safeFileName(name: string): string {
  * library is pulled in on demand so it never lands in the initial bundle.
  */
 export async function exportToXlsx(rows: ResultRow[], baseName: string): Promise<void> {
-  const XLSX = await import('xlsx');
-  const sheet = XLSX.utils.json_to_sheet(rows);
-  const book = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book, sheet, 'Sonuclar');
-  XLSX.writeFile(book, `${safeFileName(baseName)}.xlsx`);
+  const columns = Object.keys(rows[0] ?? {});
+  const toCellValue = (value: unknown): string | number | boolean | Date | null => {
+    if (value === null || value === undefined) return null;
+    if (value instanceof Date || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return value;
+    }
+    return String(value);
+  };
+  const writeXlsxFile = (await import('write-excel-file/browser')).default;
+
+  await writeXlsxFile([
+    columns,
+    ...rows.map((row) => columns.map((column) => toCellValue(row[column]))),
+  ]).toFile(`${safeFileName(baseName)}.xlsx`);
 }
 
 /** Downloads the result set as RFC 4180 CSV with a UTF-8 BOM for Excel. */

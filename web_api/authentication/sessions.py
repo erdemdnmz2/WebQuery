@@ -5,7 +5,7 @@ import os
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from jose import jwt
+import jwt
 from sqlalchemy import select, update
 
 from app_database.models import UserSession

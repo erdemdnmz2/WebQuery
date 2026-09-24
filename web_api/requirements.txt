@@ -1,10 +1,10 @@
 # Core FastAPI & ASGI
-fastapi==0.116.1
-starlette==0.47.1
+fastapi==0.141.1
+starlette==1.3.1
 uvicorn==0.35.0
-anyio==4.9.0
+anyio==4.15.1
 sniffio==1.3.1
-click==8.2.1
+click==8.5.0
 
 # Pydantic for data validation
 pydantic==2.11.7
@@ -24,12 +24,12 @@ aioodbc==0.5.0
 pyodbc==5.2.0
 
 # MySQL Support
-aiomysql==0.2.0
-PyMySQL==1.1.0
+aiomysql==0.3.2
+PyMySQL==1.2.3
 
 # PostgreSQL Support
 asyncpg==0.30.0
-psycopg2-binary==2.9.9  # sync driver, used only by Alembic migrations
+psycopg2-binary==2.9.13  # sync driver, used only by Alembic migrations
 
 # SQLAlchemy dependencies
 greenlet==3.2.3
@@ -37,12 +37,9 @@ greenlet==3.2.3
 # Authentication & Security
 # passlib was dropped: password hashing calls bcrypt directly
 # (app_database/models.py), so the wrapper had no call site.
-python-jose==3.5.0
 bcrypt==4.2.0
-cryptography==45.0.5
-ecdsa==0.19.1
-pyasn1==0.6.1
-rsa==4.9.1
+cryptography==50.0.1
+PyJWT==2.15.0
 
 # Rate Limiting
 slowapi==0.1.9
@@ -58,35 +55,35 @@ email_validator==2.2.0
 dnspython==2.7.0
 
 # Environment & Config
-python-dotenv==1.0.1
+python-dotenv==1.2.3
 
 # File handling
-python-multipart==0.0.20
+python-multipart==0.0.32
 
 # HTTP & Requests
-requests==2.32.3
-httpx==0.24.1
+requests==2.34.2
+httpx==0.28.1
 certifi==2025.7.9
 charset-normalizer==3.4.2
-idna==3.10
-urllib3==2.5.0
+idna==3.20
+urllib3==2.8.0
 
 # Dependencies
-cffi==1.17.1
-pycparser==2.22
-typing_extensions==4.14.1
+cffi==2.1.1
+pycparser==3.0
+typing_extensions==4.16.0
 packaging==25.0
-setuptools==80.9.0
+setuptools==84.0.0
 
 # Async HTTP Client (Required for Slack Bolt AsyncApp)
-aiohttp==3.9.5
+aiohttp==3.14.3
 
 # Slack Integration
-slack-bolt==1.23.0
-slack-sdk==3.35.0
+slack-bolt==1.30.0
+slack-sdk==3.44.1
 
 # Testing
-pytest==8.1.1
-pytest-asyncio==0.23.6
+pytest==9.1.1
+pytest-asyncio==1.4.0
 aiosqlite==0.20.0
 sqlglot==30.14.0
