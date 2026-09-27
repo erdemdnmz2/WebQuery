@@ -214,6 +214,19 @@ tutuyor.
 - `@v7` action'ları runner v2.327.1+ istiyor. GitHub-hosted runner'lar bunun
   çok üstünde; self-hosted runner'a geçilirse bu kısıt kontrol edilmeli.
 
+## 2026-09-24 Güncellemesi — MSSQL migration merge kapısı
+
+MSSQL metadata şeması ve migration zinciri SQLite ile eşdeğer değildir. Bu
+nedenle CI'ya, her `push` ve `pull_request` üzerinde çalışan blocking `mssql`
+job'ı eklendi. Job SQL Server 2022 servis konteynerini ve ODBC Driver 18'i
+kullanır; yalnız geçici `webquery_ci` veritabanını sıfırlar, Alembic head'i
+uygular, schema guard ile MSSQL tiplerini denetler ve kritik metadata
+entegrasyon testlerini çalıştırır. Tam suite ikinci kez çalıştırılmaz; seçimin
+kapsamı ve güvenlik korumaları ADR-0025/SPEC-0030'da tanımlıdır.
+
+Staging backup/restore provası bu kapının yerine geçmez. Bu operasyon canlıya
+benzer ve yetkili ortamda runbook ile yürütülür.
+
 ## References
 
 - Spec: yok — operasyonel tooling kararı.
