@@ -1,0 +1,59 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: Codex
+  to: WebQuery maintainer
+  created_at: "2026-10-02"
+  task: "Separate query cancellation from security-validation-hardening"
+  scope:
+    completed:
+      - "Removed cancellation runtime, frontend controls, tests and implementation documents from the security branch tip."
+      - "Retained dependency remediation, MSSQL migration CI and ODBC/migration/boolean/UUID compatibility fixes."
+      - "Published history is retained: 4143c92 remains recoverable; removal is a forward commit, not a force push."
+    excluded:
+      - "Merge to main, approval/closure of PR #3 and unrelated working-tree documents."
+      - "Changing cancellation behavior or accepting/superseding the existing feature architecture."
+  changed_files:
+    created:
+      - docs/handoffs/2026-10-02-branch-separation.yaml
+    modified:
+      - .github/workflows/ci.yml
+      - docs/open-questions.md
+      - docs/specs/SPEC-0030-mssql-migration-validation.md
+      - web_api/admin/services.py
+      - web_api/workspaces/services.py
+      - web_api/tests/conftest.py
+    deleted:
+      - web_api/query_execution/cancellation.py
+      - frontend/components/app/QueryCancelControl.tsx
+      - frontend/lib/query-cancellation.ts
+      - web_api/tests/cancellation_helpers.py
+      - web_api/tests/unit/test_query_cancellation.py
+      - web_api/tests/integration/test_query_cancellation_api.py
+      - web_api/tests/mssql/test_target_cancellation.py
+      - docs/specs/SPEC-0031-query-cancellation.md
+      - docs/adr/ADR-0026-query-cancellation.md
+      - docs/handoffs/2026-10-02-query-cancellation.yaml
+      - docs/inbox/RUNNING-QUERIES-IN-NAVBAR.md
+  decisions: []
+  validation:
+    commands_run:
+      - command: "cd web_api && ../.venv/bin/python -m pytest -q"
+        result: passed
+        evidence: "321 passed, 1 skipped, 1 existing Pydantic deprecation warning; 217.33s. Real MSSQL migration test is skipped locally and remains selected in CI."
+      - command: "cd frontend && npm run build"
+        result: passed
+        evidence: "Vite production build passed in 2.86s."
+      - command: ".venv/bin/ruff check --select F,E9 web_api"
+        result: passed
+        evidence: "All checks passed."
+      - command: "git diff --check"
+        result: passed
+        evidence: "No whitespace errors."
+      - command: "gh run view 37053373074 --repo erdemdnmz2/WebQuery --json status,conclusion,jobs"
+        result: passed
+        evidence: "Original mixed commit 4143c92: backend, frontend and real MSSQL jobs all succeeded. This is not a CI result for the new separation commits."
+  open_questions: []
+  known_risks:
+    - "Cancellation must be reapplied on feat/query-cancellation after it incorporates this cleanup commit, so a later merge cannot remove the feature."
+    - "Feature design documents at 30e56b4 differ from implementation at 4143c92; preserve both records and do not claim the old plan is complete."
+  next_step: "Finish security validation, incorporate this commit into feat/query-cancellation, then transfer and validate the existing cancellation implementation."

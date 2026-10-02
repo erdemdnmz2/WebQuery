@@ -1,0 +1,87 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "Codex"
+  to: "WebQuery maintainer"
+  created_at: "2026-09-30"
+  task: "Isolated branch and design documents for live SQL query cancellation"
+
+  scope:
+    completed:
+      - "Created isolated worktree from committed HEAD 59cd62a1a6ecb8c93c2acf44e59e5862ff56d971."
+      - "Branch is feat/query-cancellation after the 2026-10-01 user-requested rename; primary checkout remains security-validation-hardening."
+      - "Created proposed ADR, draft spec with 8 BRs and 14 ACs, and phased implementation plan."
+      - "Verified all nine original dirty/untracked files retain baseline SHA-256 values."
+      - "2026-10-01: Reviewed plan sequencing and recorded the maintainer's fail-closed 503 policy consistently in the spec, ADR, plan and decision queue."
+      - "2026-10-01: Expanded the plan with concrete module/class ownership, constructor DI, lifespan ordering and per-execution ordering after inspecting current AppContext, service delegation, runner and provider code."
+    excluded:
+      - "Runtime application implementation, database migration and merge. Commit/push of the design documents was explicitly authorized on 2026-10-01."
+      - "Existing uncommitted primary-checkout changes; none were copied into this branch."
+      - "Lease, heartbeat, crash recovery, replay queue and broad shutdown-drain feature."
+
+  changed_files:
+    created:
+      - "docs/adr/ADR-0026-live-query-cancellation.md"
+      - "docs/specs/SPEC-0031-live-query-cancellation.md"
+      - "docs/plans/PLAN-0031-live-query-cancellation.md"
+      - "docs/handoffs/2026-09-30-query-cancellation-design.yaml"
+    modified:
+      - "docs/open-questions.md"
+    deleted: []
+
+  decisions:
+    - decision: "Process-local handles with local-first cancel; Redis remote routing and persisted cancel intent."
+      rationale: "Live driver resources stay with their process; another worker can address their owner without execution SQL lookup."
+      recorded_in: "docs/adr/ADR-0026-live-query-cancellation.md"
+    - decision: "Driver-specific adapters; acknowledgement is not confirmed cancellation."
+      rationale: "MSSQL cursor cancel, asyncpg protocol cancellation and MySQL KILL QUERY have distinct lifetimes and guarantees."
+      recorded_in: "docs/specs/SPEC-0031-live-query-cancellation.md"
+    - decision: "No lease or automatic recovery in v1."
+      rationale: "Scope is user-requested live cancellation, not job orchestration or owner liveness."
+      recorded_in: "docs/adr/ADR-0026-live-query-cancellation.md"
+    - decision: "Reject new executions with 503 when Redis registry claim cannot be confirmed; no local-only fallback."
+      rationale: "Maintainer answered OQ-2026-021 on 2026-10-01; preserve cross-worker cancellation addressability before target SQL begins."
+      recorded_in: "docs/specs/SPEC-0031-live-query-cancellation.md, docs/adr/ADR-0026-live-query-cancellation.md"
+
+  validation:
+    commands_run:
+      - command: "git branch -m query-cancellation feat/query-cancellation"
+        result: passed
+        evidence: "Branch renamed at the maintainer's explicit request; git worktree list confirms feat/query-cancellation."
+      - command: "python3 /private/tmp/validate-query-cancellation-design.py"
+        result: passed
+        evidence: "Confirmed current branch, Answered OQ-2026-021, consistent registry-unavailable 503 code in all three design documents, valid local links, 14 unique ACs, 8 unique BRs, every AC mapped and no whitespace errors."
+      - command: "git status --short; git branch --show-current; git log -1 --format=%H"
+        result: passed
+        evidence: "Feature worktree initially contained only the three new design documents, on codex/query-cancellation at the chosen committed HEAD."
+      - command: "git status --short; git branch --show-current; shasum -a 256 docs/inbox/DATABASE-EXTERNAL-IDENTIFIER-UUID.md docs/inbox/IS-ADMIN-MIRROR-COLUMN.md docs/open-questions.md docs/adr/ADR-0022-remove-derived-is-admin-mirror.md docs/adr/ADR-0023-customer-isolated-vpn-deployment.md docs/handoffs/2026-09-24-b2b-saas-readiness-review.yaml docs/inbox/RATE-LIMITING-LAYER-REVIEW.md docs/onboarding-okuma-rotasi.md docs/specs/SPEC-0028-customer-isolated-vpn-deployment.md"
+        result: passed
+        evidence: "Executed in primary checkout; same nine dirty paths and all baseline hashes unchanged. Primary branch unchanged."
+      - command: >-
+          python3 -c 'from pathlib import Path; import re, subprocess;
+          files=[Path("docs/adr/ADR-0026-live-query-cancellation.md"),Path("docs/specs/SPEC-0031-live-query-cancellation.md"),Path("docs/plans/PLAN-0031-live-query-cancellation.md")];
+          missing=[str(p.parent/target) for p in files for target in re.findall(r"\]\(([^)]+)\)",p.read_text()) if not target.startswith("http") and not (p.parent/target).exists()];
+          assert not missing,missing; spec=files[1].read_text();
+          ac=re.findall(r"^- (AC-\d+):",spec,re.M); br=re.findall(r"^### (BR-\d+):",spec,re.M);
+          assert len(ac)==len(set(ac))==14; assert len(br)==len(set(br))==8;
+          assert all(item in files[2].read_text() for item in ac);
+          subprocess.run(["git","diff","--check"],check=True);
+          checks=[subprocess.run(["git","diff","--no-index","--check","/dev/null",str(p)],capture_output=True,text=True) for p in files];
+          assert all(c.returncode in (0,1) and not c.stdout and not c.stderr for c in checks),checks;
+          print("PASS: 3 documents, local links, 14 unique ACs, 8 unique BRs, all ACs mapped, no whitespace errors")'
+        result: passed
+        evidence: "Initial AC-map helper check failed on shorthand references; map expanded to explicit IDs, rerun passed. No runtime tests involved."
+      - command: "python -m pytest"
+        result: not-run
+        evidence: "Documentation-only delivery; no application behavior implemented or validated."
+      - command: "npm run build"
+        result: not-run
+        evidence: "No frontend code changed."
+
+  open_questions: []
+
+  known_risks:
+    - "Local worktree resides in /private/tmp/webquery-query-cancellation.XYgUUI; preserve or relocate it before temporary-directory cleanup."
+    - "API details are draft; actual three-driver cancellation and connection reuse must be proven before rollout."
+    - "No lease means stale active Redis entries can survive worker death; no automatic status/retry guarantee."
+    - "Redis registry outages block new executions with 503; API details remain draft."
+  next_step: "Review the proposed API and prove actual driver cancellation before runtime implementation."

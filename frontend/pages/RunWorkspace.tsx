@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeftIcon, PlayIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import { api, errorMessage, UnauthorizedError } from '../services/api';
 import { useHotkey, useIsMac } from '../lib/hooks';
+import { useQueryCancellation } from '../lib/query-cancellation';
+import { QueryCancelControl } from '../components/app/QueryCancelControl';
 import { statusMeta } from '../lib/workspace-status';
 import { outcomeFromError, outcomeFromResponse, type ExecutionOutcome } from '../lib/execution';
 import { CodeEditor } from '../components/app/CodeEditor';
@@ -31,6 +33,7 @@ const RunWorkspace: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [outcome, setOutcome] = useState<ExecutionOutcome | null>(null);
   const [running, setRunning] = useState(false);
+  const cancellation = useQueryCancellation();
   const [durationMs, setDurationMs] = useState<number | null>(null);
   const timer = useRef(0);
 
@@ -55,17 +58,20 @@ const RunWorkspace: React.FC = () => {
   }, [workspaceId]);
 
   const execute = useCallback(async () => {
+    const executionId = cancellation.begin();
+    if (!executionId) return;
     setRunning(true);
     setOutcome(null);
     timer.current = performance.now();
     try {
-      setOutcome(outcomeFromResponse(await api.executeWorkspace(Number(workspaceId))));
+      setOutcome(outcomeFromResponse(await api.executeWorkspace(Number(workspaceId), undefined, executionId)));
     } catch (caught) {
       if (caught instanceof UnauthorizedError) return;
       setOutcome(outcomeFromError(caught));
     } finally {
       setDurationMs(performance.now() - timer.current);
       setRunning(false);
+      cancellation.finish(executionId);
     }
   }, [workspaceId]);
 
@@ -126,17 +132,20 @@ const RunWorkspace: React.FC = () => {
           </div>
         </div>
 
-        <Tooltip content={<span>{isMac ? '⌘' : 'Ctrl'} + Enter</span>}>
-          <Button
-            variant="primary"
-            size="lg"
-            icon={<PlayIcon size={13} weight="fill" />}
-            loading={running}
-            onClick={() => void execute()}
-          >
-            Sorguyu çalıştır
-          </Button>
-        </Tooltip>
+        <div className="flex items-start gap-2">
+          <Tooltip content={<span>{isMac ? '⌘' : 'Ctrl'} + Enter</span>}>
+            <Button
+              variant="primary"
+              size="lg"
+              icon={<PlayIcon size={13} weight="fill" />}
+              loading={running}
+              onClick={() => void execute()}
+            >
+              Sorguyu çalıştır
+            </Button>
+          </Tooltip>
+          {running && <QueryCancelControl cancellation={cancellation} size="lg" />}
+        </div>
       </div>
 
       <SplitPane

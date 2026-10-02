@@ -5,8 +5,17 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-# Mock APP_DATABASE_URL before any app modules are imported
-os.environ["APP_DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
+# MSSQL CI passes a disposable metadata database explicitly. Local and normal
+# CI tests retain their isolated in-memory SQLite database.
+MSSQL_TEST_URL = os.getenv("MSSQL_TEST_URL")
+if MSSQL_TEST_URL:
+    import pyodbc
+
+    # Keep SQLAlchemy's pools (the subject of connection-reuse tests), but
+    # disable ODBC's hidden second pool before the first connection. Otherwise
+    # disposed fixture logins stay connected and cannot be dropped safely.
+    pyodbc.pooling = False
+os.environ["APP_DATABASE_URL"] = MSSQL_TEST_URL or "sqlite+aiosqlite:///:memory:"
 os.environ.setdefault("SECRET_KEY", "test-only-secret-key-with-at-least-32-chars")
 os.environ.setdefault(
     "QUERY_ENCRYPTION_KEY",
@@ -40,6 +49,7 @@ pytestmark = pytest.mark.asyncio
 import pytest_asyncio
 
 from app_database import AppDatabase
+from app_database.models import Base
 from database_provider import DatabaseProvider
 
 
@@ -99,6 +109,13 @@ async def async_client():
     """
     # Manually setup state for testing
     app.state.app_db = AppDatabase()
+    if MSSQL_TEST_URL:
+        # Integration tests were written for a fresh SQLite database per test.
+        # Preserve that isolation when their metadata backend is the shared,
+        # disposable MSSQL CI database. Migration correctness is checked before
+        # this fixture runs by tests/mssql/test_mssql_migration.py.
+        async with app.state.app_db.app_engine.begin() as connection:
+            await connection.run_sync(Base.metadata.drop_all)
     await app.state.app_db.create_tables()
     
     app.state.db_provider = DatabaseProvider()
@@ -125,4 +142,5 @@ async def async_client():
         # keeps the interpreter alive — pytest hangs after printing its
         # final summary instead of exiting.
         await app.state.db_provider.close_engines()
+        await app.state.context.execution_registry.close()
         await app.state.app_db.app_engine.dispose()

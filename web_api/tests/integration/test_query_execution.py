@@ -47,7 +47,7 @@ async def test_select_query_execution(async_client: AsyncClient, mock_db_session
         db.add(test_db)
         await db.commit()
         await db.refresh(test_db)
-        db_uuid = test_db.uuid
+        db_uuid = str(test_db.uuid)
         
     db_info = await app_db.get_db_info()
     app.state.context.db_provider.set_db_info(db_info)
@@ -120,7 +120,7 @@ async def test_dml_query_execution(async_client: AsyncClient, mock_db_session):
         db.add(test_db)
         await db.commit()
         await db.refresh(test_db)
-        db_uuid = test_db.uuid
+        db_uuid = str(test_db.uuid)
 
     db_info = await app_db.get_db_info()
     app.state.context.db_provider.set_db_info(db_info)
@@ -190,7 +190,7 @@ async def test_reader_blocked_from_dml(async_client: AsyncClient, mock_db_sessio
         db.add(test_db)
         await db.commit()
         await db.refresh(test_db)
-        db_uuid = test_db.uuid
+        db_uuid = str(test_db.uuid)
 
     db_info = await app_db.get_db_info()
     app.state.context.db_provider.set_db_info(db_info)
@@ -253,7 +253,7 @@ async def test_writer_blocked_from_ddl(async_client: AsyncClient, mock_db_sessio
         db.add(test_db)
         await db.commit()
         await db.refresh(test_db)
-        db_uuid = test_db.uuid
+        db_uuid = str(test_db.uuid)
 
     db_info = await app_db.get_db_info()
     app.state.context.db_provider.set_db_info(db_info)
@@ -319,7 +319,7 @@ async def test_multi_role_query_execution(async_client: AsyncClient, mock_db_ses
         db.add(test_db)
         await db.commit()
         await db.refresh(test_db)
-        db_uuid = test_db.uuid
+        db_uuid = str(test_db.uuid)
         db_id = test_db.id
 
     db_info = await app_db.get_db_info()
@@ -402,7 +402,7 @@ async def _register_admin_on_new_database(
         db.add(target)
         await db.commit()
         await db.refresh(target)
-        db_uuid = target.uuid
+        db_uuid = str(target.uuid)
         database_id = target.id
 
     app.state.context.db_provider.set_db_info(await app_db.get_db_info())

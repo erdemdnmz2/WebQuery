@@ -287,6 +287,26 @@ with status `Open` before doing task work; see `AGENTS.md`.
   anlama gelir.
 - Recorded in: `docs/specs/SPEC-0027-target-database-lifecycle.md`
 
+### OQ-2026-021: Execution registry Redis arızasında yeni sorgu kabulü nasıl davranmalı?
+
+- Status: Answered
+- Raised: 2026-09-30
+- Scope: SPEC-0031, ADR-0026; canlı query cancellation ve çok-worker execution registration
+- Question: Runtime Redis execution registry erişilemezse yeni sorgular hedef DB'ye başlamadan 503 ile reddedilsin mi, yoksa yalnız owning worker'da iptal edilebilir biçimde çalışmaya devam mı etsin?
+- Why it matters: Reddetmek çok-worker cancellation adreslenebilirliğini korur ancak Redis arızasında yeni sorguları engeller. Local-only devam etmek sorgu erişilebilirliğini korur ancak başka worker'a düşen cancel isteği execution'a ulaşamaz; UI bu sınırlamayı açıkça göstermelidir. Login throttle arıza kararı bu davranışı belirlemez.
+- Answer: Fail-closed. Kullanıcının 2026-10-01 kararı: Redis execution registry erişilemezse yeni sorgular hedef DB'ye başlamadan `503 Service Unavailable` ile reddedilir. Local-only fallback uygulanmaz. Daha önce başlamış execution'ların yerel handle üzerinden iptal edilebilmesi korunur.
+- Recorded in: `docs/specs/SPEC-0031-live-query-cancellation.md`, `docs/adr/ADR-0026-live-query-cancellation.md`
+
+### OQ-2026-022: Yeni Cancel/İptal butonu hangi işlemi iptal etmeli?
+
+- Status: Answered
+- Raised: 2026-10-02
+- Scope: Frontend Cancel/İptal butonu; `frontend/DESIGN.md`, Studio ve dialog akışları
+- Question: Sorgu ekranındaki Cancel/İptal butonu yalnız arayüzde beklemeyi mi sonlandırmalı, yoksa veritabanında çalışan sorguyu da durdurmalı?
+- Why it matters: Form/dialog kapatma ile çalışan SQL sorgusunu durdurma farklı davranış ve API gerektirir. Mevcut dialoglarda Vazgeç butonları var; yanlış akışa buton eklemek veya sorgu sürerken iptal edilmiş gibi göstermek kullanıcıya hatalı geri bildirim verir.
+- Answer: Buton yalnız sorgu çalıştırılan ekranlarda olacak ve hedef veritabanında kullanıcının çalışan sorgusunu durduracak. `frontend/DESIGN.md` ve mevcut tema kullanılacak. Navbar'da çalışan sorguları gösterme fikri geleceğe ertelendi ve `docs/inbox/RUNNING-QUERIES-IN-NAVBAR.md` içinde kaydedildi.
+- Recorded in: `docs/specs/SPEC-0032-query-cancellation.md`, `docs/adr/ADR-0027-query-cancellation.md`
+
 ## Entry Format
 
 Add new items in this format. Keep resolved entries for decision history, but

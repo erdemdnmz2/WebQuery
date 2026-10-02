@@ -39,6 +39,7 @@ from query_execution.exceptions import (
 )
 from query_execution.query_analyzer import HARD_BLOCKED_RISKS, QueryAnalyzer
 from query_execution.runner import run_statement
+from query_execution.cancellation import CancellationUnavailable, QueryCancelled
 
 logger = logging.getLogger(__name__)
 
@@ -284,20 +285,24 @@ class QueryService:
                     "masked_columns": masked_now,
                 }
 
-                applied_rules_str = json.dumps(list(masking_cols)) if masking_cols else None
-                await self.app_db.update_log(
-                    log_id=log_id,
-                    successfull=True,
-                    row_count=row_count,
-                    applied_masking_rules=applied_rules_str
-                )
+            # The target block seals cancellation and commits before audit can
+            # claim success. Cancellation must not leave a successful audit.
+            applied_rules_str = json.dumps(list(masking_cols)) if masking_cols else None
+            await self.app_db.update_log(
+                log_id=log_id,
+                successfull=True,
+                row_count=row_count,
+                applied_masking_rules=applied_rules_str
+            )
+            if row_count > config.MAX_ROW_COUNT_WARNING:
+                logger.warning(f"Query returned high row count: {row_count} rows")
+            logger.info(f"Query executed successfully. Result: {message}")
+            return result_data
                 
-                if row_count > config.MAX_ROW_COUNT_WARNING:
-                    logger.warning(f"Query returned high row count: {row_count} rows")
-                
-                logger.info(f"Query executed successfully. Result: {message}")
-                return result_data
-                
+        except (QueryCancelled, CancellationUnavailable) as exc:
+            if log_id:
+                await self.app_db.update_log(log_id=log_id, successfull=False, error=exc.code)
+            raise
         except BaseServiceException:
             # Re-raise already translated service exceptions
             raise

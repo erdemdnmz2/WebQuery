@@ -1,0 +1,81 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: Codex
+  to: WebQuery maintainer
+  created_at: "2026-10-02"
+  task: "Move existing cancellation implementation to feat/query-cancellation"
+  scope:
+    completed:
+      - "Security cleanup commit 821e73c incorporated into feature branch before reapplying cancellation, preserving safe future merges."
+      - "Existing cancellation runtime, themed controls, tests, Redis CI service and navbar reminder transferred without behavior changes."
+      - "Before documentation-comment renumbering, all 35 runtime/CI/test files were byte-identical to 4143c92."
+      - "Preserved original SPEC-0031, ADR-0026 and OQ-2026-021; renumbered the implementation record to SPEC-0032/ADR-0027/OQ-2026-022 to avoid collisions."
+      - "Recorded differences from the original draft without accepting or superseding its architecture or the user's Redis outage decision."
+    excluded:
+      - "Merge to main, approval/closure of PR #3 and unrelated working-tree documents."
+      - "Implementing header/state API, local-first routing, outage-policy changes or real PostgreSQL/MySQL driver validation."
+  changed_files:
+    created:
+      - docs/specs/SPEC-0032-query-cancellation.md
+      - docs/adr/ADR-0027-query-cancellation.md
+      - docs/handoffs/2026-10-02-query-cancellation-transfer.yaml
+      - docs/handoffs/2026-10-02-query-cancellation.yaml
+      - docs/inbox/RUNNING-QUERIES-IN-NAVBAR.md
+      - web_api/query_execution/cancellation.py
+      - web_api/tests/cancellation_helpers.py
+      - web_api/tests/unit/test_query_cancellation.py
+      - web_api/tests/integration/test_query_cancellation_api.py
+      - web_api/tests/mssql/test_target_cancellation.py
+      - frontend/lib/query-cancellation.ts
+      - frontend/components/app/QueryCancelControl.tsx
+    modified:
+      - docs/open-questions.md
+      - docs/plans/PLAN-0031-live-query-cancellation.md
+      - docs/specs/SPEC-0030-mssql-migration-validation.md
+      - .github/workflows/ci.yml
+      - web_api/query_execution/router.py
+      - web_api/query_execution/schemas.py
+      - web_api/query_execution/services.py
+      - web_api/admin/router.py
+      - web_api/admin/services.py
+      - web_api/workspaces/router.py
+      - web_api/workspaces/schemas.py
+      - web_api/workspaces/services.py
+      - web_api/app.py
+      - web_api/dependencies.py
+      - web_api/database_provider/database.py
+      - web_api/tests/conftest.py
+      - frontend/services/api.ts
+      - frontend/lib/execution.ts
+      - frontend/components/app/ResultPanel.tsx
+      - frontend/components/app/admin/ReviewDialog.tsx
+      - frontend/pages/Studio.tsx
+      - frontend/pages/RunWorkspace.tsx
+    deleted: []
+  decisions: []
+  validation:
+    commands_run:
+      - command: "cd web_api && ../.venv/bin/python -m pytest -q"
+        result: passed
+        evidence: "337 passed, 3 skipped, 1 existing Pydantic deprecation warning; 218.93s. The three real MSSQL tests are skipped locally and remain selected in CI."
+      - command: "cd frontend && npm run typecheck && npm run audit:api && npm run audit:contrast && npm run build"
+        result: passed
+        evidence: "TypeScript, 37 frontend API calls, theme contrast audit and Vite production build passed; build 2.83s. No automated frontend test runner was run."
+      - command: ".venv/bin/ruff check --select F,E9 web_api"
+        result: passed
+        evidence: "All checks passed."
+      - command: "git diff --check"
+        result: passed
+        evidence: "No whitespace errors."
+    prior_evidence:
+      - "Original 4143c92 remote CI run 37053373074 succeeded for backend, frontend and real MSSQL jobs."
+      - "Original real MSSQL/Redis validation is recorded in 2026-10-02-query-cancellation.yaml; it was not rerun locally during branch movement."
+      - "Security cleanup separately validated: 321 passed, 1 skipped; frontend build and ruff passed."
+  open_questions: []
+  known_risks:
+    - "OQ-2026-021 is not fully implemented: legacy requests bypass registry, and local cancellation currently requires Redis. This transfer is not approval of that divergence."
+    - "Original header/state API, local-first/PubSub routing and outcome_unknown behavior remain unfulfilled draft-plan items."
+    - "PostgreSQL/MySQL cancellation has no real-service validation evidence."
+    - "PR #3 targets this feature branch and edits ODBC setup already fixed in the shared security baseline; review applicability before merging. PR not modified."
+    - "New remote CI runs after publishing these branches must be checked separately."
+  next_step: "Review the recorded design gaps before treating PLAN-0031 as complete or merging the feature."

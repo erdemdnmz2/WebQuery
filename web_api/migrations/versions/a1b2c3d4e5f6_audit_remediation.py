@@ -41,9 +41,14 @@ def _constraints(table: str) -> set[str]:
     inspector = sa_inspect(op.get_bind())
     if table not in set(inspector.get_table_names()):
         return set()
+    try:
+        constraints = inspector.get_unique_constraints(table)
+    except NotImplementedError:
+        # SQL Server exposes unique constraints through their backing indexes.
+        constraints = [index for index in inspector.get_indexes(table) if index.get("unique")]
     return {
         constraint["name"]
-        for constraint in inspector.get_unique_constraints(table)
+        for constraint in constraints
         if constraint.get("name")
     }
 

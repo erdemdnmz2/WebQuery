@@ -3,7 +3,7 @@ import logging
 import uuid
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import select, true, update
 from sqlalchemy.exc import IntegrityError
 
 from app_database.app_database import AppDatabase
@@ -111,8 +111,8 @@ class OwnerService:
                         await db.execute(
                             select(User)
                             .where(
-                                User.is_platform_owner.is_(True),
-                                User.is_active.is_(True),
+                                User.is_platform_owner == true(),
+                                User.is_active == true(),
                             )
                             .with_for_update()
                         )
@@ -158,7 +158,7 @@ class OwnerService:
                 Databases.database_name,
             )
             if not include_retired:
-                statement = statement.where(Databases.is_active.is_(True))
+                statement = statement.where(Databases.is_active == true())
             result = await db.execute(statement)
             return list(result.scalars().all())
 
@@ -170,7 +170,7 @@ class OwnerService:
                     .join(User, User.id == UserDatabaseAssociation.user_id)
                     .join(Databases, Databases.id == UserDatabaseAssociation.database_id)
                     .where(
-                        Databases.is_active.is_(True),
+                        Databases.is_active == true(),
                         # Coarse prefilter only: `role` is a comma-separated
                         # string, so SQL cannot decide membership on its own and
                         # this would also match a hypothetical "ADMINISTRATOR".
@@ -207,16 +207,20 @@ class OwnerService:
         db_uuid = str(uuid.uuid4())
         try:
             async with self.app_db.get_app_db() as db, db.begin():
-                existing = (
-                    await db.execute(
-                        select(Databases)
-                        .where(
-                            Databases.servername == request.servername,
-                            Databases.database_name == request.database_name,
-                        )
-                        .with_for_update()
+                existing_result = await db.execute(
+                    select(Databases)
+                    .where(
+                        Databases.servername == request.servername,
+                        Databases.database_name == request.database_name,
                     )
-                ).scalars().first()
+                    .with_for_update()
+                )
+                existing = existing_result.scalars().first()
+                # SQL Server/pyodbc does not allow another command on the
+                # connection while this result set is still open.  `.first()`
+                # leaves that cursor live for this dialect, so close it before
+                # loading the initial admin below.
+                existing_result.close()
                 if existing is not None and existing.is_active:
                     raise OwnerDatabaseAlreadyExistsError("Veritabanı zaten kayıtlı.")
 
@@ -420,15 +424,15 @@ class OwnerService:
                 # Checked before the assignment: writing the new name first
                 # would let autoflush hit the unique constraint and surface a
                 # driver IntegrityError instead of this endpoint's own answer.
-                clash = (
-                    await db.execute(
-                        select(Databases).where(
-                            Databases.servername == next_servername,
-                            Databases.database_name == next_database_name,
-                            Databases.id != database_id,
-                        )
+                clash_result = await db.execute(
+                    select(Databases).where(
+                        Databases.servername == next_servername,
+                        Databases.database_name == next_database_name,
+                        Databases.id != database_id,
                     )
-                ).scalars().first()
+                )
+                clash = clash_result.scalars().first()
+                clash_result.close()
                 if clash is not None:
                     raise OwnerDatabaseAlreadyExistsError(
                         "Bu sunucu ve veritabanı adıyla başka bir kayıt var."

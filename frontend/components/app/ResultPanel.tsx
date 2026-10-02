@@ -4,6 +4,7 @@ import {
   FileCsvIcon,
   FileXlsIcon,
   ShieldCheckIcon,
+  StopIcon,
   TableIcon,
   WarningCircleIcon,
 } from '@phosphor-icons/react';
@@ -93,6 +94,14 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
             {['w-full', 'w-[92%]', 'w-full', 'w-[78%]', 'w-[95%]', 'w-[64%]', 'w-[86%]'].map((width, index) => (
               <Skeleton key={index} className={cn('h-4', width)} />
             ))}
+          </div>
+        ) : outcome?.cancelled ? (
+          <div role="status" className="flex min-h-0 flex-1">
+            <EmptyState
+              icon={<StopIcon size={18} />}
+              title="Sorgu iptal edildi"
+              description="Çalıştırma hedef veritabanında durduruldu. Sorguyu düzenleyip tekrar çalıştırabilirsiniz."
+            />
           </div>
         ) : outcome?.sentForApproval ? (
           /*

@@ -3,6 +3,7 @@ Query Execution Schemas
 Pydantic models for query execution endpoints
 """
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -12,6 +13,11 @@ class SQLQuery(BaseModel):
     db_uuid: str
     query: str
     ad_hoc_mask_columns: list[str] | None = None
+    execution_id: UUID | None = None
+
+
+class ExecutionRequest(BaseModel):
+    execution_id: UUID | None = None
 
 
 class SQLResponse(BaseModel):

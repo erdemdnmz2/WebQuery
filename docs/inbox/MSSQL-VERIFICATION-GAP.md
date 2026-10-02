@@ -1,6 +1,6 @@
 # Testler ve migration'lar hiç MSSQL'e karşı çalışmadı
 
-**Durum:** Inbox / uygulanacak iş
+**Durum:** Kısmen uygulandı — staging provası bekliyor
 **Kaydedildi:** 2026-08-30
 **Kapsam:** `web_api/tests/`, `web_api/migrations/versions/`,
 `.github/workflows/ci.yml`
@@ -83,9 +83,23 @@ kapsamı seçimi ve süre bütçesi kararı içeriyor. ADR-0002'nin güncellemes
 kabul edilen risk olarak kaydedildi ve README'nin "Testing" bölümünde
 kullanıcıya görünür bir boşluk olarak yazıldı — gizlenmedi, ertelendi.
 
+## 2026-09-24 uygulama sonucu
+
+- Her PR/push için geçici SQL Server 2022, ODBC Driver 18 ve daraltılmış
+  migration/RBAC/audit/database lifecycle/query smoke seti içeren `mssql` CI
+  job'ı eklendi. Karar `ADR-0025`, sözleşme `SPEC-0030` içindedir.
+- Test reseti yalnız `MSSQL_CI=1` ve `webquery_ci` adı birlikte verildiğinde
+  çalışır; başka bir bağlantı hedefinde yıkıcı SQL çalıştırmayı reddeder.
+- Yerelde gerçek SQL Server olmadığı için migration testi bilinçli olarak
+  skip edilir. Job'ın GitHub Actions'taki ilk gerçek servis koşusu henüz
+  kaydedilmedi.
+- Staging backup/restore provası dış ortamda yetki gerektirir. İzlenecek
+  adımlar `docs/runbooks/MSSQL-STAGING-MIGRATION-REHEARSAL.md` içindedir;
+  bu çalışmada müşteri verisine veya bir staging sistemine erişilmedi.
+
 ## Teslim kontrolü
 
-- 1. madde için: `alembic upgrade head` çıktısı, şema doğrulamasının sonucu ve
-  ölçülen süre handoff'a yazılır.
-- 2. madde için: ADR-0002 güncellenir, CI job'ının hangi testleri kapsadığı
-  ve neden o alt kümenin seçildiği kaydedilir.
+- 1. madde için: Yetkili staging provasında `alembic upgrade head` çıktısı,
+  şema doğrulamasının sonucu ve ölçülen süre handoff'a yazılır.
+- 2. madde için: Tamamlandı; CI job'ının kapsamı ve gerekçesi `ADR-0025` ile
+  kaydedildi. İlk GitHub Actions servis koşusunun sonucu handoff'a eklenecek.

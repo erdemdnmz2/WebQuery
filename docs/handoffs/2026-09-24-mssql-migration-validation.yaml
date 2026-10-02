@@ -1,0 +1,62 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: "Codex"
+  to: "WebQuery engineering"
+  created_at: "2026-09-24T00:00:00+03:00"
+  task: "MSSQL migration and critical metadata-flow validation (roadmap step 2)"
+
+  scope:
+    completed:
+      - "Added a guarded MSSQL migration smoke test that recreates only the disposable webquery_ci database."
+      - "Added a GitHub Actions SQL Server 2022 service job with ODBC Driver 18."
+      - "Configured selected authentication, RBAC, audit, database lifecycle and query execution integration tests to run against MSSQL in that job."
+      - "Added the authorized staging backup/restore rehearsal runbook."
+    excluded:
+      - "No customer database, staging environment, backup, or credential was accessed."
+      - "The GitHub-hosted MSSQL service job cannot be executed from this local checkout."
+
+  changed_files:
+    created:
+      - "docs/specs/SPEC-0030-mssql-migration-validation.md"
+      - "docs/adr/ADR-0025-mssql-pr-validation.md"
+      - "docs/runbooks/MSSQL-STAGING-MIGRATION-REHEARSAL.md"
+      - "docs/handoffs/2026-09-24-mssql-migration-validation.yaml"
+      - "web_api/tests/mssql/test_mssql_migration.py"
+    modified:
+      - ".github/workflows/ci.yml"
+      - "web_api/tests/conftest.py"
+      - "docs/inbox/MSSQL-VERIFICATION-GAP.md"
+      - "docs/adr/ADR-0002-ci-merge-gate-policy.md"
+    deleted: []
+
+  decisions:
+    - decision: "Run a selected MSSQL smoke suite on every pull request and push."
+      rationale: "The primary metadata database is MSSQL, so broken DDL or type behavior must be detected before merge."
+      recorded_in: "docs/adr/ADR-0025-mssql-pr-validation.md"
+    - decision: "Permit destructive test setup only with MSSQL_CI=1 and the fixed webquery_ci database name."
+      rationale: "Prevents CI test utilities from targeting customer or staging databases."
+      recorded_in: "docs/specs/SPEC-0030-mssql-migration-validation.md"
+
+  validation:
+    commands_run:
+      - command: "pytest tests/mssql/test_mssql_migration.py -q"
+        result: "passed"
+        evidence: "1 passed (non-destructive target guard), 1 skipped (real SQL Server service absent locally)."
+      - command: "ruff check --select F,E9 ."
+        result: "passed"
+        evidence: "No selected lint errors."
+      - command: "git diff --check"
+        result: "passed"
+        evidence: "No whitespace errors."
+      - command: "ruby -e \"require 'yaml'; YAML.load_file('.github/workflows/ci.yml')\""
+        result: "passed"
+        evidence: "Workflow YAML parsed successfully."
+      - command: "pytest -q"
+        result: "passed"
+        evidence: "320 passed, 1 skipped, 1 existing Pydantic deprecation warning; 220.23s."
+
+  open_questions: []
+  known_risks:
+    - "The first actual GitHub Actions SQL Server service-container result remains to be observed on a push or pull request."
+    - "A staging restore rehearsal requires separate customer authorization and an isolated non-production backup copy."
+  next_step: "Review the first mssql CI job result; then schedule and record the authorized staging rehearsal."

@@ -76,17 +76,88 @@ jobs:
               -E "(password|secret|api_key)\s*=\s*['\"][^'\"]{8,}" web_api/ \
             || (echo "Hardcoded secret-looking value found in source" && exit 1)
 
-      # Informational for now, and it reports a lot: 85 advisories across 16
-      # pinned packages as of 2026-08-30, `aiohttp` 3.9.5 alone accounting for
-      # roughly a third. The fixes are version upgrades that need their own
-      # verification pass, so making this blocking would put a red CI in front
-      # of every unrelated change. Known cost of leaving it informational: the
-      # step has failed on every run since it was added, so a *new* advisory
-      # looks exactly like the standing backlog. Compare the counts, not the
-      # pass/fail. See docs/inbox/DEPENDENCY-ADVISORY-UPGRADES.md and ADR-0002.
-      - name: Dependency audit (informational)
-        continue-on-error: true
+      # Blocking: SPEC-0029 remediated the known high/critical backlog. A new
+      # advisory must now stop the merge instead of blending into a permanent
+      # informational failure.
+      - name: Dependency audit
         run: pip-audit -r web_api/requirements.txt
+
+  mssql:
+    # The metadata database is SQL Server in deployment. This focused job
+    # proves migrations, schema guard and high-impact runtime paths on the
+    # real dialect without duplicating the full SQLite suite. See ADR-0025.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: "WebQuery-CI-Sql1!"
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'WebQuery-CI-Sql1!' -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      # Disposable service credentials, not a deployment secret.
+      MSSQL_CI: "1"
+      MSSQL_TEST_URL: "mssql+aioodbc://sa:WebQuery-CI-Sql1%21@127.0.0.1:1433/webquery_ci?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+      SECRET_KEY: ci-test-key-for-github-actions-only-not-production
+      QUERY_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      CENTRAL_DB_USER: ci_user
+      CENTRAL_DB_PASSWORD: ci_pass
+      REDIS_URL: redis://localhost:6379/15
+      ALLOWED_EMAIL_DOMAINS: example.com
+      REGISTRATION_REQUIRES_ACTIVATION: "false"
+      SLACK_BOT_TOKEN: xoxb-test-token
+      SLACK_APP_TOKEN: xapp-test-token
+      SLACK_ADMIN_CHANNEL: C_TEST_CHANNEL
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11" # matches web_api/Dockerfile
+          cache: pip
+          cache-dependency-path: web_api/requirements.txt
+
+      - name: Install ODBC Driver 18
+        run: |
+          # Use Microsoft's canonical package-managed source. Hosted runners
+          # already carry microsoft-prod.list with Signed-By; adding a second
+          # unsigned mssql-release.list for the same URL breaks apt update.
+          curl -fsSL https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb \
+            -o /tmp/packages-microsoft-prod.deb
+          sudo dpkg -i /tmp/packages-microsoft-prod.deb
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
+
+      - name: Install dependencies
+        run: pip install -r web_api/requirements.txt
+
+      - name: Migrate and validate SQL Server
+        working-directory: web_api
+        run: |
+          pytest -q \
+            tests/mssql/ \
+            tests/integration/test_auth_api.py \
+            tests/integration/test_owner_governance.py \
+            tests/integration/test_database_lifecycle.py \
+            tests/integration/test_query_execution.py \
+            tests/integration/test_query_cancellation_api.py
 
   frontend:
     runs-on: ubuntu-latest
@@ -112,6 +183,10 @@ jobs:
         working-directory: frontend
         run: npm run typecheck
 
+      - name: Verify XLSX export
+        working-directory: frontend
+        run: npm run verify:export
+
       - name: Build
         working-directory: frontend
         run: npm run build
@@ -126,13 +201,8 @@ jobs:
         working-directory: frontend
         run: npm run audit:contrast
 
-      # Informational for the same reason as pip-audit, but the backlog here is
-      # down to one package: `xlsx` (SheetJS 0.18.5), whose upstream left npm,
-      # so the fix is a library replacement rather than a version bump. The
-      # other three highs this reported on 2026-08-30 (`nanoid`, `postcss`,
-      # `react-router`) were in-range patch bumps and were taken in the
-      # lockfile the same day, which is why the expected failure count is 1.
-      - name: Dependency audit (informational)
+      # Blocking: `xlsx` was replaced and the package graph is audit-clean.
+      # A newly disclosed high/critical dependency issue must stop the merge.
+      - name: Dependency audit
         working-directory: frontend
-        continue-on-error: true
         run: npm audit --audit-level=high
