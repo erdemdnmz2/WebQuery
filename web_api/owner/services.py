@@ -207,16 +207,20 @@ class OwnerService:
         db_uuid = str(uuid.uuid4())
         try:
             async with self.app_db.get_app_db() as db, db.begin():
-                existing = (
-                    await db.execute(
-                        select(Databases)
-                        .where(
-                            Databases.servername == request.servername,
-                            Databases.database_name == request.database_name,
-                        )
-                        .with_for_update()
+                existing_result = await db.execute(
+                    select(Databases)
+                    .where(
+                        Databases.servername == request.servername,
+                        Databases.database_name == request.database_name,
                     )
-                ).scalars().first()
+                    .with_for_update()
+                )
+                existing = existing_result.scalars().first()
+                # SQL Server/pyodbc does not allow another command on the
+                # connection while this result set is still open.  `.first()`
+                # leaves that cursor live for this dialect, so close it before
+                # loading the initial admin below.
+                existing_result.close()
                 if existing is not None and existing.is_active:
                     raise OwnerDatabaseAlreadyExistsError("Veritabanı zaten kayıtlı.")
 
@@ -420,15 +424,15 @@ class OwnerService:
                 # Checked before the assignment: writing the new name first
                 # would let autoflush hit the unique constraint and surface a
                 # driver IntegrityError instead of this endpoint's own answer.
-                clash = (
-                    await db.execute(
-                        select(Databases).where(
-                            Databases.servername == next_servername,
-                            Databases.database_name == next_database_name,
-                            Databases.id != database_id,
-                        )
+                clash_result = await db.execute(
+                    select(Databases).where(
+                        Databases.servername == next_servername,
+                        Databases.database_name == next_database_name,
+                        Databases.id != database_id,
                     )
-                ).scalars().first()
+                )
+                clash = clash_result.scalars().first()
+                clash_result.close()
                 if clash is not None:
                     raise OwnerDatabaseAlreadyExistsError(
                         "Bu sunucu ve veritabanı adıyla başka bir kayıt var."
