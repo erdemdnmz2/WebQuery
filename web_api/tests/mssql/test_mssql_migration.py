@@ -58,6 +58,14 @@ def _migration_head() -> str:
     return head
 
 
+def _migration_environment(url: URL) -> dict[str, str]:
+    environment = os.environ.copy()
+    # str(URL) masks the password; only pass this string to the subprocess
+    # environment, never to logs or failure messages.
+    environment["APP_DATABASE_URL"] = url.render_as_string(hide_password=False)
+    return environment
+
+
 def test_mssql_reset_rejects_non_ci_targets() -> None:
     with pytest.raises(RuntimeError, match="MSSQL_CI"):
         _validated_ci_url(
@@ -77,8 +85,7 @@ def test_migrations_and_schema_guard_on_real_mssql() -> None:
     url = _validated_ci_url(os.getenv("MSSQL_TEST_URL"), os.getenv("MSSQL_CI"))
     _recreate_database(url)
 
-    environment = os.environ.copy()
-    environment["APP_DATABASE_URL"] = str(url)
+    environment = _migration_environment(url)
     result = subprocess.run(
         [sys.executable, "-m", "alembic", "upgrade", "head"],
         cwd=WEB_API_DIR,

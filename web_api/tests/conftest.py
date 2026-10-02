@@ -8,6 +8,13 @@ from httpx import ASGITransport, AsyncClient
 # MSSQL CI passes a disposable metadata database explicitly. Local and normal
 # CI tests retain their isolated in-memory SQLite database.
 MSSQL_TEST_URL = os.getenv("MSSQL_TEST_URL")
+if MSSQL_TEST_URL:
+    import pyodbc
+
+    # Keep SQLAlchemy's pools (the subject of connection-reuse tests), but
+    # disable ODBC's hidden second pool before the first connection. Otherwise
+    # disposed fixture logins stay connected and cannot be dropped safely.
+    pyodbc.pooling = False
 os.environ["APP_DATABASE_URL"] = MSSQL_TEST_URL or "sqlite+aiosqlite:///:memory:"
 os.environ.setdefault("SECRET_KEY", "test-only-secret-key-with-at-least-32-chars")
 os.environ.setdefault(

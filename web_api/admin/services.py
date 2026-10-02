@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 import sqlglot.errors
-from sqlalchemy import String, and_, cast, delete, inspect, or_
+from sqlalchemy import String, and_, cast, delete, inspect, or_, true
 from sqlalchemy.sql import select
 
 from app_database.app_database import AppDatabase
@@ -195,7 +195,7 @@ class AdminService(BaseAdminService):
                 for user in (
                     await db.execute(
                         select(User)
-                        .where(User.is_active.is_(True))
+                        .where(User.is_active == true())
                         .order_by(User.username.asc())
                     )
                 ).scalars().all()
@@ -319,7 +319,7 @@ class AdminService(BaseAdminService):
                     )
                     .where(
                         UserDatabaseAssociation.user_id == admin_user.id,
-                        Databases.is_active.is_(True),
+                        Databases.is_active == true(),
                     )
                 )
             ).all()

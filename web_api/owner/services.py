@@ -3,7 +3,7 @@ import logging
 import uuid
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import select, true, update
 from sqlalchemy.exc import IntegrityError
 
 from app_database.app_database import AppDatabase
@@ -111,8 +111,8 @@ class OwnerService:
                         await db.execute(
                             select(User)
                             .where(
-                                User.is_platform_owner.is_(True),
-                                User.is_active.is_(True),
+                                User.is_platform_owner == true(),
+                                User.is_active == true(),
                             )
                             .with_for_update()
                         )
@@ -158,7 +158,7 @@ class OwnerService:
                 Databases.database_name,
             )
             if not include_retired:
-                statement = statement.where(Databases.is_active.is_(True))
+                statement = statement.where(Databases.is_active == true())
             result = await db.execute(statement)
             return list(result.scalars().all())
 
@@ -170,7 +170,7 @@ class OwnerService:
                     .join(User, User.id == UserDatabaseAssociation.user_id)
                     .join(Databases, Databases.id == UserDatabaseAssociation.database_id)
                     .where(
-                        Databases.is_active.is_(True),
+                        Databases.is_active == true(),
                         # Coarse prefilter only: `role` is a comma-separated
                         # string, so SQL cannot decide membership on its own and
                         # this would also match a hypothetical "ADMINISTRATOR".

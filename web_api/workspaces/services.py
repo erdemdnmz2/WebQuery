@@ -9,7 +9,7 @@ from typing import Any
 
 import sqlglot.errors
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql import select
+from sqlalchemy.sql import select, true
 
 from app_database.app_database import AppDatabase
 from app_database.models import (
@@ -166,7 +166,7 @@ class WorkspaceService:
             db_results = await db.execute(
                 select(Databases.servername, Databases.database_name, Databases.uuid)
                 .where(
-                    Databases.is_active.is_(True),
+                    Databases.is_active == true(),
                     Databases.servername.in_(servernames),
                     Databases.database_name.in_(database_names),
                 )
@@ -320,7 +320,7 @@ class WorkspaceService:
             select(Databases.uuid).where(
                 Databases.servername == query_data.servername,
                 Databases.database_name == query_data.database_name,
-                Databases.is_active.is_(True),
+                Databases.is_active == true(),
             )
         )
         db_uuid = str(db_res.scalars().first() or "")
@@ -372,7 +372,7 @@ class WorkspaceService:
                 select(Databases).where(
                     Databases.servername == query_data.servername,
                     Databases.database_name == query_data.database_name,
-                    Databases.is_active.is_(True),
+                    Databases.is_active == true(),
                 )
             )
             db_entry = db_result.scalars().first()

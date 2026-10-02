@@ -30,6 +30,12 @@ def test_baseline_migration_creates_a_new_database(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_migration_url_with_percent_is_not_configparser_interpolation(tmp_path: Path) -> None:
+    """ODBC passwords/query args and ordinary paths may contain percent signs."""
+    result = _run_upgrade(tmp_path / "percent%database.db")
+    assert result.returncode == 0, result.stderr
+
+
 def test_baseline_migration_accepts_a_complete_legacy_schema(tmp_path: Path) -> None:
     database_path = tmp_path / "legacy.db"
     engine = create_engine(f"sqlite:///{database_path}")

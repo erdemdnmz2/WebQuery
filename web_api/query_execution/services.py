@@ -291,10 +291,10 @@ class QueryService:
                     row_count=row_count,
                     applied_masking_rules=applied_rules_str
                 )
-                
+
                 if row_count > config.MAX_ROW_COUNT_WARNING:
                     logger.warning(f"Query returned high row count: {row_count} rows")
-                
+
                 logger.info(f"Query executed successfully. Result: {message}")
                 return result_data
                 

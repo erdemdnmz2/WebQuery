@@ -3,7 +3,7 @@
 ## 1. Spec Kartı
 
 - Özellik: MSSQL migration validation
-- Durum: Implemented — CI execution pending
+- Durum: Implemented — yerel gerçek MSSQL ve 4143c92 GitHub Actions koşusu geçti
 - Versiyon: 2026-09-24
 - Tarih: 2026-09-24
 - Sahip: WebQuery engineering
@@ -98,4 +98,25 @@ Yok.
 - [x] CI servis konteyneri ve ODBC kurulumu eklendi
 - [x] Staging backup/restore runbook'u eklendi
 - [x] Yerel doğrulama komutları çalıştırıldı ve sonuçları handoff'a yazıldı
-- [ ] GitHub Actions'ta gerçek MSSQL servis koşusu görüldü
+- [x] GitHub Actions'ta gerçek MSSQL servis koşusu görüldü (run 37053373074, commit 4143c92)
+
+### 2026-10-02 doğrulama ve regresyon düzeltmeleri
+
+- Gerçek SQL Server 2022 / ODBC Driver 18 ile boş `webquery_ci` üzerine tüm
+  migration zinciri, güncel head, schema guard, UNIQUEIDENTIFIER ve NVARCHAR
+  kontrolleri geçti. Ortam mevcut uygulamadan ayrı geçici Docker servisleridir.
+- ODBC kurulumunda ikinci, Signed-By'sız apt kaynağı oluşturma kaldırıldı;
+  Microsoft'un canonical `packages-microsoft-prod.deb` kurulumu kullanılıyor.
+- Migration subprocess URL'si parolayı gizleyen `str(URL)` yerine yalnız
+  process ortamına açık URL taşır; URL loglanmaz. Alembic ConfigParser'da `%`
+  kaçışları korunur; public migration CLI için regresyon testi eklendi.
+- MSSQL'in desteklemediği unique-constraint reflection yerine unique backing
+  index fallback'i kullanılır. Aktif kayıt/OWNER filtrelerinde MSSQL'de
+  geçersiz `IS 1` yerine portable boolean equality kullanılır; yetki ve
+  emeklilik kuralları değişmez.
+- Mevcut test verileri geçerli UUID ve JSON string UUID kullanacak şekilde
+  düzeltildi. Test-only ODBC ikinci havuzu kapatıldı; SQLAlchemy havuzları
+  açık kalır, geçici hedef hesabı test sonunda temizlenebilir.
+- Sorgu iptali ve ona ait Redis/test seçimi `feat/query-cancellation` branchine
+  ayrıldı. Bu branch yalnız bağımlılık güvenliği, MSSQL migration doğrulaması
+  ve bunları destekleyen uyumluluk/regresyon düzeltmelerini içerir.

@@ -127,10 +127,12 @@ jobs:
 
       - name: Install ODBC Driver 18
         run: |
-          curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | \
-            gpg --dearmor | sudo tee /usr/share/keyrings/microsoft-prod.gpg > /dev/null
-          curl -fsSL https://packages.microsoft.com/config/ubuntu/22.04/prod.list | \
-            sudo tee /etc/apt/sources.list.d/mssql-release.list
+          # Use Microsoft's canonical package-managed source. Hosted runners
+          # already carry microsoft-prod.list with Signed-By; adding a second
+          # unsigned mssql-release.list for the same URL breaks apt update.
+          curl -fsSL https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb \
+            -o /tmp/packages-microsoft-prod.deb
+          sudo dpkg -i /tmp/packages-microsoft-prod.deb
           sudo apt-get update
           sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
 
