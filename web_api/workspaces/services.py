@@ -9,7 +9,7 @@ from typing import Any
 
 import sqlglot.errors
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql import select
+from sqlalchemy.sql import select, true
 
 from app_database.app_database import AppDatabase
 from app_database.models import (
@@ -40,6 +40,7 @@ from query_execution.exceptions import (
 )
 from query_execution.query_analyzer import QueryAnalyzer, hard_block_reason_for
 from query_execution.runner import run_statement
+from query_execution.cancellation import CancellationUnavailable, QueryCancelled
 from workspaces.exceptions import (
     WorkspaceAccessDeniedError,
     WorkspaceNotEditableError,
@@ -166,7 +167,7 @@ class WorkspaceService:
             db_results = await db.execute(
                 select(Databases.servername, Databases.database_name, Databases.uuid)
                 .where(
-                    Databases.is_active.is_(True),
+                    Databases.is_active == true(),
                     Databases.servername.in_(servernames),
                     Databases.database_name.in_(database_names),
                 )
@@ -320,7 +321,7 @@ class WorkspaceService:
             select(Databases.uuid).where(
                 Databases.servername == query_data.servername,
                 Databases.database_name == query_data.database_name,
-                Databases.is_active.is_(True),
+                Databases.is_active == true(),
             )
         )
         db_uuid = str(db_res.scalars().first() or "")
@@ -372,7 +373,7 @@ class WorkspaceService:
                 select(Databases).where(
                     Databases.servername == query_data.servername,
                     Databases.database_name == query_data.database_name,
-                    Databases.is_active.is_(True),
+                    Databases.is_active == true(),
                 )
             )
             db_entry = db_result.scalars().first()
@@ -469,6 +470,10 @@ class WorkspaceService:
             logger.info(f"Workspace {workspace_id} executed successfully. Result: {message}")
             return {"response_type": "data", "data": result_data, "message": message, "masked_columns": masked_now}
 
+        except (QueryCancelled, CancellationUnavailable) as exc:
+            if log_id:
+                await self.app_db.update_log(log_id=log_id, successfull=False, error=exc.code)
+            raise
         except BaseServiceException:
             raise
         except Exception as e:

@@ -3,7 +3,7 @@
 ## 1. Spec Kartı
 
 - Özellik: MSSQL migration validation
-- Durum: Implemented — CI execution pending
+- Durum: Implemented — yerel gerçek MSSQL doğrulandı; GitHub Actions koşusu bekleniyor
 - Versiyon: 2026-09-24
 - Tarih: 2026-09-24
 - Sahip: WebQuery engineering
@@ -99,3 +99,25 @@ Yok.
 - [x] Staging backup/restore runbook'u eklendi
 - [x] Yerel doğrulama komutları çalıştırıldı ve sonuçları handoff'a yazıldı
 - [ ] GitHub Actions'ta gerçek MSSQL servis koşusu görüldü
+
+### 2026-10-02 doğrulama ve regresyon düzeltmeleri
+
+- Gerçek SQL Server 2022 / ODBC Driver 18 ile boş `webquery_ci` üzerine tüm
+  migration zinciri, güncel head, schema guard, UNIQUEIDENTIFIER ve NVARCHAR
+  kontrolleri geçti. Ortam mevcut uygulamadan ayrı geçici Docker servisleridir.
+- ODBC kurulumunda ikinci, Signed-By'sız apt kaynağı oluşturma kaldırıldı;
+  Microsoft'un canonical `packages-microsoft-prod.deb` kurulumu kullanılıyor.
+- Migration subprocess URL'si parolayı gizleyen `str(URL)` yerine yalnız
+  process ortamına açık URL taşır; URL loglanmaz. Alembic ConfigParser'da `%`
+  kaçışları korunur; public migration CLI için regresyon testi eklendi.
+- MSSQL'in desteklemediği unique-constraint reflection yerine unique backing
+  index fallback'i kullanılır. Aktif kayıt/OWNER filtrelerinde MSSQL'de
+  geçersiz `IS 1` yerine portable boolean equality kullanılır; yetki ve
+  emeklilik kuralları değişmez.
+- Mevcut test verileri geçerli UUID ve JSON string UUID kullanacak şekilde
+  düzeltildi. Test-only ODBC ikinci havuzu kapatıldı; SQLAlchemy havuzları
+  açık kalır, geçici hedef hesabı test sonunda temizlenebilir.
+- Gerçek Redis ve hedef MSSQL iptali SPEC-0031 kapsamında CI seçimine eklendi.
+  Tam komut/sonuçlar `docs/handoffs/2026-10-02-query-cancellation.yaml` içindedir.
+  Yeni workflow henüz GitHub Actions'ta çalıştırılmadı; yerel test sonucu,
+  uzak runner ODBC kurulumunun başarı kanıtı yerine geçmez.

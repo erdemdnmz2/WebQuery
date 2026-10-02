@@ -224,7 +224,7 @@ async def test_renaming_moves_saved_queries_with_the_registration(
             servername="prod-sql",
             database_name="SalesDB",
             query="SELECT 1",
-            uuid="lifecycle-query",
+            uuid="16bc95ad-37af-49d6-a3fd-5390b81b45ac",
             status="saved_in_workspace",
         )
         db.add(query)
@@ -239,7 +239,7 @@ async def test_renaming_moves_saved_queries_with_the_registration(
 
     async with app_db.get_app_db() as db:
         moved = (
-            await db.execute(select(QueryData).where(QueryData.uuid == "lifecycle-query"))
+            await db.execute(select(QueryData).where(QueryData.uuid == "16bc95ad-37af-49d6-a3fd-5390b81b45ac"))
         ).scalars().first()
         assert moved.servername == "prod-sql-01"
         assert moved.database_name == "SalesDB"

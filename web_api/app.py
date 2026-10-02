@@ -171,6 +171,8 @@ async def lifespan(app: FastAPI):
         if getattr(app.state, "login_throttle", None):
             await app.state.login_throttle.close()
             logger.info("Redis giriş kısıtlayıcı bağlantısı kapatıldı")
+        if getattr(app.state, "context", None):
+            await app.state.context.execution_registry.close()
         try:
             if hasattr(app.state, 'db_provider') and app.state.db_provider:
                 await app.state.db_provider.close_engines()

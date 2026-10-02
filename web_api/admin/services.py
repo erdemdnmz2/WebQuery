@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 import sqlglot.errors
-from sqlalchemy import String, and_, cast, delete, inspect, or_
+from sqlalchemy import String, and_, cast, delete, inspect, or_, true
 from sqlalchemy.sql import select
 
 from app_database.app_database import AppDatabase
@@ -42,6 +42,7 @@ from database_provider import DatabaseProvider
 from query_execution import config
 from query_execution.query_analyzer import QueryAnalyzer, hard_block_reason_for
 from query_execution.runner import run_statement
+from query_execution.cancellation import CancellationUnavailable, QueryCancelled
 
 from .exceptions import (
     DatabaseAccessNotFoundError,
@@ -195,7 +196,7 @@ class AdminService(BaseAdminService):
                 for user in (
                     await db.execute(
                         select(User)
-                        .where(User.is_active.is_(True))
+                        .where(User.is_active == true())
                         .order_by(User.username.asc())
                     )
                 ).scalars().all()
@@ -319,7 +320,7 @@ class AdminService(BaseAdminService):
                     )
                     .where(
                         UserDatabaseAssociation.user_id == admin_user.id,
-                        Databases.is_active.is_(True),
+                        Databases.is_active == true(),
                     )
                 )
             ).all()
@@ -754,6 +755,10 @@ class AdminApprovalService(BaseAdminService):
                 "message": message,
                 "error": None
             }
+        except (QueryCancelled, CancellationUnavailable) as exc:
+            if log_id:
+                await self.app_db.update_log(log_id=log_id, successfull=False, error=exc.code)
+            raise
         except Exception as exc:
             # The other three execution paths redact passwords before logging
             # and scrub connection details before answering. The preview used

@@ -3,7 +3,7 @@
 import logging
 
 from pydantic import EmailStr, TypeAdapter
-from sqlalchemy import func, select
+from sqlalchemy import func, select, true
 from sqlalchemy.exc import IntegrityError
 
 from app_database.app_database import AppDatabase
@@ -95,8 +95,8 @@ async def ensure_active_owner(app_db: AppDatabase) -> None:
     async with app_db.get_app_db() as db:
         count = await db.scalar(
             select(func.count(User.id)).where(
-                User.is_platform_owner.is_(True),
-                User.is_active.is_(True),
+                User.is_platform_owner == true(),
+                User.is_active == true(),
             )
         )
     if not count:

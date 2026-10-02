@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.sql import select
+from sqlalchemy.sql import select, true
 
 from common.clock import db_now
 from common.roles import mode_from_credentials
@@ -308,7 +308,7 @@ class AppDatabase:
             # never reach the runtime catalogue: it has no entry in
             # `db_by_uuid`, so every execution path fails closed on it.
             result = await db.execute(
-                select(Databases).where(Databases.is_active.is_(True))
+                select(Databases).where(Databases.is_active == true())
             )
             databases = result.scalars().all()
             db_info : dict[str, dict[str, Any]] = {}

@@ -1,0 +1,115 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: Codex
+  to: WebQuery engineering
+  created_at: "2026-10-02T18:35:00Z"
+  task: "Sorgu ekranlarına gerçek hedef veritabanı iptali ekleme"
+
+  scope:
+    completed:
+      - "Studio, RunWorkspace ve admin önizlemesinde yalnız çalışırken temalı İptal et"
+      - "Authenticated user / execution UUID ile cross-worker Redis iptal sinyali"
+      - "MSSQL SQLCancel, PostgreSQL pg_cancel_backend, MySQL KILL QUERY"
+      - "Commit seal, rollback, driver watcher cleanup ve QUERY_CANCELLED audit"
+      - "Navbar'da çalışan sorgular fikri inbox'a kaydedildi; navbar uygulanmadı"
+      - "Gerçek MSSQL/Redis ile cross-worker iptal, rollback ve havuz tekrar kullanımı"
+      - "Gerçek HTTP/provider akışında sysadmin/processadmin olmayan hedef hesapla iptal ve audit"
+      - "CI ODBC kaynak çakışması, migration URL/introspection ve MSSQL boolean uyumluluğu düzeltildi"
+    excluded:
+      - "GitHub Actions'ta yeni remote koşunun sonucu; teslim sırasında ayrıca doğrulanacak"
+      - "PostgreSQL/MySQL gerçek servis doğrulaması"
+      - "Frontend test runner'ı / sonraki faz"
+      - "Slack veya CD değişiklikleri"
+
+  changed_files:
+    created:
+      - docs/specs/SPEC-0031-query-cancellation.md
+      - docs/adr/ADR-0026-query-cancellation.md
+      - docs/inbox/RUNNING-QUERIES-IN-NAVBAR.md
+      - frontend/components/app/QueryCancelControl.tsx
+      - frontend/lib/query-cancellation.ts
+      - web_api/query_execution/cancellation.py
+      - web_api/tests/cancellation_helpers.py
+      - web_api/tests/unit/test_query_cancellation.py
+      - web_api/tests/integration/test_query_cancellation_api.py
+      - web_api/tests/mssql/test_target_cancellation.py
+    modified:
+      - docs/open-questions.md
+      - .github/workflows/ci.yml
+      - docs/specs/SPEC-0030-mssql-migration-validation.md
+      - frontend/services/api.ts
+      - frontend/lib/execution.ts
+      - frontend/components/app/ResultPanel.tsx
+      - frontend/components/app/admin/ReviewDialog.tsx
+      - frontend/pages/Studio.tsx
+      - frontend/pages/RunWorkspace.tsx
+      - web_api/query_execution/router.py
+      - web_api/query_execution/schemas.py
+      - web_api/query_execution/services.py
+      - web_api/database_provider/database.py
+      - web_api/dependencies.py
+      - web_api/app.py
+      - web_api/workspaces/router.py
+      - web_api/workspaces/schemas.py
+      - web_api/workspaces/services.py
+      - web_api/admin/router.py
+      - web_api/admin/services.py
+      - web_api/tests/conftest.py
+      - web_api/app_database/app_database.py
+      - web_api/owner/bootstrap.py
+      - web_api/owner/services.py
+      - web_api/migrations/env.py
+      - web_api/migrations/versions/a1b2c3d4e5f6_audit_remediation.py
+      - web_api/tests/mssql/test_mssql_migration.py
+      - web_api/tests/unit/test_baseline_migration.py
+      - web_api/tests/integration/test_database_lifecycle.py
+      - web_api/tests/integration/test_query_execution.py
+    deleted: []
+
+  decisions:
+    - decision: "İptal, HTTP isteğini kesmek değil hedef SQL'i durdurmaktır"
+      rationale: "Kullanıcının OQ-2026-021 yanıtı"
+      recorded_in: docs/specs/SPEC-0031-query-cancellation.md
+    - decision: "Redis owner-scope sinyali + hedef driver + atomik commit seal"
+      rationale: "Çok worker, thread'de çalışan SQL ve tier yetkilerini koruma"
+      recorded_in: docs/adr/ADR-0026-query-cancellation.md
+
+  validation:
+    commands_run:
+      - command: "cd web_api && ../.venv/bin/python -m pytest -q tests/unit/test_query_cancellation.py tests/integration/test_query_cancellation_api.py tests/unit/test_baseline_migration.py"
+        result: passed
+        evidence: "Commit öncesi son kontrol: 24 passed, 1 warning; 9.65s"
+      - command: "cd web_api && ../.venv/bin/python -m pytest -q"
+        result: passed
+        evidence: "337 passed, 3 skipped; 222.43s. Normal yerel SQLite koşusunda üç gerçek MSSQL testi skip; bunlar ayrı Docker MSSQL/Redis koşusunda geçti. Mevcut Pydantic deprecation uyarısı var."
+      - command: "cd web_api && ../.venv/bin/python -m pytest -q tests/unit/test_baseline_migration.py"
+        result: passed
+        evidence: "8 passed; percent URL regresyonu önce ConfigParser ValueError ile başarısız oldu, düzeltme sonrası geçti"
+      - command: "docker compose -p webquery-cancel-validation-20261002 -f /private/tmp/webquery-cancel-validation.compose.yml run --rm tests -q -p no:cacheprovider tests/mssql/ tests/integration/test_auth_api.py tests/integration/test_owner_governance.py tests/integration/test_database_lifecycle.py tests/integration/test_query_execution.py tests/integration/test_query_cancellation_api.py"
+        result: passed
+        evidence: "44 passed, 2 warnings; 78.22s. Gerçek SQL Server 2022, Redis 7.2, Python 3.11, ODBC Driver 18 ve güncel requirements pin'leri. Migration, schema guard, kritik metadata akışları ve gerçek hedef iptali geçti."
+      - command: ".venv/bin/ruff check --select F,E9 web_api"
+        result: passed
+        evidence: "All checks passed"
+      - command: "git diff --check"
+        result: passed
+        evidence: "Whitespace hatası yok"
+      - command: "cd frontend && npm run typecheck && npm run audit:api && npm run audit:contrast && npm run build"
+        result: passed
+        evidence: "Typecheck; 37 API çağrısı; iki tema kontrastı; Vite production build"
+    manual:
+      - "Sentetik loopback API ile üç sorgu yüzeyi, light/dark, Enter, bekleme ve 503/retry"
+      - "Geçici UI test sunucusu gerçek backend/DB iptal kanıtı değildir"
+      - "Change-review: UUID/owner scope, mevcut RBAC/risk/masking, secret/log redaction, pool lifecycle incelendi"
+      - "Gerçek WAITFOR 20 saniye yerine 5 saniyelik test bütçesinde kesildi; yazma geri alındı, aynı tek bağlantılı havuz yeniden kullanıldı"
+      - "Gerçek API iptali: önce uncommitted yazma gözlendi, kilitte bekleyen SQL durduruldu, başarısız QUERY_CANCELLED audit yazıldı; sonraki API SELECT iki satırın da eski değerlerini döndürdü"
+      - "Yerel test servisleri ayrı Docker projesinde, host portu açmadan çalıştı; mevcut uygulama/MSSQL/Redis servisleri korunmuştur"
+
+  open_questions: []
+  known_risks:
+    - "GitHub Actions runner'da yeni workflow/ODBC sonucu ayrıca doğrulanmalı; yerel 44/44 sonucu remote CI yeşil iddiası değildir"
+    - "PostgreSQL/MySQL için gerçek servis doğrulaması yapılmadı; unit test kanıtı mevcut. MSSQL ve Redis/Lua gerçek servislerle doğrulandı"
+    - "İptal geri alınabilir açık transaction'ı rollback eder; daha önce COMMIT edilen veya autocommit DDL geri alınamaz"
+    - "Driver/Redis arızasında hedefin durması gecikebilir; 202 tamamlanma değildir"
+    - "İlgisiz dirty worktree değişiklikleri korundu; yalnız bu özelliğin dosyaları commitlenmeli"
+  next_step: "Bu teslimin yeni GitHub Actions sonucunu doğrulamak"

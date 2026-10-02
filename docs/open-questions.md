@@ -287,6 +287,16 @@ with status `Open` before doing task work; see `AGENTS.md`.
   anlama gelir.
 - Recorded in: `docs/specs/SPEC-0027-target-database-lifecycle.md`
 
+### OQ-2026-021: Yeni Cancel/İptal butonu hangi işlemi iptal etmeli?
+
+- Status: Answered
+- Raised: 2026-10-02
+- Scope: Frontend Cancel/İptal butonu; `frontend/DESIGN.md`, Studio ve dialog akışları
+- Question: Sorgu ekranındaki Cancel/İptal butonu yalnız arayüzde beklemeyi mi sonlandırmalı, yoksa veritabanında çalışan sorguyu da durdurmalı?
+- Why it matters: Form/dialog kapatma ile çalışan SQL sorgusunu durdurma farklı davranış ve API gerektirir. Mevcut dialoglarda Vazgeç butonları var; yanlış akışa buton eklemek veya sorgu sürerken iptal edilmiş gibi göstermek kullanıcıya hatalı geri bildirim verir.
+- Answer: Buton yalnız sorgu çalıştırılan ekranlarda olacak ve hedef veritabanında kullanıcının çalışan sorgusunu durduracak. `frontend/DESIGN.md` ve mevcut tema kullanılacak. Navbar'da çalışan sorguları gösterme fikri geleceğe ertelendi ve `docs/inbox/RUNNING-QUERIES-IN-NAVBAR.md` içinde kaydedildi.
+- Recorded in: `docs/specs/SPEC-0031-query-cancellation.md`, `docs/adr/ADR-0026-query-cancellation.md`
+
 ## Entry Format
 
 Add new items in this format. Keep resolved entries for decision history, but

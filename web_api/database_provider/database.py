@@ -159,7 +159,13 @@ class DatabaseProvider:
                     await session.execute(
                         text(init_sql.format(ms=QUERY_TIMEOUT_SECONDS * 1000))
                     )
-                yield session
+                from query_execution.cancellation import current_execution
+                execution = current_execution.get()
+                if execution is None:
+                    yield session
+                else:
+                    async with execution.target(session, tech, conn_str):
+                        yield session
             except BaseException:
                 # Any failure inside the caller's block discards the batch.
                 await session.rollback()

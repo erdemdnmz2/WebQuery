@@ -41,7 +41,9 @@ def _to_sync_url(async_url: str) -> str:
     )
 
 
-config.set_main_option("sqlalchemy.url", _to_sync_url(DATABASE_URL))
+# ConfigParser interprets percent signs, including URL-encoded credentials.
+# Escape only for config storage; get_section restores the original URL.
+config.set_main_option("sqlalchemy.url", _to_sync_url(DATABASE_URL).replace("%", "%%"))
 
 if config.config_file_name:
     fileConfig(config.config_file_name)
