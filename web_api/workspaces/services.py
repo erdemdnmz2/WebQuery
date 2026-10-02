@@ -40,6 +40,7 @@ from query_execution.exceptions import (
 )
 from query_execution.query_analyzer import QueryAnalyzer, hard_block_reason_for
 from query_execution.runner import run_statement
+from query_execution.cancellation import CancellationUnavailable, QueryCancelled
 from workspaces.exceptions import (
     WorkspaceAccessDeniedError,
     WorkspaceNotEditableError,
@@ -469,6 +470,10 @@ class WorkspaceService:
             logger.info(f"Workspace {workspace_id} executed successfully. Result: {message}")
             return {"response_type": "data", "data": result_data, "message": message, "masked_columns": masked_now}
 
+        except (QueryCancelled, CancellationUnavailable) as exc:
+            if log_id:
+                await self.app_db.update_log(log_id=log_id, successfull=False, error=exc.code)
+            raise
         except BaseServiceException:
             raise
         except Exception as e:

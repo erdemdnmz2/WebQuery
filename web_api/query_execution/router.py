@@ -4,8 +4,9 @@ FastAPI router for single and multiple SQL query execution.
 All routes are strictly typed and documented.
 """
 from typing import Any
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException
 from sqlalchemy.future import select
 
 from app_database.app_database import AppDatabase
@@ -14,7 +15,8 @@ from authentication.services import get_current_user
 from common.limiter import limiter
 from common.roles import effective_mode
 from database_provider import DatabaseProvider
-from dependencies import get_app_db, get_db_provider, get_query_service
+from dependencies import get_app_db, get_db_provider, get_query_service, get_execution_registry
+from query_execution.cancellation import ExecutionRegistry, ExecutionConflict
 from query_execution import config
 from query_execution import schemas as query_models
 from query_execution.services import QueryService
@@ -30,7 +32,8 @@ async def execute_query(
     request: Request,
     query_request: query_models.SQLQuery,
     current_user: User = Depends(get_current_user),
-    query_service: QueryService = Depends(get_query_service)
+    query_service: QueryService = Depends(get_query_service),
+    registry: ExecutionRegistry = Depends(get_execution_registry),
 ) -> dict[str, Any]:
     """
     Executes a single SQL query via the query execution service.
@@ -45,14 +48,32 @@ async def execute_query(
         dict[str, Any]: The query execution results or error response.
     """
     client_ip: str | None = request.client.host if request.client else None
-    result: dict[str, Any] = await query_service.execute_query(
-        query=query_request.query,
-        user=current_user,
-        db_uuid=query_request.db_uuid,
-        ad_hoc_mask_columns=query_request.ad_hoc_mask_columns,
-        client_ip=client_ip,
-    )
+    execution_id = str(query_request.execution_id) if query_request.execution_id else None
+    async with registry.track(current_user.id, execution_id):
+        result: dict[str, Any] = await query_service.execute_query(
+            query=query_request.query,
+            user=current_user,
+            db_uuid=query_request.db_uuid,
+            ad_hoc_mask_columns=query_request.ad_hoc_mask_columns,
+            client_ip=client_ip,
+        )
     return result
+
+
+@router.post("/query_executions/{execution_id}/cancel", status_code=202)
+@limiter.limit(config.RATE_LIMITER)
+async def cancel_query_execution(
+    request: Request,
+    execution_id: UUID,
+    current_user: User = Depends(get_current_user),
+    registry: ExecutionRegistry = Depends(get_execution_registry),
+):
+    result = await registry.cancel(current_user.id, str(execution_id))
+    if result == 0:
+        raise HTTPException(404, "Çalışan sorgu bulunamadı.")
+    if result == 2:
+        raise ExecutionConflict("Sorgu tamamlandı veya commit aşamasında; iptal edilemez.")
+    return {"status": "cancelling"}
 
 
 # `POST /api/multiple_query` was removed (OQ-2026-012). It carried no rate limit

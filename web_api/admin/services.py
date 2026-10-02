@@ -42,6 +42,7 @@ from database_provider import DatabaseProvider
 from query_execution import config
 from query_execution.query_analyzer import QueryAnalyzer, hard_block_reason_for
 from query_execution.runner import run_statement
+from query_execution.cancellation import CancellationUnavailable, QueryCancelled
 
 from .exceptions import (
     DatabaseAccessNotFoundError,
@@ -754,6 +755,10 @@ class AdminApprovalService(BaseAdminService):
                 "message": message,
                 "error": None
             }
+        except (QueryCancelled, CancellationUnavailable) as exc:
+            if log_id:
+                await self.app_db.update_log(log_id=log_id, successfull=False, error=exc.code)
+            raise
         except Exception as exc:
             # The other three execution paths redact passwords before logging
             # and scrub connection details before answering. The preview used

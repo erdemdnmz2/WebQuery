@@ -142,4 +142,5 @@ async def async_client():
         # keeps the interpreter alive — pytest hangs after printing its
         # final summary instead of exiting.
         await app.state.db_provider.close_engines()
+        await app.state.context.execution_registry.close()
         await app.state.app_db.app_engine.dispose()

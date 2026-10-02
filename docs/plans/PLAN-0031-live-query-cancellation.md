@@ -1,6 +1,6 @@
 # PLAN-0031: Canlı sorgu iptali implementasyon planı
 
-- Durum: Taslak; uygulama yapılmadı.
+- Durum: Taslak; tüm plan uygulanmadı. Mevcut farklı uygulama 2026-10-02'de bu branche taşındı.
 - Tarih: 2026-09-30
 - Branch: `feat/query-cancellation`
 - Spec: [SPEC-0031](../specs/SPEC-0031-live-query-cancellation.md)
@@ -9,6 +9,18 @@
   worktree. Ana checkout'taki commit edilmemiş değişiklikler dahil edilmedi.
 
 ## 0. Karar kapısı
+
+### 2026-10-02 branch taşıması
+
+`security-validation-hardening` üzerindeki 4143c92 iptal uygulaması bu branche
+ayrıldı. Mevcut uygulama ve test sınırı
+[SPEC-0032](../specs/SPEC-0032-query-cancellation.md) ve
+[ADR-0027](../adr/ADR-0027-query-cancellation.md) içinde kayıtlıdır.
+Bu planın header/state API, local-first cancel, Pub/Sub/batch reconciliation,
+Redis arızasında local iptal, ID'siz yeni sorgular için fail-closed ve gerçek
+üç-driver doğrulaması maddeleri henüz tümüyle karşılanmaz.
+OQ-2026-021 kararı korunur. Taşıma işi bu farkları çözmez, taslağı kabul etmez
+ve planı tamamlanmış hale getirmez.
 
 OQ-2026-021, 2026-10-01 tarihinde cevaplandı ve spec/ADR'ye kaydedildi: Redis
 registry erişilemezse yeni sorgular hedef DB'ye başlamadan 503 ile reddedilir;

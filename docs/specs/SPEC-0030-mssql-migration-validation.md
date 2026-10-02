@@ -118,5 +118,8 @@ Yok.
   düzeltildi. Test-only ODBC ikinci havuzu kapatıldı; SQLAlchemy havuzları
   açık kalır, geçici hedef hesabı test sonunda temizlenebilir.
 - Sorgu iptali ve ona ait Redis/test seçimi `feat/query-cancellation` branchine
-  ayrıldı. Bu branch yalnız bağımlılık güvenliği, MSSQL migration doğrulaması
-  ve bunları destekleyen uyumluluk/regresyon düzeltmelerini içerir.
+  ayrıldı. `security-validation-hardening` branchi yalnız bağımlılık güvenliği,
+  MSSQL migration doğrulaması ve bunları destekleyen uyumluluk/regresyon
+  düzeltmelerini içerir. Feature branch bu ortak tabanı devralır; ayrıca gerçek
+  Redis servisini ve `tests/mssql/test_target_cancellation.py` ile
+  `tests/integration/test_query_cancellation_api.py` CI seçimini içerir.
