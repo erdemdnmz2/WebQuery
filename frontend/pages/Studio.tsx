@@ -14,8 +14,6 @@ import {
 import { api, errorMessage, UnauthorizedError } from '../services/api';
 import { cn } from '../lib/cn';
 import { useHotkey, useIsMac } from '../lib/hooks';
-import { useQueryCancellation } from '../lib/query-cancellation';
-import { QueryCancelControl } from '../components/app/QueryCancelControl';
 import { useWorkspaces } from '../lib/workspaces';
 import { isEditable, statusMeta } from '../lib/workspace-status';
 import { outcomeFromError, outcomeFromResponse, type ExecutionOutcome } from '../lib/execution';
@@ -57,7 +55,6 @@ const Studio: React.FC = () => {
 
   const [outcome, setOutcome] = useState<ExecutionOutcome | null>(null);
   const [running, setRunning] = useState(false);
-  const cancellation = useQueryCancellation();
   const [durationMs, setDurationMs] = useState<number | null>(null);
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
 
@@ -194,8 +191,6 @@ const Studio: React.FC = () => {
       return;
     }
 
-    const executionId = cancellation.begin();
-    if (!executionId) return;
     setRunning(true);
     setOutcome(null);
     runTimer.current = performance.now();
@@ -203,7 +198,6 @@ const Studio: React.FC = () => {
       const response = await api.executeQuery({
         db_uuid: dbUuid,
         query,
-        execution_id: executionId,
         ad_hoc_mask_columns: adHocMasked.length > 0 ? adHocMasked : undefined,
       });
       setOutcome(outcomeFromResponse(response));
@@ -219,7 +213,6 @@ const Studio: React.FC = () => {
     } finally {
       setDurationMs(performance.now() - runTimer.current);
       setRunning(false);
-      cancellation.finish(executionId);
     }
   }, [dbUuid, query, adHocMasked, reload, toast]);
 
@@ -430,7 +423,6 @@ const Studio: React.FC = () => {
               Çalıştır
             </Button>
           </Tooltip>
-          {running && <QueryCancelControl cancellation={cancellation} />}
         </div>
       </div>
 

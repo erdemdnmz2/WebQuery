@@ -15,9 +15,7 @@ from dependencies import (
     get_app_db,
     get_db_provider,
     get_workspace_service,
-    get_execution_registry,
 )
-from query_execution.cancellation import ExecutionRegistry
 from query_execution import schemas as query_models
 
 from .schemas import (
@@ -172,8 +170,7 @@ async def execute_workspace(
     current_user: User = Depends(get_current_user),
     workspace_service: WorkspaceService = Depends(get_workspace_service),
     app_db: AppDatabase = Depends(get_app_db),
-    db_provider: DatabaseProvider = Depends(get_db_provider),
-    registry: ExecutionRegistry = Depends(get_execution_registry),
+    db_provider: DatabaseProvider = Depends(get_db_provider)
 ) -> dict[str, Any]:
     """
     Execute the stored query for a workspace server-side using centralized credentials.
@@ -198,14 +195,12 @@ async def execute_workspace(
     """
     # Delegate execution to WorkspaceService which enforces approval rules (using centralized credentials)
     ad_hoc = execution_request.ad_hoc_mask_columns if execution_request else None
-    execution_id = str(execution_request.execution_id) if execution_request and execution_request.execution_id else None
-    async with registry.track(current_user.id, execution_id):
-        result: dict[str, Any] = await workspace_service.execute_workspace(
-            workspace_id=workspace_id,
-            current_user=current_user,
-            db_provider=db_provider,
-            ad_hoc_mask_columns=ad_hoc
-        )
+    result: dict[str, Any] = await workspace_service.execute_workspace(
+        workspace_id=workspace_id,
+        current_user=current_user,
+        db_provider=db_provider,
+        ad_hoc_mask_columns=ad_hoc
+    )
 
     if result.get("response_type") == "error":
         # map to HTTP errors for common cases

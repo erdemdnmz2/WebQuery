@@ -2,7 +2,6 @@ import {
   ApiError,
   DATABASE_ACCESS_DENIED,
   QUERY_BLOCKED,
-  QUERY_CANCELLED,
   QUERY_ROLE_DENIED,
   QUERY_SENT_FOR_APPROVAL,
   QUERY_SYNTAX_ERROR,
@@ -32,7 +31,6 @@ export interface ExecutionOutcome {
   traceId?: string;
   /** The analyzer refused the query and routed it to an administrator. */
   sentForApproval: boolean;
-  cancelled: boolean;
   /** Columns the server reported as redacted in these rows. */
   maskedColumns: string[];
 }
@@ -49,7 +47,6 @@ function emptyOutcome(): ExecutionOutcome {
     limit: null,
     error: null,
     sentForApproval: false,
-    cancelled: false,
     maskedColumns: [],
   };
 }
@@ -84,11 +81,6 @@ export function outcomeFromError(error: unknown): ExecutionOutcome {
   outcome.error = errorMessage(error);
   if (error instanceof ApiError) {
     outcome.traceId = error.traceId;
-    if (error.code === QUERY_CANCELLED) {
-      outcome.cancelled = true;
-      outcome.error = null;
-      return outcome;
-    }
     // Only this code means an approval request now exists. The refusals below
     // create none, and drawing a waiting state over them made users wait on an
     // administrator who had never been asked.
@@ -115,7 +107,7 @@ export function outcomeFromError(error: unknown): ExecutionOutcome {
 
 /** One line summarising a completed run, in the language of the interface. */
 export function summarise(outcome: ExecutionOutcome, format: (value: number) => string): string | null {
-  if (outcome.error || outcome.cancelled) return null;
+  if (outcome.error) return null;
   if (outcome.affectedRows !== null) return `${format(outcome.affectedRows)} satır etkilendi`;
   if (outcome.truncated && outcome.limit !== null) {
     return `İlk ${format(outcome.limit)} satır (kırpıldı)`;

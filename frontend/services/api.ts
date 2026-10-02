@@ -72,7 +72,6 @@ export const QUERY_ROLE_DENIED = 'QUERY_ROLE_DENIED';
 export const DATABASE_ACCESS_DENIED = 'DATABASE_ACCESS_DENIED';
 /** A hard-blocked risk class: no approval can lift it. */
 export const QUERY_BLOCKED = 'QUERY_BLOCKED';
-export const QUERY_CANCELLED = 'QUERY_CANCELLED';
 
 /**
  * Someone decided this approval request first. The decision is atomic on the
@@ -267,17 +266,14 @@ export const api = {
 
   /* ----------------------------------------------------------- execution */
 
-  executeQuery: (payload: { db_uuid: string; query: string; ad_hoc_mask_columns?: string[]; execution_id?: string }) =>
+  executeQuery: (payload: { db_uuid: string; query: string; ad_hoc_mask_columns?: string[] }) =>
     request<SqlResponse>('/api/execute_query', { method: 'POST', body: payload }),
 
-  executeWorkspace: (id: number, adHocMaskColumns?: string[], executionId?: string) =>
+  executeWorkspace: (id: number, adHocMaskColumns?: string[]) =>
     request<SqlResponse>(`/api/execute_workspace/${id}`, {
       method: 'POST',
-      body: { ad_hoc_mask_columns: adHocMaskColumns ?? null, execution_id: executionId },
+      body: { ad_hoc_mask_columns: adHocMaskColumns ?? null },
     }),
-
-  cancelExecution: (executionId: string) =>
-    request<{ status: 'cancelling' }>(`/api/query_executions/${executionId}/cancel`, { method: 'POST' }),
 
   /* --------------------------------------------------------------- admin */
 
@@ -285,10 +281,8 @@ export const api = {
     request<{ waiting_approvals?: PendingQuery[] }>('/api/admin/queries_to_approve').then(
       (data) => data.waiting_approvals ?? [],
     ),
-  previewQuery: (workspaceId: number, executionId?: string) =>
-    request<PreviewResponse>(`/api/admin/execute_for_preview/${workspaceId}`, {
-      method: 'POST', body: { execution_id: executionId },
-    }),
+  previewQuery: (workspaceId: number) =>
+    request<PreviewResponse>(`/api/admin/execute_for_preview/${workspaceId}`, { method: 'POST' }),
   approveQuery: (workspaceId: number, showResults: boolean) =>
     request<{ success?: boolean; message?: string }>(`/api/admin/approve_query/${workspaceId}`, {
       method: 'POST',

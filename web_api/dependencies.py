@@ -14,7 +14,6 @@ from database_provider import DatabaseProvider
 from notification import NotificationService
 from owner.services import OwnerService
 from query_execution.services import QueryService
-from query_execution.cancellation import ExecutionRegistry
 from workspaces.exceptions import WorkspaceAccessDeniedError, WorkspaceNotFoundError
 from workspaces.services import WorkspaceService
 
@@ -27,7 +26,6 @@ class AppContext:
     def __init__(self, app_db: AppDatabase, db_provider: DatabaseProvider):
         self.app_db = app_db
         self.db_provider = db_provider
-        self.execution_registry = ExecutionRegistry()
         
         # Initialize stateless services
         self.notification_service = NotificationService()
@@ -46,10 +44,6 @@ def get_context(request: Request) -> AppContext:
     Returns the AppContext container from request app state.
     """
     return request.app.state.context
-
-
-def get_execution_registry(context: AppContext = Depends(get_context)) -> ExecutionRegistry:
-    return context.execution_registry
 
 
 def get_app_db(context: AppContext = Depends(get_context)) -> AppDatabase:

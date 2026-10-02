@@ -4,7 +4,6 @@ Pydantic models for workspace endpoints
 """
 
 from pydantic import BaseModel, ConfigDict
-from query_execution.schemas import ExecutionRequest
 
 
 class WorkspaceInfo(BaseModel):
@@ -70,6 +69,6 @@ class WorkspaceUpdate(BaseModel):
     query: str
 
 
-class WorkspaceExecutionRequest(ExecutionRequest):
+class WorkspaceExecutionRequest(BaseModel):
     """Workspace execution request containing ad-hoc columns to mask"""
     ad_hoc_mask_columns: list[str] | None = None

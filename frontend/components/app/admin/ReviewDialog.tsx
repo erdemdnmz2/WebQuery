@@ -1,8 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { CheckIcon, EyeIcon, ProhibitIcon, ShareNetworkIcon } from '@phosphor-icons/react';
-import { APPROVAL_CONFLICT, QUERY_CANCELLED, ApiError, api, errorMessage } from '../../../services/api';
-import { useQueryCancellation } from '../../../lib/query-cancellation';
-import { QueryCancelControl } from '../QueryCancelControl';
+import { APPROVAL_CONFLICT, ApiError, api, errorMessage } from '../../../services/api';
 import { formatCount } from '../../../lib/format';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
@@ -11,7 +9,6 @@ import { Dialog } from '../../ui/Dialog';
 import { EmptyState } from '../../ui/EmptyState';
 import { Field } from '../../ui/Field';
 import { Textarea } from '../../ui/Input';
-import { SkeletonRows } from '../../ui/Skeleton';
 import { useToast } from '../../ui/Toast';
 import { CodeEditor } from '../CodeEditor';
 import type { PendingQuery, PreviewResponse } from '../../../types';
@@ -42,8 +39,6 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
-  const [previewCancelled, setPreviewCancelled] = useState(false);
-  const cancellation = useQueryCancellation();
   const [deciding, setDeciding] = useState(false);
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState<string | null>(null);
@@ -55,30 +50,20 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
 
   const runPreview = async () => {
     if (!request) return;
-    const executionId = cancellation.begin();
-    if (!executionId) return;
     setPreviewing(true);
     setPreviewError(null);
-    setPreview(null);
-    setPreviewCancelled(false);
     try {
-      setPreview(await api.previewQuery(request.workspace_id, executionId));
+      setPreview(await api.previewQuery(request.workspace_id));
     } catch (caught) {
-      if (caught instanceof ApiError && caught.code === QUERY_CANCELLED) {
-        setPreviewCancelled(true);
-      } else {
-        setPreviewError(errorMessage(caught));
-      }
+      setPreviewError(errorMessage(caught));
     } finally {
       setPreviewing(false);
-      cancellation.finish(executionId);
     }
   };
 
   const resetDecisionState = () => {
     setPreview(null);
     setPreviewError(null);
-    setPreviewCancelled(false);
     setReason('');
     setReasonError(null);
   };
@@ -137,26 +122,25 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
       title="Sorgu talebini incele"
       description="Karar verilene kadar kullanıcı bu sorguyu düzenleyemez veya çalıştıramaz."
       size="xl"
-      busy={deciding || previewing}
+      busy={deciding}
       footer={
         <>
           <Button
             variant="danger"
             icon={<ProhibitIcon size={14} />}
-            disabled={deciding || previewing}
+            disabled={deciding}
             onClick={() => void decide('reject')}
           >
             Reddet
           </Button>
           <div className="flex-1" />
-          <Button icon={<CheckIcon size={14} />} disabled={deciding || previewing} onClick={() => void decide('approve')}>
+          <Button icon={<CheckIcon size={14} />} disabled={deciding} onClick={() => void decide('approve')}>
             Onayla, paylaşma
           </Button>
           <Button
             variant="primary"
             icon={<ShareNetworkIcon size={14} />}
             loading={deciding}
-            disabled={previewing}
             onClick={() => void decide('approve-share')}
           >
             Onayla ve paylaş
@@ -202,31 +186,13 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
                   </span>
                 )}
               </h3>
-              <div className="flex items-start gap-2">
-                <Button
-                  size="sm"
-                  icon={<EyeIcon size={13} />}
-                  disabled={deciding}
-                  loading={previewing}
-                  onClick={() => void runPreview()}
-                >
-                  Önizlemeyi çalıştır
-                </Button>
-                {previewing && <QueryCancelControl cancellation={cancellation} size="sm" />}
-              </div>
+              <Button size="sm" icon={<EyeIcon size={13} />} loading={previewing} onClick={() => void runPreview()}>
+                Önizlemeyi çalıştır
+              </Button>
             </div>
 
             <div className="h-52 overflow-hidden rounded-md border border-line bg-sunken">
-              {previewing ? (
-                <div className="p-3.5" role="status" aria-busy="true">
-                  <span className="sr-only">Sorgu çalışıyor</span>
-                  <SkeletonRows />
-                </div>
-              ) : previewCancelled ? (
-                <div role="status">
-                  <EmptyState size="sm" title="Sorgu iptal edildi" description="Önizleme hedef veritabanında durduruldu." />
-                </div>
-              ) : previewError ? (
+              {previewError ? (
                 <div className="p-3.5">
                   <pre className="whitespace-pre-wrap break-words rounded-sm border border-danger-line bg-danger-soft p-3 font-mono text-[12px] text-danger">
                     {previewError}

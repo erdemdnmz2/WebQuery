@@ -13,10 +13,7 @@ from common.roles import mode_from_credentials
 from dependencies import (
     admin_required,
     get_admin_service,
-    get_execution_registry,
 )
-from query_execution.cancellation import ExecutionRegistry
-from query_execution.schemas import ExecutionRequest
 
 from .schemas import (
     AdminApprovalsList,
@@ -106,21 +103,17 @@ async def reject_query(
 async def execute_for_preview(
     workspace_id: int,
     request: Request,
-    execution_request: ExecutionRequest | None = None,
     current_admin : User = Depends(admin_required),
-    service : AdminService = Depends(get_admin_service),
-    registry: ExecutionRegistry = Depends(get_execution_registry),
+    service : AdminService = Depends(get_admin_service)
 ):
     """
     Admin için workspace sorgusunu preview eder (önizleme)
 
     Admin yetkisi gerektirir. execute_for_preview, query'yi çalıştırır ancak status değiştirmez.
     """
-    execution_id = str(execution_request.execution_id) if execution_request and execution_request.execution_id else None
-    async with registry.track(current_admin.id, execution_id):
-        result = await service.execute_for_preview(
-            workspace_id, current_admin, client_ip=_peer_ip(request)
-        )
+    result = await service.execute_for_preview(
+        workspace_id, current_admin, client_ip=_peer_ip(request)
+    )
 
     if isinstance(result, dict) and result.get("response_type") == "error":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("error"))
