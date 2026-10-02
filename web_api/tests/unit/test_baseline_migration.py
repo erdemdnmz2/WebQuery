@@ -3,10 +3,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, select, true
 from sqlalchemy.dialects import mssql
 
-from app_database.models import Base, Workspace
+from app_database.models import Base, Databases, Workspace
 
 WEB_API_DIR = Path(__file__).resolve().parents[2]
 
@@ -178,3 +178,13 @@ def test_workspace_nvarchar_migration_is_reachable(tmp_path: Path) -> None:
     )
     assert history.returncode == 0, history.stderr
     assert "a3f5c81b9d24" in history.stdout
+
+
+def test_active_database_filter_compiles_with_equals_on_mssql() -> None:
+    """`IS 1` is invalid on SQL Server; boolean filters must render with `=`."""
+    dialect = mssql.dialect()
+    statement = select(Databases).where(Databases.is_active == true())
+    compiled = str(statement.compile(dialect=dialect, compile_kwargs={"literal_binds": True}))
+
+    assert " = 1" in compiled
+    assert " IS 1" not in compiled
