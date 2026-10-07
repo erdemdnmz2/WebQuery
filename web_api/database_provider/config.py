@@ -118,7 +118,7 @@ def apply_statement_timeout(engine, tech: str, timeout_seconds: int) -> None:
             # A driver that does not expose a mutable timeout must not take the
             # connection down; the absence is visible in the log instead.
             logger.warning(
-                "Hedef bağlantıda ifade zaman aşımı ayarlanamadı (tech=%s)", tech
+                "Could not set statement timeout on target connection (tech=%s)", tech
             )
 
 def get_driver_for_technology(technology: str) -> str:

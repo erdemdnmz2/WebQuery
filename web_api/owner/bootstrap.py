@@ -32,7 +32,7 @@ async def bootstrap_owner(
     normalized_email = str(_EMAIL_ADAPTER.validate_python(email.strip())).casefold()
     normalized_username = username.strip() if username else None
     if username is not None and not normalized_username:
-        raise ValueError("Yeni OWNER kullanıcı adı boş olamaz.")
+        raise ValueError("The new OWNER username cannot be empty.")
     created = False
     activated = False
 
@@ -49,7 +49,7 @@ async def bootstrap_owner(
             if user is None:
                 if not normalized_username or not password:
                     raise ValueError(
-                        "Kullanıcı bulunamadı; yeni OWNER için --username ve parola gerekir."
+                        "User not found; --username and a password are required for a new OWNER."
                     )
                 user = User(
                     username=normalized_username,
@@ -85,7 +85,7 @@ async def bootstrap_owner(
 
             user_id = user.id
     except IntegrityError as exc:
-        raise ValueError("OWNER e-posta adresi veya kullanıcı adı zaten kayıtlı.") from exc
+        raise ValueError("The OWNER email address or username is already registered.") from exc
 
     return user_id, True
 
@@ -101,6 +101,7 @@ async def ensure_active_owner(app_db: AppDatabase) -> None:
         )
     if not count:
         logger.critical(
-            "Aktif platform OWNER bulunamadı. Sunucuda `python -m scripts.bootstrap_owner --email <email>` komutuyla OWNER bootstrap edin."
+            "No active platform OWNER found. Bootstrap an OWNER on the server with "
+            "`python -m scripts.bootstrap_owner --email <email>`."
         )
         raise SystemExit(1)

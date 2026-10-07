@@ -19,26 +19,26 @@ def _query_block_text(request_id: str, query: str) -> str:
     if len(query) <= _QUERY_TEXT_BUDGET:
         return f"*Sorgu:*\n```{query}```"
     return (
-        f"*Sorgu:* _(ilk {_QUERY_TEXT_BUDGET} karakter; tamamı için "
-        f"WebQuery onay kuyruğuna bakın — istek {request_id})_\n"
+        f"*Query:* _(first {_QUERY_TEXT_BUDGET} characters; see the WebQuery "
+        f"approval queue for the full query — request {request_id})_\n"
         f"```{query[:_QUERY_TEXT_BUDGET]}```"
     )
 
 
 def create_approval_message(request_id: str, username: str, machine_name: str, database: str, query: str, risk_score: str) -> list[dict[str, Any]]:
     """
-    Slack için butonlu onay mesajı bloklarını oluşturur.
-    request_id (UUID) butonların 'value' kısmına gizlenir.
+    Builds buttoned approval message blocks for Slack.
+    The request_id (UUID) is carried in the buttons' 'value' field.
 
-    Sorgu metninin tamamının Slack'e çıkması bilinçli bir karardır; gerekçesi
-    ve sınırları `docs/features.md` (eski ADR-0019) içindedir.
+    Sending the full query text to Slack is deliberate; its rationale and
+    limits are documented in `docs/features.md` (legacy ADR-0019).
     """
     return [
         {
             "type": "header",
             "text": {
                 "type": "plain_text",
-                "text": "⚠️ Kritik Sorgu Onayı Bekleniyor",
+                "text": "⚠️ Critical Query Approval Required",
                 "emoji": True
             }
         },
@@ -47,7 +47,7 @@ def create_approval_message(request_id: str, username: str, machine_name: str, d
             "fields": [
                 {
                     "type": "mrkdwn",
-                    "text": f"*Kullanıcı:*\n{username}"
+                    "text": f"*User:*\n{username}"
                 },
                 {
                     "type": "mrkdwn",
@@ -55,7 +55,7 @@ def create_approval_message(request_id: str, username: str, machine_name: str, d
                 },
                 {
                     "type": "mrkdwn",
-                    "text": f"*Veritabanı:*\n{database}"
+                    "text": f"*Database:*\n{database}"
                 },
                 {
                     "type": "mrkdwn",

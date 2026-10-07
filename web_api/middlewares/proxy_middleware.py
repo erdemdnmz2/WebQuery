@@ -44,14 +44,14 @@ def parse_trusted_proxies(raw: str | None) -> list[ipaddress.IPv4Network | ipadd
         if candidate == "*":
             logger.error(
                 "TRUSTED_PROXY_IPS='*' kabul edilmiyor: her istemci kendi IP'sini "
-                "sahteleyebilirdi. Girdi yok sayıldı."
+                "could have been forged. The input was ignored."
             )
             continue
         try:
             networks.append(ipaddress.ip_network(candidate, strict=False))
         except ValueError:
             logger.warning(
-                "TRUSTED_PROXY_IPS içindeki '%s' geçerli bir IP/CIDR değil; yok sayıldı.",
+                "'%s' in TRUSTED_PROXY_IPS is not a valid IP/CIDR; ignored.",
                 candidate,
             )
     return networks
@@ -105,13 +105,13 @@ class TrustedProxyMiddleware:
         self.networks = parse_trusted_proxies(raw)
         if self.networks:
             logger.info(
-                "Güvenilen proxy ağı sayısı: %d; istemci IP'si X-Forwarded-For'dan çözülecek",
+                "Trusted proxy networks: %d; client IP will be resolved from X-Forwarded-For",
                 len(self.networks),
             )
         else:
             logger.warning(
-                "TRUSTED_PROXY_IPS tanımlı değil. Uygulama bir reverse proxy arkasındaysa "
-                "giriş kısıtlaması, rate limit ve audit kayıtları tek bir IP'ye düşer."
+                "TRUSTED_PROXY_IPS is not configured. If the application is behind a reverse proxy, "
+                "login protection, rate limiting and audit records will collapse to one IP."
             )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:

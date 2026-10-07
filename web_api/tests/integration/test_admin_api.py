@@ -209,7 +209,7 @@ async def test_owner_database_registration_requires_explicit_initial_admin(async
     }
     response = await async_client.post("/api/owner/databases", json=db_payload)
     assert response.status_code == 201
-    assert response.json()["message"] == "Veritabanı kaydedildi."
+    assert response.json()["message"] == "Database registered."
     
     # Verify database entry in metadata DB
     app_db = app.state.context.app_db
@@ -244,7 +244,7 @@ async def test_owner_database_registration_requires_explicit_initial_admin(async
     response_dup = await async_client.post("/api/owner/databases", json=db_payload)
     assert response_dup.status_code == 400
     assert response_dup.json()["error_code"] == "DATABASE_ALREADY_EXISTS"
-    assert response_dup.json()["message"] == "Veritabanı zaten kayıtlı."
+    assert response_dup.json()["message"] == "Database is already registered."
 
 
 @pytest.mark.asyncio

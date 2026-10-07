@@ -74,7 +74,7 @@ class DatabaseProvider:
             }
 
         logger.debug(
-            "Hedef veritabanı kataloğu güncellendi: %d sunucu, %d veritabanı",
+            "Target database catalog refreshed: %d servers, %d databases",
             len(self.db_info),
             len(self.db_by_uuid),
         )
@@ -130,7 +130,7 @@ class DatabaseProvider:
         credentials = self._credentials_for(db_uuid, tier)
         if credentials is None:
             raise ValueError(
-                f"Bu veritabanı için {tier.upper()} kademesinde kimlik bilgisi tanımlı değil."
+                f"No credentials are configured for the {tier.upper()} tier of this database."
             )
         username, password = credentials
         conn_str = create_connection_string(

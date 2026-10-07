@@ -182,7 +182,7 @@ class QueryService:
                 )
                 raise QueryBlockedError(
                     message=query_analysis.get("reason")
-                    or "Bu sorgu güvenlik politikası gereği engellendi."
+                    or "This query was blocked by security policy."
                 )
 
             # An administrator skips the approval requirement, not the security
@@ -191,7 +191,7 @@ class QueryService:
             # stops being part of the decision. Until then the skip is logged.
             if not query_analysis["return"] and is_db_admin:
                 logger.warning(
-                    "Admin riskli sorgu çalıştırıyor: user=%s risk=%s db=%s",
+                    "Admin is executing a risky query: user=%s risk=%s db=%s",
                     getattr(user, "username", user.id),
                     risk_level,
                     database_name,

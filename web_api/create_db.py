@@ -35,8 +35,8 @@ _SAFE_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 def _validate_identifier(name: str, field: str) -> str:
     if not _SAFE_IDENTIFIER.match(name):
         raise ValueError(
-            f"{field} güvenli bir SQL tanımlayıcı değil: {name!r}. "
-            "Yalnız harf, rakam ve alt çizgi kabul edilir."
+            f"{field} is not a safe SQL identifier: {name!r}. "
+            "Only letters, digits and underscores are accepted."
         )
     return name
 
@@ -59,14 +59,14 @@ def create_database_and_user_if_not_exists() -> None:
     Also handles custom user creation if DB_USER is not 'sa'.
     Uses a synchronous SQLAlchemy engine with AUTOCOMMIT isolation level.
     """
-    logger.info("Uygulama veritabanı ve kullanıcı yapılandırması denetleniyor")
+    logger.info("Checking application database and user configuration")
 
     url = make_url(DATABASE_URL)
-    target_db = _validate_identifier(url.database, "Hedef veritabanı adı")
+    target_db = _validate_identifier(url.database, "Target database name")
     target_user = url.username
     target_password = url.password
     if target_user and target_user.lower() != "sa":
-        _validate_identifier(target_user, "Uygulama kullanıcı adı")
+        _validate_identifier(target_user, "Application username")
 
     # We need to connect as 'sa' to create DBs and Users.
     # We assume the password provided in env is the SA password
@@ -90,27 +90,27 @@ def create_database_and_user_if_not_exists() -> None:
                 {"name": target_db},
             )
             if not result.scalar():
-                logger.info("Uygulama veritabanı oluşturuluyor")
+                logger.info("Creating application database")
                 conn.execute(text(f"CREATE DATABASE [{target_db}]"))
-                logger.info("Uygulama veritabanı oluşturuldu")
+                logger.info("Application database created")
             else:
-                logger.info("Uygulama veritabanı zaten mevcut")
+                logger.info("Application database already exists")
 
             # 2. Create User if not 'sa'
             if target_user and target_user.lower() != 'sa':
-                logger.info("Uygulama veritabanı kullanıcısı denetleniyor")
+                logger.info("Checking application database user")
 
                 login_check = conn.execute(
                     text("SELECT 1 FROM sys.server_principals WHERE name = :name"),
                     {"name": target_user},
                 )
                 if not login_check.scalar():
-                    logger.info("Uygulama veritabanı giriş hesabı oluşturuluyor")
+                    logger.info("Creating application database login")
                     escaped_password = _escape_literal(target_password or "")
                     conn.execute(
                         text(f"CREATE LOGIN [{target_user}] WITH PASSWORD = '{escaped_password}'")
                     )
-                    logger.info("Uygulama veritabanı giriş hesabı oluşturuldu")
+                    logger.info("Application database login created")
 
                 # Switch to target database to create User and assign roles
                 conn.execute(text(f"USE [{target_db}]"))
@@ -120,7 +120,7 @@ def create_database_and_user_if_not_exists() -> None:
                     {"name": target_user},
                 )
                 if not user_check.scalar():
-                    logger.info("Uygulama veritabanı kullanıcısı oluşturuluyor")
+                    logger.info("Creating application database user")
                     conn.execute(text(f"CREATE USER [{target_user}] FOR LOGIN [{target_user}]"))
                     # db_owner here is scoped to this one application database,
                     # not to the server: the login has no sysadmin membership
@@ -129,9 +129,9 @@ def create_database_and_user_if_not_exists() -> None:
                     # CREATE INDEX, ...) that a narrower fixed role would not
                     # cover.
                     conn.execute(text(f"ALTER ROLE db_owner ADD MEMBER [{target_user}]"))
-                    logger.info("Uygulama veritabanı kullanıcısı ve rolü oluşturuldu")
+                    logger.info("Application database user and role created")
                 else:
-                    logger.info("Uygulama veritabanı kullanıcısı zaten mevcut")
+                    logger.info("Application database user already exists")
     finally:
         engine.dispose()
 

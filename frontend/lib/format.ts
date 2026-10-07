@@ -1,4 +1,4 @@
-const NUMBER_FORMAT = new Intl.NumberFormat('tr-TR');
+const NUMBER_FORMAT = new Intl.NumberFormat("en-US");
 
 /** Groups digits so a 1.2 million row count is readable at a glance. */
 export function formatCount(value: number): string {
@@ -15,7 +15,7 @@ export function formatBytes(bytes: number): string {
 /** Milliseconds rendered the way an engineer reads a query timing. */
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)} ms`;
-  return `${(ms / 1000).toFixed(2)} sn`;
+  return `${(ms / 1000).toFixed(2)} s`;
 }
 
 /**
@@ -24,7 +24,7 @@ export function formatDuration(ms: number): string {
  */
 export function formatCell(value: unknown): { text: string; kind: 'null' | 'empty' | 'value' } {
   if (value === null || value === undefined) return { text: 'NULL', kind: 'null' };
-  if (typeof value === 'string' && value.length === 0) return { text: 'boş', kind: 'empty' };
+  if (typeof value === 'string' && value.length === 0) return { text: "empty", kind: 'empty' };
   if (typeof value === 'object') return { text: JSON.stringify(value), kind: 'value' };
   return { text: String(value), kind: 'value' };
 }

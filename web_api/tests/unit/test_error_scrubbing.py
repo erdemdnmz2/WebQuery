@@ -15,7 +15,7 @@ def test_connection_error_does_not_expose_client_infrastructure_details():
     assert "webquery_svc" not in output
     assert "sql-prod-03" not in output
     assert "PayrollProd" not in output
-    assert output.startswith("Sorgu çalıştırılamadı.")
+    assert output.startswith("Could not execute the query.")
 
 
 def test_user_fixable_sql_error_is_preserved_without_driver_noise():

@@ -112,9 +112,9 @@ async def execute_for_preview(
     registry: ExecutionRegistry = Depends(get_execution_registry),
 ):
     """
-    Admin için workspace sorgusunu preview eder (önizleme)
+    Preview a workspace query for an administrator.
 
-    Admin yetkisi gerektirir. execute_for_preview, query'yi çalıştırır ancak status değiştirmez.
+    Requires administrator access. execute_for_preview runs the query without changing its status.
     """
     execution_id = str(execution_request.execution_id) if execution_request and execution_request.execution_id else None
     async with registry.track(current_admin.id, execution_id):

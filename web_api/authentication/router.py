@@ -66,7 +66,7 @@ def get_login_throttle(request: Request) -> LoginThrottle:
     if throttle is None:
         raise HTTPException(
             status_code=503,
-            detail="Giriş koruması geçici olarak kullanılamıyor.",
+            detail="Login protection is temporarily unavailable.",
         )
     return throttle
 
@@ -75,8 +75,8 @@ def get_login_throttle(request: Request) -> LoginThrottle:
 # is an OWNER decision in all cases, so this wording is accurate either way and
 # does not confirm whether an address is already registered.
 _REGISTRATION_ACK = (
-    "Kayıt başvurunuz alındı. Yönetici hesabınızı etkinleştirdiğinde "
-    "giriş yapabilirsiniz."
+    "Your registration request was received. You can sign in once an "
+    "administrator activates your account."
 )
 
 
@@ -96,7 +96,7 @@ def _current_session_id(request: Request) -> int | None:
 def _throttle_unavailable() -> HTTPException:
     return HTTPException(
         status_code=503,
-        detail="Giriş koruması geçici olarak kullanılamıyor.",
+        detail="Login protection is temporarily unavailable.",
     )
 
 
@@ -132,8 +132,8 @@ async def login(
         raise HTTPException(
             status_code=429,
             detail=(
-                "Çok fazla başarısız giriş denemesi. "
-                f"Yaklaşık {max(1, wait // 60)} dakika sonra tekrar deneyin."
+                "Too many failed sign-in attempts. "
+                f"Try again in about {max(1, wait // 60)} minutes."
             ),
         )
 
@@ -238,15 +238,15 @@ async def refresh_session(
 
     rotated = await sessions.rotate_refresh(app_db, token)
     if rotated is None:
-        raise HTTPException(status_code=401, detail="Oturum süresi doldu")
+        raise HTTPException(status_code=401, detail="Session expired")
     if rotated.get("reuse"):
-        raise HTTPException(status_code=401, detail="Güvenlik nedeniyle oturum sonlandırıldı. Tekrar giriş yapın.")
+        raise HTTPException(status_code=401, detail="Session ended for security reasons. Sign in again.")
 
     async with app_db.get_app_db() as db:
         user = await db.get(User, rotated["user_id"])
     if user is None or not getattr(user, "is_active", True):
-        await sessions.revoke_session(app_db, rotated["session_id"], "hesap devre dışı")
-        raise HTTPException(status_code=401, detail="Hesabınız devre dışı bırakılmış")
+        await sessions.revoke_session(app_db, rotated["session_id"], "account disabled")
+        raise HTTPException(status_code=401, detail="Your account has been disabled")
 
     access = sessions.mint_access(rotated["user_id"], rotated["session_id"])
     _clear_legacy_refresh_cookie(response)
@@ -287,7 +287,7 @@ async def register(
     if not config.is_registration_domain_allowed(user.email):
         raise HTTPException(
             status_code=403,
-            detail="Bu e-posta alan adıyla kayıt yapılamaz.",
+            detail="Registration is not allowed with this email domain.",
         )
 
     # The password policy is checked before touching the database so an invalid
@@ -306,7 +306,7 @@ async def register(
             # Answering 409 for a known address confirmed which corporate
             # mailboxes exist; activation is an OWNER decision either way, so
             # the caller learns nothing by being told the truth here.
-            logger.info("Kayıt denemesi mevcut bir e-posta için yapıldı")
+            logger.info("Registration attempted for an existing email")
             return {"success": True, "message": _REGISTRATION_ACK}
 
         new_user: User = User(
@@ -384,12 +384,12 @@ async def change_password(
     """
     # Both hashes run on a worker thread; see `User.acheck_password`.
     if not await current_user.acheck_password(payload.current_password):
-        logger.warning("Şifre değiştirme reddedildi: mevcut şifre hatalı")
-        raise HTTPException(status_code=400, detail="Mevcut şifre hatalı.")
+        logger.warning("Password change rejected: current password is invalid")
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
 
     if payload.new_password == payload.current_password:
         raise HTTPException(
-            status_code=400, detail="Yeni şifre mevcut şifreyle aynı olamaz."
+            status_code=400, detail="The new password cannot match the current password."
         )
 
     try:
@@ -436,7 +436,7 @@ async def change_password(
 
     return {
         "success": True,
-        "message": "Şifreniz güncellendi. Diğer oturumlarınız sonlandırıldı.",
+        "message": "Your password was updated. Other sessions were ended.",
         "revoked_sessions": revoked_count,
     }
 
@@ -473,7 +473,7 @@ async def logout(
             if payload.get("sid"):
                 await sessions.revoke_session(app_db, int(payload["sid"]), "logout")
         except Exception as exc:
-            logger.warning("Çıkış sırasında oturum iptal edilemedi: %s", type(exc).__name__)
+            logger.warning("Could not revoke the session during sign-out: %s", type(exc).__name__)
 
     # Clear token from cookie
     response.delete_cookie(

@@ -54,8 +54,8 @@ def _log_slack_listener_exit(task: "asyncio.Task[None]") -> None:
     exc = task.exception()
     if exc is not None:
         logger.error(
-            "Slack dinleyicisi beklenmedik şekilde sonlandı: %s; "
-            "Slack onay akışı çalışmayacak",
+            "Slack listener exited unexpectedly: %s; "
+            "the Slack approval flow will not run",
             type(exc).__name__,
         )
 
@@ -67,15 +67,15 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     verify_startup_config()
-    logger.info("Uygulama başlatılıyor")
+    logger.info("Starting application")
 
     try:
         app.state.login_throttle = RedisLoginThrottle.from_environment()
         await app.state.login_throttle.ping()
-        logger.info("Redis giriş kısıtlayıcı bağlantısı doğrulandı")
+        logger.info("Redis login throttle connection verified")
     except (LoginThrottleUnavailable, ValueError) as exc:
         logger.critical(
-            "Redis giriş kısıtlayıcı bağlantısı kurulamadı: %s; uygulama başlatılmayacak",
+            "Could not connect to the Redis login throttle: %s; application will not start",
             type(exc).__name__,
         )
         raise SystemExit(1) from exc
@@ -92,9 +92,9 @@ async def lifespan(app: FastAPI):
             # than trusted. verify_schema raises SystemExit, which is a
             # BaseException and deliberately passes through the handler below.
             await conn.run_sync(verify_schema)
-        logger.info("Uygulama veritabanı bağlantısı ve şema doğrulandı")
+        logger.info("Application database connection and schema verified")
         await ensure_active_owner(app.state.app_db)
-        logger.info("Aktif platform OWNER doğrulandı")
+        logger.info("Active platform OWNER verified")
         # Schema is managed by Alembic (`alembic upgrade head`, run in
         # entrypoint.sh before this process starts) — see
         # docs/architecture.md (legacy ADR-0001). Two instances
@@ -102,7 +102,7 @@ async def lifespan(app: FastAPI):
         # changes and couldn't add columns to existing tables.
     except Exception as e:
         logger.critical(
-            "Uygulama veritabanı başlatılamadı: %s; APP_DATABASE_URL ayarını kontrol edin",
+            "Could not initialize the application database: %s; check APP_DATABASE_URL",
             type(e).__name__,
         )
         await app.state.app_db.app_engine.dispose() if hasattr(app.state, 'app_db') else None
@@ -124,7 +124,7 @@ async def lifespan(app: FastAPI):
 
     except Exception as e:
         logger.warning(
-            "Slack entegrasyonu başlatılamadı: %s; Slack özellikleri devre dışı kalacak",
+            "Could not initialize Slack integration: %s; Slack features will be disabled",
             type(e).__name__,
         )
 
@@ -133,10 +133,10 @@ async def lifespan(app: FastAPI):
         db_info = await app.state.app_db.get_db_info()
         app.state.db_provider.set_db_info(db_info)
         await app.state.db_provider.start_cache_loop()
-        logger.info("Hedef veritabanı sağlayıcısı ve engine cache başlatıldı")
+        logger.info("Target database provider and engine cache initialized")
     except Exception as e:
         logger.critical(
-            "Hedef veritabanı sağlayıcısı başlatılamadı: %s; bağlantı yapılandırmasını kontrol edin",
+            "Could not initialize the target database provider: %s; check the connection configuration",
             type(e).__name__,
         )
         # Cleanup
@@ -150,42 +150,42 @@ async def lifespan(app: FastAPI):
             app_db=app.state.app_db,
             db_provider=app.state.db_provider
         )
-        logger.info("Uygulama bağlamı başlatıldı")
+        logger.info("Application context initialized")
     except Exception as e:
-        logger.critical("Uygulama bağlamı başlatılamadı: %s", type(e).__name__)
+        logger.critical("Could not initialize application context: %s", type(e).__name__)
         await app.state.app_db.app_engine.dispose()
         raise SystemExit(1)
 
-    logger.info("Tüm servisler başlatıldı")
+    logger.info("All services started")
 
     try:
         yield
     finally:
-        logger.info("Uygulama kapatılıyor")
+        logger.info("Shutting down application")
         slack_task = getattr(app.state, "slack_task", None)
         if slack_task is not None and not slack_task.done():
             slack_task.cancel()
             with suppress(asyncio.CancelledError):
                 await slack_task
-            logger.info("Slack dinleyicisi durduruldu")
+            logger.info("Slack listener stopped")
         if getattr(app.state, "login_throttle", None):
             await app.state.login_throttle.close()
-            logger.info("Redis giriş kısıtlayıcı bağlantısı kapatıldı")
+            logger.info("Redis login throttle connection closed")
         if getattr(app.state, "context", None):
             await app.state.context.execution_registry.close()
         try:
             if hasattr(app.state, 'db_provider') and app.state.db_provider:
                 await app.state.db_provider.close_engines()
-                logger.info("Hedef veritabanı bağlantıları kapatıldı")
+                logger.info("Target database connections closed")
         except Exception as e:
-            logger.error("Hedef veritabanı sağlayıcısı kapatılamadı: %s", type(e).__name__)
+            logger.error("Could not close the target database provider: %s", type(e).__name__)
         try:
             if hasattr(app.state, 'app_db') and app.state.app_db:
                 await app.state.app_db.app_engine.dispose()
-                logger.info("Uygulama veritabanı bağlantısı kapatıldı")
+                logger.info("Application database connection closed")
         except Exception as e:
-            logger.error("Uygulama veritabanı bağlantısı kapatılamadı: %s", type(e).__name__)
-        logger.info("Uygulama kapatma işlemi tamamlandı")
+            logger.error("Could not close the application database connection: %s", type(e).__name__)
+        logger.info("Application shutdown complete")
 
 app = FastAPI(
     title="WebQuery API",

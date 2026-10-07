@@ -59,7 +59,7 @@ def setup_logging() -> None:
     root_logger.addHandler(console_handler)
 
     if level == logging.INFO and configured_name != "INFO":
-        root_logger.warning("Geçersiz LOG_LEVEL; INFO seviyesi kullanılıyor")
+        root_logger.warning("Invalid LOG_LEVEL; using INFO level")
     
     # Suppress verbose loggers from libraries if needed
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)

@@ -128,7 +128,7 @@ async def rotate_refresh(app_db, refresh_token: str) -> dict | None:
             )).scalars().first()
             if compromised:
                 user_id = compromised.user_id
-                reason = "refresh token tekrar kullanımı tespit edildi"
+                reason = "refresh token reuse detected"
                 revoked = await db.execute(
                     update(UserSession)
                     .where(UserSession.user_id == user_id,

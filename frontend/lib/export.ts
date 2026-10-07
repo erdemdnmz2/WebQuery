@@ -7,7 +7,7 @@ function safeFileName(name: string): string {
       .replace(/[^\p{L}\p{N}._-]+/gu, '-')
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '')
-      .slice(0, 60) || 'sonuc'
+      .slice(0, 60) || "results"
   );
 }
 

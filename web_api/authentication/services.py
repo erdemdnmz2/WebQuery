@@ -93,7 +93,7 @@ async def get_current_user(
             raise credentials_exception
         token_data = TokenData(sub=user_id)
     except PyJWTError:
-        logger.warning("Geçersiz JWT reddedildi")
+        logger.warning("Invalid JWT rejected")
         raise credentials_exception
 
     # AuthMiddleware verifies the session once per request and records it. The

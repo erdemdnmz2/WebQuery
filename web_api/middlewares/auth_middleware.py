@@ -1,6 +1,6 @@
 """
 Authentication Middleware
-Her HTTP request için JWT token doğrulama ve session kontrolü yapar
+Validates the JWT token and checks the session for every HTTP request.
 """
 import logging
 import os
@@ -105,7 +105,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
             request.state.authenticated_user = authenticated_user
         except Exception as exc:
-            logger.warning("Kimlik doğrulama reddedildi: %s", type(exc).__name__)
+            logger.warning("Authentication rejected: %s", type(exc).__name__)
             if request.url.path.startswith("/api/"):
                 return StarletteResponse(
                     content='{"detail":"Invalid token"}',

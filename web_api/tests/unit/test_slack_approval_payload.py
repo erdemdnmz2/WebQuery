@@ -1,9 +1,9 @@
-"""Slack onay bildiriminin sorgu bloğu (ADR-0019, denetim bulgusu P2-18).
+"""The query block in the Slack approval notification (ADR-0019, finding P2-18).
 
-Slack, metni 3000 karakteri aşan bir `section` bloğunu değil, payload'ın
-tamamını reddeder. Sınır konmadan önce uzun bir sorgu, onay bildiriminin hiç
-ulaşmaması demekti: kullanıcı "onaya gönderildi" cevabını alıyor, kanalda
-hiçbir şey görünmüyordu.
+Slack rejects the entire payload when a `section` block exceeds 3000 characters.
+Before the limit was applied, a long query caused the approval notification to
+be dropped: the user received "sent for approval" while nothing appeared in
+the channel.
 """
 from slack_integration.schemas import (
     _SLACK_SECTION_LIMIT,
@@ -31,13 +31,13 @@ def _message(query: str) -> list[dict]:
 
 
 def test_a_short_query_is_sent_in_full():
-    """ADR-0019: onaylayan göremediği bir sorguyu değerlendiremez."""
+    """ADR-0019: a reviewer cannot evaluate a query they cannot see."""
     query = "DELETE FROM customers WHERE id = 42"
 
     text = _query_block(_message(query))["text"]["text"]
 
     assert query in text
-    assert "ilk" not in text  # kırpma notu yok
+    assert "first" not in text  # no truncation note
 
 
 def test_a_long_query_is_truncated_instead_of_dropping_the_notification():
@@ -47,7 +47,7 @@ def test_a_long_query_is_truncated_instead_of_dropping_the_notification():
     text = _query_block(_message(query))["text"]["text"]
 
     assert len(text) <= _SLACK_SECTION_LIMIT
-    assert text.startswith("*Sorgu:*")
+    assert text.startswith("*Query:*")
     assert query[:200] in text
     assert query not in text
 
@@ -62,8 +62,8 @@ def test_a_truncated_query_points_the_approver_at_webquery():
 
 
 def test_a_query_at_the_boundary_still_fits():
-    """Kırpma eşiğinin hemen altındaki sorgu kırpılmamalı ve blok sınırını
-    aşmamalı: sarmalayıcı metin de bütçenin içinde hesaplanıyor."""
+    """A query just below the truncation threshold must not be truncated or
+    exceed the block limit: wrapper text counts against the budget."""
     query = "x" * 2700
 
     text = _query_block(_message(query))["text"]["text"]

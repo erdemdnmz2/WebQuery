@@ -1,0 +1,75 @@
+handoff:
+  status: COMPLETE
+  from: "Codex"
+  to: "repository owner"
+  created_at: "2026-10-08T00:00:00+03:00"
+  task: "English language baseline for the main WebQuery application"
+
+  scope:
+    completed:
+      - "Translated tracked frontend UI, accessibility text, metadata and English locale formatting."
+      - "Translated backend API diagnostics, CLI prompts, Slack messages, operational logs and maintained technical prose."
+      - "Translated design/spec/ADR templates and updated message assertions without changing machine contracts."
+      - "Preserved authorization, audit logging, masking, tracing, query analysis, SQL, roles and canonical Turkish normalization values."
+    excluded:
+      - "The .local disposable demo and its local-only credentials remain outside the main tracked application."
+
+  changed_files:
+    created:
+      - "docs/specs/SPEC-0035-english-language-baseline.md"
+      - "docs/handoffs/2026-10-08-english-language-baseline.yaml"
+    modified:
+      - "frontend/**"
+      - "web_api/**"
+      - "nginx.conf"
+      - "docs/specs/SPEC-TEMPLATE.md"
+      - "docs/adr/ADR-TEMPLATE.md"
+    deleted: []
+
+  decisions:
+    - decision: "Promote the existing local English presentation into the main frontend and translate backend-controlled messages in place."
+      rationale: "The local build already provided consistent English UI wording; in-place literals preserve the existing API and runtime architecture."
+      recorded_in: "docs/specs/SPEC-0035-english-language-baseline.md"
+    - decision: "Do not add runtime i18n or rename machine-facing identifiers."
+      rationale: "The requested result is a single English baseline, and route, payload, role, SQL, masking and normalization contracts must remain stable."
+      recorded_in: "docs/specs/SPEC-0035-english-language-baseline.md"
+
+  validation:
+    commands_run:
+      - command: "git diff --check"
+        result: "passed"
+        evidence: "No whitespace errors."
+      - command: "npm run typecheck"
+        result: "passed"
+        evidence: "tsc --noEmit completed successfully."
+      - command: "npm run build"
+        result: "passed"
+        evidence: "Vite production build completed successfully."
+      - command: "npm run audit:api"
+        result: "passed"
+        evidence: "37 frontend calls matched backend routes."
+      - command: "npm run audit:contrast"
+        result: "passed"
+        evidence: "All light and dark theme contrast targets passed."
+      - command: "npm run verify:export"
+        result: "passed"
+        evidence: "XLSX export verification completed successfully."
+      - command: "npm run verify:source-map-security"
+        result: "passed"
+        evidence: "Oversized/nested source-map offsets rejected; valid map preserved."
+      - command: "pytest"
+        result: "passed"
+        evidence: "338 passed, 3 skipped."
+      - command: "python3 scripts/check_repository.py"
+        result: "passed"
+        evidence: "44 backend environment keys covered; secrets, Git exclusions, Docker rules and local links verified."
+      - command: "git grep -n -E '[çğıöşüÇĞİÖŞÜ]' -- ':!.local/**' ':!AGENTS.md'"
+        result: "passed"
+        evidence: "No Turkish-specific characters remain in the tracked application/docs scope."
+
+  open_questions: []
+
+  known_risks:
+    - "The main repository now returns English API and Slack message text; external clients that incorrectly assert human-language messages should use error codes instead."
+    - "Pydantic emitted one existing deprecation warning during pytest; it is unrelated to this translation change."
+  next_step: "Review the final diff and commit the English language baseline."

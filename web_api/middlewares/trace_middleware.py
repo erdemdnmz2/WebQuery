@@ -29,7 +29,7 @@ def _accepted_request_id(raw: str | None) -> str:
         try:
             return str(uuid.UUID(candidate))
         except ValueError:
-            logger.debug("Geçersiz X-Request-ID biçimi yok sayıldı; yeni iz kimliği üretildi")
+            logger.debug("Invalid X-Request-ID format ignored; generated a new trace ID")
     return str(uuid.uuid4())
 
 
@@ -47,7 +47,7 @@ class TraceMiddleware(BaseHTTPMiddleware):
         trace_token = trace_id_var.set(request_id)
         
         # 3. Log request initiation
-        logger.info("İstek başladı: %s %s", request.method, request.url.path)
+        logger.info("Request started: %s %s", request.method, request.url.path)
         
         start_time: float = time.time()
         try:
@@ -56,7 +56,7 @@ class TraceMiddleware(BaseHTTPMiddleware):
             # 4. Measure and log request completion
             process_time: float = (time.time() - start_time) * 1000
             logger.info(
-                "İstek tamamlandı: %s %s - durum: %d - süre: %.2fms",
+                "Request completed: %s %s - status: %d - duration: %.2fms",
                 request.method,
                 request.url.path,
                 response.status_code,
@@ -69,7 +69,7 @@ class TraceMiddleware(BaseHTTPMiddleware):
         except Exception as exc:
             process_time: float = (time.time() - start_time) * 1000
             logger.error(
-                "İstek başarısız oldu: %s %s - hata: %s - süre: %.2fms",
+                "Request failed: %s %s - error: %s - duration: %.2fms",
                 request.method,
                 request.url.path,
                 type(exc).__name__,

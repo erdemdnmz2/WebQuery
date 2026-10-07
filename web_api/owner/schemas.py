@@ -43,11 +43,11 @@ class OwnerDatabaseCreate(BaseModel):
         required = required_by_mode[self.connection_mode]
         for tier in required:
             if not all(value and value.strip() for value in supplied[tier]):
-                raise ValueError(f"{tier.upper()} kullanıcı adı ve şifresi zorunludur.")
+                raise ValueError(f"{tier.upper()} username and password are required.")
         for tier, values in supplied.items():
             if tier not in required and any(value and value.strip() for value in values):
                 raise ValueError(
-                    f"{tier.upper()} bilgileri seçilen bağlantı modunda gönderilemez."
+                    f"{tier.upper()} credentials cannot be submitted for the selected connection mode."
                 )
         return self
 
@@ -77,7 +77,7 @@ class OwnerDatabaseUpdate(BaseModel):
     @model_validator(mode="after")
     def reject_empty_update(self) -> "OwnerDatabaseUpdate":
         if not self.model_fields_set:
-            raise ValueError("Güncellenecek en az bir alan gönderilmelidir.")
+            raise ValueError("At least one field to update must be provided.")
         return self
 
     def credential_fields(self) -> dict[str, str | None]:

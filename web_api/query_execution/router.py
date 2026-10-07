@@ -70,9 +70,9 @@ async def cancel_query_execution(
 ):
     result = await registry.cancel(current_user.id, str(execution_id))
     if result == 0:
-        raise HTTPException(404, "Çalışan sorgu bulunamadı.")
+        raise HTTPException(404, "Running query not found.")
     if result == 2:
-        raise ExecutionConflict("Sorgu tamamlandı veya commit aşamasında; iptal edilemez.")
+        raise ExecutionConflict("The query has completed or is committing; it cannot be cancelled.")
     return {"status": "cancelling"}
 
 

@@ -98,7 +98,7 @@ const Studio: React.FC = () => {
         if (cancelled) return;
         setTargetsLoaded(true);
         if (!(caught instanceof UnauthorizedError)) {
-          toast.error('Bağlantı listesi alınamadı', errorMessage(caught));
+          toast.error("Could not load connections", errorMessage(caught));
         }
       });
     return () => {
@@ -126,7 +126,7 @@ const Studio: React.FC = () => {
       })
       .catch((caught) => {
         if (cancelled || caught instanceof UnauthorizedError) return;
-        toast.error('Çalışma alanı açılamadı', errorMessage(caught));
+        toast.error("Could not open workspace", errorMessage(caught));
         navigate('/');
       })
       .finally(() => {
@@ -186,11 +186,11 @@ const Studio: React.FC = () => {
 
   const runQuery = useCallback(async () => {
     if (!dbUuid) {
-      toast.error('Hedef seçilmedi', 'Çalıştırmadan önce bir sunucu ve veritabanı seçin.');
+      toast.error("No target selected", "Select a server and database before running the query.");
       return;
     }
     if (!query.trim()) {
-      toast.error('Sorgu boş', 'Çalıştırılacak bir SQL ifadesi yazın.');
+      toast.error("Empty query", "Enter an SQL statement to execute.");
       return;
     }
 
@@ -213,7 +213,7 @@ const Studio: React.FC = () => {
       setOutcome(failure);
       if (failure.sentForApproval) {
         /* The analyzer saved the statement as a workspace of its own. */
-        toast.warning('Sorgu onaya gönderildi', 'Risk analizi bu ifadeyi yönetici incelemesine yönlendirdi.');
+        toast.warning("Query sent for approval", "Risk analysis sent this statement for administrator review.");
         void reload();
       }
     } finally {
@@ -236,10 +236,10 @@ const Studio: React.FC = () => {
       await api.updateWorkspace(current.id, { query });
       setSavedQuery(query);
       void reload();
-      toast.success('Sorgu güncellendi', current.name);
+      toast.success("Query updated", current.name);
     } catch (caught) {
       if (caught instanceof UnauthorizedError) return;
-      toast.error('Kaydedilemedi', errorMessage(caught));
+      toast.error("Could not save", errorMessage(caught));
     } finally {
       setSaving(false);
     }
@@ -257,11 +257,11 @@ const Studio: React.FC = () => {
       });
       setSaveOpen(false);
       void reload();
-      toast.success('Çalışma alanı kaydedildi', saveName.trim());
+      toast.success("Workspace saved", saveName.trim());
       if (created?.workspace_id) navigate(`/editor/${created.workspace_id}`);
     } catch (caught) {
       if (caught instanceof UnauthorizedError) return;
-      toast.error('Kaydedilemedi', errorMessage(caught));
+      toast.error("Could not save", errorMessage(caught));
     } finally {
       setSaving(false);
     }
@@ -307,7 +307,7 @@ const Studio: React.FC = () => {
       serverNames(servers).map((name) => ({
         value: name,
         label: name,
-        meta: `${servers[name].databases.length} veritabanı`,
+        meta: `${servers[name].databases.length} databases`,
         trailing: servers[name].technology ? (
           <Badge tone="neutral" mono>
             {servers[name].technology}
@@ -341,14 +341,14 @@ const Studio: React.FC = () => {
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <Picker
-          label="Çalışma alanı seçin"
-          placeholder="Kaydedilmemiş sorgu"
+          label="Select a workspace"
+          placeholder="Unsaved query"
           value={current ? String(current.id) : null}
           onChange={(value) => navigate(`/editor/${value}`)}
           items={workspaceItems}
           triggerClassName="w-[220px]"
-          emptyMessage="Kayıtlı çalışma alanı yok"
-          searchPlaceholder="Çalışma alanı ara"
+          emptyMessage="No saved workspaces"
+          searchPlaceholder="Search workspaces"
           header={(close) => (
             <button
               type="button"
@@ -363,33 +363,33 @@ const Studio: React.FC = () => {
               className="flex w-full items-center gap-2 border-b border-line px-3 py-2 text-left text-[13px] text-accent hover:bg-hover"
             >
               <PlusIcon size={14} weight="bold" />
-              Yeni sorgu
+              New query
             </button>
           )}
         />
 
         <Picker
-          label="Sunucu seçin"
-          placeholder="Sunucu"
+          label="Select a server"
+          placeholder="Server"
           value={server || null}
           onChange={chooseServer}
           items={serverItems}
           triggerClassName="w-[210px]"
-          emptyMessage="Yetkili olduğunuz sunucu yok"
-          searchPlaceholder="Sunucu ara"
+          emptyMessage="No accessible servers"
+          searchPlaceholder="Search servers"
           leading={<HardDrivesIcon size={14} className="shrink-0 text-subtle" />}
         />
 
         <Picker
-          label="Veritabanı seçin"
-          placeholder="Veritabanı"
+          label="Select a database"
+          placeholder="Database"
           value={dbUuid || null}
           onChange={setDbUuid}
           items={databaseItems}
           disabled={!server}
           triggerClassName="w-[190px]"
-          emptyMessage="Bu sunucuda yetkili olduğunuz veritabanı yok"
-          searchPlaceholder="Veritabanı ara"
+          emptyMessage="No accessible databases on this server"
+          searchPlaceholder="Search databases"
           leading={<DatabaseIcon size={14} className="shrink-0 text-subtle" />}
         />
 
@@ -401,7 +401,7 @@ const Studio: React.FC = () => {
 
         <div className="ml-auto flex items-center gap-2">
           <Button icon={<LockKeyIcon size={14} />} disabled={!dbUuid} onClick={() => setMaskingOpen(true)}>
-            Maskeleme
+            Masking
             {maskedCount > 0 && (
               <span className="ml-0.5 rounded-[var(--r-pill)] bg-warning-soft px-1.5 text-[10.5px] font-medium leading-[16px] text-warning">
                 {maskedCount}
@@ -415,8 +415,8 @@ const Studio: React.FC = () => {
             disabled={!editable || !dbUuid}
             onClick={() => void saveWorkspace()}
           >
-            {current ? 'Kaydet' : 'Farklı kaydet'}
-            {dirty && <span aria-label="Kaydedilmemiş değişiklik" className="ml-0.5 size-1.5 rounded-full bg-warning" />}
+            {current ? "Save" : "Save as"}
+            {dirty && <span aria-label="Unsaved changes" className="ml-0.5 size-1.5 rounded-full bg-warning" />}
           </Button>
 
           <Tooltip content={<span>{isMac ? '⌘' : 'Ctrl'} + Enter</span>}>
@@ -427,7 +427,7 @@ const Studio: React.FC = () => {
               disabled={!dbUuid}
               onClick={() => void runQuery()}
             >
-              Çalıştır
+              Run
             </Button>
           </Tooltip>
           {running && <QueryCancelControl cancellation={cancellation} />}
@@ -441,8 +441,7 @@ const Studio: React.FC = () => {
         >
           <WarningCircleIcon size={15} weight="fill" className="shrink-0" />
           <span>
-            Hiçbir veritabanına erişim yetkiniz yok. Sorgu çalıştırabilmek için bir yöneticinin sizi bir
-            veritabanına yetkilendirmesi gerekir.
+            You do not have access to any databases. An administrator needs to grant you database access before you can run queries.
           </span>
         </div>
       )}
@@ -454,9 +453,8 @@ const Studio: React.FC = () => {
         >
           <WarningCircleIcon size={15} weight="fill" className="shrink-0" />
           <span>
-            Bu çalışma alanının hedefi (<span className="font-mono">{current?.servername}</span> /{' '}
-            <span className="font-mono">{current?.database_name}</span>) erişebildiğiniz veritabanları arasında
-            değil. Çalıştırmadan önce yetkili bir hedef seçin.
+            This workspace's target (<span className="font-mono">{current?.servername}</span> /{' '}
+            <span className="font-mono">{current?.database_name}</span>) is not among your accessible databases. Select an authorized target before running the query.
           </span>
         </div>
       )}
@@ -473,14 +471,14 @@ const Studio: React.FC = () => {
 
       <SplitPane
         storageKey="webquery.studio.split"
-        firstLabel="Düzenleyici"
-        secondLabel="Sonuçlar"
+        firstLabel="Editor"
+        secondLabel="Results"
         className="min-h-0 flex-1"
         first={
           <section className="flex min-h-0 w-full flex-col overflow-hidden rounded-md border border-line bg-surface">
             <PanelHeader
               dense
-              title={current?.name ?? 'Kaydedilmemiş sorgu'}
+              title={current?.name ?? "Unsaved query"}
               description={
                 server && database ? (
                   <span className="flex items-center gap-1.5">
@@ -489,7 +487,7 @@ const Studio: React.FC = () => {
                     <Identifier>{database}</Identifier>
                   </span>
                 ) : (
-                  'Hedef seçilmedi'
+                  "No target selected"
                 )
               }
               actions={
@@ -497,10 +495,10 @@ const Studio: React.FC = () => {
                   <span className="mr-1 hidden items-center gap-1 text-[11.5px] text-subtle sm:flex">
                     <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd>
                     <Kbd>↵</Kbd>
-                    çalıştır
+                    run
                   </span>
                   <IconButton
-                    label="Düzenleyiciyi temizle"
+                    label="Clear editor"
                     size="sm"
                     disabled={!editable || query.length === 0}
                     onClick={() => setQuery('')}
@@ -527,9 +525,9 @@ const Studio: React.FC = () => {
             outcome={outcome}
             running={running}
             durationMs={durationMs}
-            exportBaseName={current?.name ?? 'webquery-sonuc'}
-            emptyTitle="Henüz sorgu çalıştırılmadı"
-            emptyDescription={`Sorgunuzu yazın ve ${isMac ? '⌘' : 'Ctrl'} + Enter ile çalıştırın. Sonuçlar burada görünür.`}
+            exportBaseName={current?.name ?? "webquery-results"}
+            emptyTitle="No query run yet"
+            emptyDescription={`Write your query and press ${isMac ? '⌘' : 'Ctrl'} + Enter to run it. Results will appear here.`}
           />
         }
       />
@@ -538,23 +536,23 @@ const Studio: React.FC = () => {
       <Dialog
         open={maskingOpen}
         onOpenChange={setMaskingOpen}
-        title="Veri maskeleme"
-        description={`${server} / ${database} üzerinde bu çalıştırma için geçerli kurallar.`}
+        title="Data masking"
+        description={`${server} / ${database} — rules configured for this execution.`}
         footer={
           <Button variant="primary" onClick={() => setMaskingOpen(false)}>
-            Tamam
+            Done
           </Button>
         }
       >
         <div className="flex flex-col gap-6">
           <section>
-            <h3 className="text-[12.5px] font-medium text-muted">Yönetici kuralları</h3>
+            <h3 className="text-[12.5px] font-medium text-muted">Administrator rules</h3>
             <p className="mt-1 text-[12.5px] leading-relaxed text-subtle">
-              Bu kolonlar sunucu tarafında maskelenir ve kaldırılamaz.
+              These columns are masked server-side and the rules cannot be removed here.
             </p>
             {persistentMasked.length === 0 ? (
               <p className="mt-2.5 rounded-sm border border-line bg-sunken px-3 py-2.5 text-[12.5px] text-subtle">
-                Bu veritabanı için tanımlı kalıcı kural yok.
+                No permanent rules are configured for this database.
               </p>
             ) : (
               <ul className="mt-2.5 flex flex-wrap gap-1.5">
@@ -571,9 +569,9 @@ const Studio: React.FC = () => {
           </section>
 
           <section>
-            <h3 className="text-[12.5px] font-medium text-muted">Geçici kurallar</h3>
+            <h3 className="text-[12.5px] font-medium text-muted">Temporary rules</h3>
             <p className="mt-1 text-[12.5px] leading-relaxed text-subtle">
-              Yalnızca bu oturumdaki çalıştırmalara uygulanır, kaydedilmez.
+              Apply only to executions in this session and are not saved.
             </p>
 
             <form
@@ -583,16 +581,16 @@ const Studio: React.FC = () => {
                 addAdHocColumn();
               }}
             >
-              <Field label="Kolon adı" className="flex-1 [&>div:first-child]:sr-only">
+              <Field label="Column name" className="flex-1 [&>div:first-child]:sr-only">
                 <Input
                   value={newMaskColumn}
                   onChange={(event) => setNewMaskColumn(event.target.value)}
-                  placeholder="email, tckn, iban"
+                  placeholder="email, phone, account_number"
                   className="font-mono"
                 />
               </Field>
               <Button type="submit" disabled={!newMaskColumn.trim()}>
-                Ekle
+                Add
               </Button>
             </form>
 
@@ -603,7 +601,7 @@ const Studio: React.FC = () => {
                     <span className="inline-flex h-[22px] items-center gap-1 rounded-[var(--r-pill)] border border-warning-line bg-warning-soft pl-2 pr-1 font-mono text-[11px] text-warning">
                       {column}
                       <IconButton
-                        label={`${column} kuralını kaldır`}
+                        label={`${column} — remove rule`}
                         size="sm"
                         className="size-4 text-warning hover:bg-transparent hover:text-fg"
                         onClick={() => setAdHocMasked((columns) => columns.filter((item) => item !== column))}
@@ -623,14 +621,14 @@ const Studio: React.FC = () => {
       <Dialog
         open={saveOpen}
         onOpenChange={setSaveOpen}
-        title="Çalışma alanı olarak kaydet"
-        description="Kaydedilen sorgular listenizde görünür ve onay akışına dahil olur."
+        title="Save as workspace"
+        description="Saved queries appear in your workspace list and participate in the approval workflow."
         size="md"
         busy={saving}
         footer={
           <>
             <Button variant="secondary" onClick={() => setSaveOpen(false)} disabled={saving}>
-              Vazgeç
+              Cancel
             </Button>
             <Button
               variant="primary"
@@ -638,34 +636,34 @@ const Studio: React.FC = () => {
               disabled={!saveName.trim() || !dbUuid}
               onClick={() => void createWorkspace()}
             >
-              Kaydet
+              Save
             </Button>
           </>
         }
       >
         <div className="flex flex-col gap-4">
-          <Field label="Ad" required>
+          <Field label="Name" required>
             <Input
               value={saveName}
               onChange={(event) => setSaveName(event.target.value)}
               autoFocus
-              placeholder="Aylık satış özeti"
+              placeholder="Monthly sales summary"
             />
           </Field>
           <Field
-            label="Açıklama"
-            hint="Sorguyu inceleyen yöneticinin neden çalıştırıldığını anlaması için bir cümle yeterli."
+            label="Description"
+            hint="A brief description helps the reviewing administrator understand why this query is needed."
           >
             <Textarea
               value={saveDescription}
               onChange={(event) => setSaveDescription(event.target.value)}
               rows={3}
-              placeholder="Kapanış raporu için ürün kırılımında ciro."
+              placeholder="Revenue by product for the month-end report."
             />
           </Field>
           <div className="rounded-sm border border-line bg-sunken px-3 py-2.5 text-[12.5px] text-subtle">
-            Hedef: <span className="font-mono text-fg">{server || 'seçilmedi'}</span> /{' '}
-            <span className="font-mono text-fg">{database || 'seçilmedi'}</span>
+            Target: <span className="font-mono text-fg">{server || "not selected"}</span> /{' '}
+            <span className="font-mono text-fg">{database || "not selected"}</span>
           </div>
         </div>
       </Dialog>

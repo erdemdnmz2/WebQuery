@@ -11,6 +11,6 @@ async def owner_required(current_user: User = Depends(get_current_user)) -> User
     if not bool(current_user.is_platform_owner):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Platform OWNER erişimi gerekli.",
+            detail="Platform OWNER access is required.",
         )
     return current_user

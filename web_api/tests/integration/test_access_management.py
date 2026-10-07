@@ -321,7 +321,7 @@ async def test_password_change_requires_the_current_password(async_client: Async
         json={"current_password": "NotThePassword1!", "new_password": "BrandNewSecret123!"},
     )
     assert response.status_code == 400
-    assert "Mevcut şifre" in response.text
+    assert "Current password" in response.text
 
     # Unchanged.
     fresh = _client(async_client)

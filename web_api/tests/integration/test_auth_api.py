@@ -172,7 +172,7 @@ async def test_register_invalid_password(async_client: AsyncClient):
     }
     response = await async_client.post("/api/register", json=register_data)
     assert response.status_code == 400
-    assert "Şifre en az 12 karakter olmalıdır" in response.json()["detail"]
+    assert "Password must be at least 12 characters long" in response.json()["detail"]
 
     # 2. No uppercase or numbers
     register_data_2 = {
@@ -182,7 +182,7 @@ async def test_register_invalid_password(async_client: AsyncClient):
     }
     response = await async_client.post("/api/register", json=register_data_2)
     assert response.status_code == 400
-    assert "Şifre en az bir büyük harf ve bir rakam içermelidir" in response.json()["detail"]
+    assert "Password must contain at least one uppercase letter and one digit" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

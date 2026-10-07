@@ -88,7 +88,7 @@ export const SplitPane: React.FC<SplitPaneProps> = ({
       <div
         role="separator"
         aria-orientation="vertical"
-        aria-label="Bölme genişliği"
+        aria-label="Pane width"
         aria-valuenow={Math.round(ratio * 100)}
         aria-valuemin={Math.round(minRatio * 100)}
         aria-valuemax={Math.round(maxRatio * 100)}
@@ -115,7 +115,7 @@ export const SplitPane: React.FC<SplitPaneProps> = ({
       <div className="flex min-h-[280px] min-w-0 flex-1">{second}</div>
 
       <span className="sr-only">
-        {firstLabel} ve {secondLabel} arasındaki bölmeyi ok tuşlarıyla ayarlayabilirsiniz.
+        {firstLabel} and {secondLabel} panes can be resized using the arrow keys.
       </span>
     </div>
   );

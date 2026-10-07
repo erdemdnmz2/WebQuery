@@ -32,7 +32,7 @@ _CLIENT_PATTERNS: Final[tuple[tuple[re.Pattern[str], str], ...]] = (
             r"database|dbname|host|hostaddr|port)\s*=\s*[^;,)\s]+",
             re.IGNORECASE,
         ),
-        "[bağlantı-bilgisi]",
+        "[connection-info]",
     ),
     (
         re.compile(
@@ -54,7 +54,7 @@ _CLIENT_PATTERNS: Final[tuple[tuple[re.Pattern[str], str], ...]] = (
             r"(?:\.\d{1,3}){2,3}(?::\d+)?\b",
             re.IGNORECASE,
         ),
-        "[iç-adres]",
+        "[internal-address]",
     ),
     (
         re.compile(
@@ -69,7 +69,7 @@ _CLIENT_PATTERNS: Final[tuple[tuple[re.Pattern[str], str], ...]] = (
             r"\b[\w-]+\.(?:internal|local|lan|corp|intranet)\b",
             re.IGNORECASE,
         ),
-        "[iç-host]",
+        "[internal-host]",
     ),
     (
         re.compile(r"(?:[A-Za-z]:)?[\\/](?:[\w.-]+[\\/])+[\w.-]+\.py"),
@@ -103,7 +103,7 @@ def redact_passwords(message: str) -> str:
 def scrub(message: str) -> str:
     """Return a target-database error that is safe to show to an API client."""
     if not message:
-        return "Sorgu çalıştırılamadı."
+        return "Could not execute the query."
 
     cleaned = redact_passwords(message)
     for pattern, replacement in _CLIENT_PATTERNS:
@@ -121,6 +121,6 @@ def scrub(message: str) -> str:
         return cleaned[:_MAX_CLIENT_ERROR_LENGTH]
 
     return (
-        "Sorgu çalıştırılamadı. Ayrıntılar sunucu kaydına yazıldı — "
-        "destek ekibine trace_id ile başvurun."
+        "Could not execute the query. Details were written to the server log — "
+        "contact support with the trace_id."
     )

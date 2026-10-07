@@ -37,7 +37,7 @@ def wait_once() -> bool:
         finally:
             engine.dispose()
     except Exception as exc:
-        logger.info("Veritabanı henüz hazır değil: %s", type(exc).__name__)
+        logger.info("Database is not ready yet: %s", type(exc).__name__)
         return False
 
 

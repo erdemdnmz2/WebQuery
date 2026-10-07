@@ -14,29 +14,29 @@ export interface StatusMeta {
  */
 export const WORKSPACE_STATUS: Record<WorkspaceStatus, StatusMeta> = {
   saved_in_workspace: {
-    label: 'Taslak',
+    label: "Draft",
     tone: 'neutral',
-    hint: 'Düzenlenebilir. Riskli bir ifade içeriyorsa çalıştırıldığında onaya düşer.',
+    hint: "Editable. Risky statements are sent for approval when run.",
   },
   waiting_for_approval: {
-    label: 'Onay bekliyor',
+    label: "Awaiting approval",
     tone: 'warning',
-    hint: 'Yönetici incelemesi tamamlanana kadar düzenlenemez.',
+    hint: "Cannot be edited until administrator review is complete.",
   },
   approved_and_executed: {
-    label: 'Onaylandı',
+    label: "Approved",
     tone: 'success',
-    hint: 'Yönetici sorguyu çalıştırdı. Sonuçlar paylaşıma açılmadı.',
+    hint: "An administrator executed the query. Results were not shared.",
   },
   approved_with_results: {
-    label: 'Çalıştırılabilir',
+    label: "Ready to run",
     tone: 'success',
-    hint: 'Sorguyu çalıştırıp sonuçları dışa aktarabilirsiniz.',
+    hint: "You can execute the query and export its results.",
   },
   rejected: {
-    label: 'Reddedildi',
+    label: "Rejected",
     tone: 'danger',
-    hint: 'Yönetici bu sorguyu reddetti. Düzenleyip yeniden gönderebilirsiniz.',
+    hint: "An administrator rejected this query. You can edit and resubmit it.",
   },
 };
 

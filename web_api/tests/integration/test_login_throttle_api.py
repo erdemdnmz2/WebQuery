@@ -32,11 +32,11 @@ async def test_login_throttle_blocks_before_password_verification(async_client: 
             response = await async_client.post("/api/login", json=payload)
             assert response.status_code == 400, response.text
 
-    with patch.object(User, "check_password", side_effect=AssertionError("KDF çağrılmamalı")):
+    with patch.object(User, "check_password", side_effect=AssertionError("KDF must not be called")):
         response = await async_client.post("/api/login", json=payload)
 
     assert response.status_code == 429
-    assert "Çok fazla başarısız giriş denemesi" in response.json()["detail"]
+    assert "Too many failed sign-in attempts" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -48,20 +48,20 @@ async def test_redis_unavailable_rejects_login_before_password_verification(asyn
             raise LoginThrottleUnavailable("redis unavailable")
 
         async def record_failure(self, email: str, client_ip: str) -> None:
-            raise AssertionError("record_failure çağrılmamalı")
+            raise AssertionError("record_failure must not be called")
 
         async def clear_account(self, email: str) -> None:
-            raise AssertionError("clear_account çağrılmamalı")
+            raise AssertionError("clear_account must not be called")
 
     app.state.login_throttle = UnavailableThrottle()
-    with patch.object(User, "check_password", side_effect=AssertionError("KDF çağrılmamalı")):
+    with patch.object(User, "check_password", side_effect=AssertionError("KDF must not be called")):
         response = await async_client.post(
             "/api/login",
             json={"email": "unavailable@example.com", "password": "StrongPassword123!"},
         )
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "Giriş koruması geçici olarak kullanılamıyor."
+    assert response.json()["detail"] == "Login protection is temporarily unavailable."
 
 
 @pytest.mark.asyncio
@@ -76,7 +76,7 @@ async def test_redis_failure_while_recording_invalid_login_is_fail_closed(async_
             raise LoginThrottleUnavailable("redis unavailable")
 
         async def clear_account(self, email: str) -> None:
-            raise AssertionError("clear_account çağrılmamalı")
+            raise AssertionError("clear_account must not be called")
 
     app.state.login_throttle = RecordUnavailableThrottle()
     with patch.object(User, "check_password", return_value=False):
@@ -102,7 +102,7 @@ async def test_redis_failure_while_clearing_successful_login_is_fail_closed(asyn
             return 0
 
         async def record_failure(self, email: str, client_ip: str) -> None:
-            raise AssertionError("record_failure çağrılmamalı")
+            raise AssertionError("record_failure must not be called")
 
         async def clear_account(self, email: str) -> None:
             raise LoginThrottleUnavailable("redis unavailable")

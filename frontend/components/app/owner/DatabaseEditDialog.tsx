@@ -100,19 +100,19 @@ export const DatabaseEditDialog: React.FC<DatabaseEditDialogProps> = ({ database
     try {
       const result = await api.updateOwnerDatabase(database.id, payload);
       toast.success(
-        'Veritabanı kaydı güncellendi',
+        "Database registration updated",
         result.updated_tiers.length > 0
-          ? `Güncellenen kademeler: ${result.updated_tiers.join(', ').toLocaleUpperCase('tr')}`
-          : 'Kimlik bilgileri değişti',
+          ? `Updated tiers: ${result.updated_tiers.join(', ').toLocaleUpperCase("en")}`
+          : "Database identity changed",
       );
       onUpdated();
       onOpenChange(false);
     } catch (caught) {
       if (caught instanceof ApiError && caught.code === 'CONNECTION_MODE_CONFLICT') {
         setConflicts((caught.context?.conflicts as ConnectionModeConflict[] | undefined) ?? []);
-        toast.error('Bağlantı modu daraltılamadı', 'Önce çakışan yetkileri düşürün.');
+        toast.error("Could not restrict connection mode", "First downgrade the conflicting permissions.");
       } else {
-        toast.error('Güncellenemedi', errorMessage(caught));
+        toast.error("Could not update", errorMessage(caught));
       }
     } finally {
       setSaving(false);
@@ -123,31 +123,31 @@ export const DatabaseEditDialog: React.FC<DatabaseEditDialogProps> = ({ database
     <Dialog
       open={database !== null}
       onOpenChange={onOpenChange}
-      title="Veritabanı kaydını güncelle"
-      description="Boş bırakılan alanlar değiştirilmez. Bir kademeyi kaldırmak için bağlantı modunu daraltın."
+      title="Update database registration"
+      description="Blank fields remain unchanged. Restrict the connection mode to remove a tier."
       size="lg"
       busy={saving}
       footer={
         <>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
-            Vazgeç
+            Cancel
           </Button>
           <Button variant="primary" loading={saving} disabled={!dirty} onClick={() => void save()}>
-            Kaydet
+            Save
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-          <Field label="Sunucu adresi">
+          <Field label="Server address">
             <Input
               value={form.servername}
               onChange={(event) => setForm({ ...form, servername: event.target.value })}
               className="font-mono"
             />
           </Field>
-          <Field label="Veritabanı adı">
+          <Field label="Database name">
             <Input
               value={form.database_name}
               onChange={(event) => setForm({ ...form, database_name: event.target.value })}
@@ -157,29 +157,29 @@ export const DatabaseEditDialog: React.FC<DatabaseEditDialogProps> = ({ database
         </div>
         {identityChanged && (
           <p className="text-[12px] text-warning">
-            Kimlik değişikliği bu kayda bağlı tüm kayıtlı sorguları yeni ada taşır.
+            Changing the database identity updates all saved queries linked to this registration.
           </p>
         )}
 
-        <Field label="Bağlantı modu" hint="Daraltma, çakışan yetki varsa reddedilir.">
+        <Field label="Connection mode" hint="Restrictions are rejected if existing permissions conflict.">
           <SegmentedControl
             value={form.connection_mode}
             onChange={(connection_mode) => setForm({ ...form, connection_mode })}
             segments={CONNECTION_MODES}
-            label="Bağlantı modu"
+            label="Connection mode"
             className="w-full overflow-x-auto"
           />
         </Field>
 
         {conflicts && conflicts.length > 0 && (
           <div className="rounded-sm border border-danger-line bg-danger-soft p-3">
-            <p className="mb-2 text-[12.5px] font-medium text-danger">Çakışan kullanıcı yetkileri</p>
+            <p className="mb-2 text-[12.5px] font-medium text-danger">Conflicting user permissions</p>
             <ul className="flex flex-col gap-1">
               {conflicts.map((conflict) => (
                 <li key={conflict.user_id} className="flex items-center gap-2 text-[12px] text-danger">
                   <span className="font-mono">{conflict.username}</span>
                   <Badge tone="danger" mono>{conflict.role}</Badge>
-                  <span>{conflict.unsupported_tier.toLocaleUpperCase('tr')} gerektiriyor</span>
+                  <span>{conflict.unsupported_tier.toLocaleUpperCase("en")} required</span>
                 </li>
               ))}
             </ul>
@@ -194,7 +194,7 @@ export const DatabaseEditDialog: React.FC<DatabaseEditDialogProps> = ({ database
               (tier === 'ddl' && form.connection_mode === 'ro_rw_ddl');
             return (
               <React.Fragment key={tier}>
-                <Field label={`${tier.toLocaleUpperCase('tr')} kullanıcı adı`} hint={tierAllowed ? 'Boş = değiştirme' : 'Bu modda tanımlı değil'}>
+                <Field label={`${tier.toLocaleUpperCase("en")} username`} hint={tierAllowed ? "Blank = unchanged" : "Not configured in this mode"}>
                   <Input
                     value={form[`username_${tier}`]}
                     onChange={(event) => setForm({ ...form, [`username_${tier}`]: event.target.value })}
@@ -202,7 +202,7 @@ export const DatabaseEditDialog: React.FC<DatabaseEditDialogProps> = ({ database
                     autoComplete="off"
                   />
                 </Field>
-                <Field label={`${tier.toLocaleUpperCase('tr')} şifre`} hint={tierAllowed ? 'Boş = değiştirme' : undefined}>
+                <Field label={`${tier.toLocaleUpperCase("en")} password`} hint={tierAllowed ? "Blank = unchanged" : undefined}>
                   <Input
                     type="password"
                     value={form[`password_${tier}`]}

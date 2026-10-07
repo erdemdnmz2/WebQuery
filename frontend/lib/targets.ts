@@ -18,7 +18,7 @@ export interface Target {
 
 /** Servers the user has at least one granted database on, alphabetically. */
 export function serverNames(info: DatabaseInfo): string[] {
-  return Object.keys(info).sort((a, b) => a.localeCompare(b, 'tr'));
+  return Object.keys(info).sort((a, b) => a.localeCompare(b, "en"));
 }
 
 export function databasesOf(info: DatabaseInfo, servername: string): TargetDatabase[] {

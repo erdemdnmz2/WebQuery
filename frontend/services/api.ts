@@ -48,7 +48,7 @@ export class ApiError extends Error {
 /** Raised when the session expired; the shell redirects instead of rendering. */
 export class UnauthorizedError extends ApiError {
   constructor() {
-    super('Oturum süresi doldu.', 401);
+    super("Your session has expired.", 401);
     this.name = 'UnauthorizedError';
   }
 }
@@ -118,16 +118,16 @@ async function readError(response: Response): Promise<ParsedError> {
       const first = detail[0];
       if (typeof first?.msg === 'string') return { message: first.msg, code, traceId, context };
     }
-    if (code) return { message: 'İstek tamamlanamadı.', code, traceId, context };
+    if (code) return { message: "Could not complete the request.", code, traceId, context };
   } catch {
     /* Non-JSON error bodies fall through to the status-based message. */
   }
 
-  if (response.status >= 500) return { message: 'Sunucu bu isteği tamamlayamadı.' };
-  if (response.status === 403) return { message: 'Bu işlem için yetkiniz yok.' };
-  if (response.status === 404) return { message: 'Kayıt bulunamadı.' };
-  if (response.status === 429) return { message: 'Çok fazla istek gönderildi. Biraz bekleyip tekrar deneyin.' };
-  return { message: 'İstek tamamlanamadı.' };
+  if (response.status >= 500) return { message: "The server could not complete this request." };
+  if (response.status === 403) return { message: "You do not have permission for this action." };
+  if (response.status === 404) return { message: "Record not found." };
+  if (response.status === 429) return { message: "Too many requests. Wait a moment and try again." };
+  return { message: "Could not complete the request." };
 }
 
 interface RequestOptions extends Omit<RequestInit, 'body'> {
@@ -180,7 +180,7 @@ async function request<T>(url: string, options: RequestOptions = {}, retried = f
       ...rest,
     });
   } catch {
-    throw new ApiError('Sunucuya ulaşılamıyor. Ağ bağlantınızı kontrol edin.', 0);
+    throw new ApiError("Cannot reach the server. Check your network connection.", 0);
   }
 
   if (response.status === 401) {
@@ -400,7 +400,7 @@ export const api = {
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   if (error instanceof Error && error.message) return error.message;
-  return 'Beklenmeyen bir hata oluştu.';
+  return "An unexpected error occurred.";
 }
 
 /** The support reference the backend attaches to service-layer failures. */

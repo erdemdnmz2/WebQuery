@@ -10,11 +10,11 @@ const NotFound: React.FC = () => {
     <EmptyState
       className="my-auto"
       icon={<CompassIcon size={18} />}
-      title="Bu sayfa yok"
-      description="Bağlantı değişmiş veya kayıt silinmiş olabilir. Çalışma alanları listesinden devam edebilirsiniz."
+      title="Page not found"
+      description="The link may have changed or the record may have been deleted. Continue from your workspace list."
       action={
         <Button variant="primary" icon={<ArrowLeftIcon size={14} />} onClick={() => navigate('/')}>
-          Çalışma alanlarına dön
+          Back to workspaces
         </Button>
       }
     />

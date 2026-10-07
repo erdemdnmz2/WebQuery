@@ -31,11 +31,11 @@ import type { Workspace, WorkspaceStatus } from '../types';
 type Filter = 'all' | WorkspaceStatus;
 
 const SUMMARY: { key: Filter; label: string }[] = [
-  { key: 'all', label: 'Tümü' },
-  { key: 'saved_in_workspace', label: 'Taslak' },
-  { key: 'waiting_for_approval', label: 'Onay bekleyen' },
-  { key: 'approved_with_results', label: 'Çalıştırılabilir' },
-  { key: 'rejected', label: 'Reddedilen' },
+  { key: 'all', label: "All" },
+  { key: 'saved_in_workspace', label: "Draft" },
+  { key: 'waiting_for_approval', label: "Awaiting approval" },
+  { key: 'approved_with_results', label: "Ready to run" },
+  { key: 'rejected', label: "Rejected" },
 ];
 
 const Workspaces: React.FC = () => {
@@ -56,12 +56,12 @@ const Workspaces: React.FC = () => {
   }, [workspaces]);
 
   const visible = useMemo(() => {
-    const needle = search.trim().toLocaleLowerCase('tr');
+    const needle = search.trim().toLocaleLowerCase("en");
     return workspaces.filter((workspace) => {
       if (filter !== 'all' && workspace.status !== filter) return false;
       if (!needle) return true;
       return `${workspace.name} ${workspace.description ?? ''} ${workspace.servername} ${workspace.database_name}`
-        .toLocaleLowerCase('tr')
+        .toLocaleLowerCase("en")
         .includes(needle);
     });
   }, [workspaces, filter, search]);
@@ -77,10 +77,10 @@ const Workspaces: React.FC = () => {
     try {
       await api.deleteWorkspace(pendingDelete.id);
       replace(workspaces.filter((workspace) => workspace.id !== pendingDelete.id));
-      toast.success('Çalışma alanı silindi', pendingDelete.name);
+      toast.success("Workspace deleted", pendingDelete.name);
       setPendingDelete(null);
     } catch (caught) {
-      toast.error('Silinemedi', errorMessage(caught));
+      toast.error("Could not delete", errorMessage(caught));
     } finally {
       setDeleting(false);
     }
@@ -90,17 +90,17 @@ const Workspaces: React.FC = () => {
     <div className="flex flex-col gap-5 animate-enter">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1>Çalışma alanları</h1>
+          <h1>Workspaces</h1>
           <p className="mt-1 max-w-[60ch] text-[13px] text-subtle">
-            Kaydettiğiniz sorgular, onay durumları ve çalıştırma yetkileri.
+            Your saved queries, approval statuses and execution permissions.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <IconButton label="Listeyi yenile" onClick={() => void reload()}>
+          <IconButton label="Refresh list" onClick={() => void reload()}>
             <ArrowClockwiseIcon size={15} className={cn(loading && 'animate-spin-slow')} />
           </IconButton>
           <Button variant="primary" icon={<PlusIcon size={14} weight="bold" />} onClick={() => navigate('/editor')}>
-            Yeni sorgu
+            New query
           </Button>
         </div>
       </header>
@@ -108,7 +108,7 @@ const Workspaces: React.FC = () => {
       <div className="flex flex-wrap items-center gap-2">
         <div
           role="group"
-          aria-label="Duruma göre filtrele"
+          aria-label="Filter by status"
           className="flex w-full items-stretch overflow-x-auto rounded-md border border-line bg-surface sm:w-auto"
         >
           {SUMMARY.map((item, index) => {
@@ -140,12 +140,12 @@ const Workspaces: React.FC = () => {
         </div>
 
         <div className="ml-auto w-full sm:w-64">
-          <Field label="Ara" className="[&>div:first-child]:sr-only">
+          <Field label="Search" className="[&>div:first-child]:sr-only">
             <Input
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Ad, sunucu veya veritabanı"
+              placeholder="Name, server or database"
               icon={<MagnifyingGlassIcon size={14} />}
             />
           </Field>
@@ -158,30 +158,30 @@ const Workspaces: React.FC = () => {
         ) : error ? (
           <EmptyState
             icon={<WarningCircleIcon size={18} />}
-            title="Liste yüklenemedi"
+            title="Could not load list"
             description={error}
             action={
               <Button icon={<ArrowClockwiseIcon size={14} />} onClick={() => void reload()}>
-                Yeniden dene
+                Try again
               </Button>
             }
           />
         ) : workspaces.length === 0 ? (
           <EmptyState
             icon={<PlusIcon size={18} />}
-            title="Henüz kayıtlı sorgunuz yok"
-            description="SQL Studio'da bir sorgu yazıp kaydettiğinizde burada listelenir ve onay durumunu buradan takip edersiniz."
+            title="No saved queries yet"
+            description="Write and save a query in SQL Studio to see it here and track its approval status."
             action={
               <Button variant="primary" icon={<PlusIcon size={14} weight="bold" />} onClick={() => navigate('/editor')}>
-                İlk sorgunuzu yazın
+                Write your first query
               </Button>
             }
           />
         ) : visible.length === 0 ? (
           <EmptyState
             size="sm"
-            title="Bu filtreye uyan kayıt yok"
-            description="Arama terimini kısaltmayı veya durum filtresini temizlemeyi deneyin."
+            title="No records match this filter"
+            description="Try a shorter search term or clear the status filter."
             action={
               <Button
                 onClick={() => {
@@ -189,7 +189,7 @@ const Workspaces: React.FC = () => {
                   setSearch('');
                 }}
               >
-                Filtreleri temizle
+                Clear filters
               </Button>
             }
           />
@@ -219,7 +219,7 @@ const Workspaces: React.FC = () => {
                       {workspace.name}
                     </button>
                     <p className="mt-0.5 truncate text-[12.5px] text-subtle">
-                      {workspace.description || 'Açıklama girilmedi'}
+                      {workspace.description || "No description provided"}
                     </p>
                   </div>
 
@@ -245,7 +245,7 @@ const Workspaces: React.FC = () => {
                         icon={<PlayIcon size={13} weight="fill" />}
                         onClick={() => navigate(`/execute/${workspace.id}`)}
                       >
-                        Çalıştır
+                        Run
                       </Button>
                     ) : (
                       <Button
@@ -254,13 +254,13 @@ const Workspaces: React.FC = () => {
                         icon={<PencilSimpleIcon size={13} />}
                         onClick={() => navigate(`/editor/${workspace.id}`)}
                       >
-                        {editable ? 'Aç' : 'Görüntüle'}
+                        {editable ? "Open" : "View"}
                       </Button>
                     )}
 
                     <Menu>
                       <MenuTrigger asChild>
-                        <IconButton label={`${workspace.name} için işlemler`} size="sm">
+                        <IconButton label={`${workspace.name} — actions`} size="sm">
                           <DotsThreeIcon size={17} weight="bold" />
                         </IconButton>
                       </MenuTrigger>
@@ -269,14 +269,14 @@ const Workspaces: React.FC = () => {
                           icon={<PencilSimpleIcon size={15} />}
                           onSelect={() => navigate(`/editor/${workspace.id}`)}
                         >
-                          Studio'da aç
+                          Open in Studio
                         </MenuItem>
                         <MenuItem
                           icon={<PlayIcon size={15} />}
                           disabled={!runnable}
                           onSelect={() => navigate(`/execute/${workspace.id}`)}
                         >
-                          Çalıştır ve dışa aktar
+                          Run and export
                         </MenuItem>
                         <MenuSeparator />
                         <MenuItem
@@ -284,7 +284,7 @@ const Workspaces: React.FC = () => {
                           icon={<TrashIcon size={15} />}
                           onSelect={() => setPendingDelete(workspace)}
                         >
-                          Sil
+                          Delete
                         </MenuItem>
                       </MenuContent>
                     </Menu>
@@ -299,9 +299,9 @@ const Workspaces: React.FC = () => {
       <ConfirmDialog
         open={pendingDelete !== null}
         onOpenChange={(open) => !open && setPendingDelete(null)}
-        title="Çalışma alanını sil"
-        description="Kayıtlı sorgu ve onay geçmişi kalıcı olarak kaldırılır. Bu işlem geri alınamaz."
-        confirmLabel="Kalıcı olarak sil"
+        title="Delete workspace"
+        description="The saved query and approval history will be permanently removed. This cannot be undone."
+        confirmLabel="Delete permanently"
         destructive
         busy={deleting}
         onConfirm={() => void confirmDelete()}

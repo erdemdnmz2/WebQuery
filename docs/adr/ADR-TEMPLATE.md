@@ -1,25 +1,25 @@
-# Trade-off Tablosu
+# Trade-off table
 
-Senaryo: `<Karar verilmesini gerektiren bağlamı ve ölçeği yazın.>`
+Scenario: `<Describe the context and scale requiring a decision.>`
 
-Baştan tahmininizce en belirleyici kriter: `<Örn. güvenilirlik, güvenlik, maliyet veya gecikme.>`
+Most decisive criterion at the outset: `<For example, reliability, security, cost or latency.>`
 
-| Kriter | 1. `<Alternatif>` | 2. `<Alternatif>` | 3. `<Alternatif>` |
+| Criterion | 1. `<Alternative>` | 2. `<Alternative>` | 3. `<Alternative>` |
 | --- | --- | --- | --- |
-| Performans | `<değerlendirme>` | `<değerlendirme>` | `<değerlendirme>` |
-| Kompleksite | `<değerlendirme>` | `<değerlendirme>` | `<değerlendirme>` |
-| Ölçeklenebilirlik | `<değerlendirme>` | `<değerlendirme>` | `<değerlendirme>` |
-| Bakım | `<değerlendirme>` | `<değerlendirme>` | `<değerlendirme>` |
-| Maliyet | `<değerlendirme>` | `<değerlendirme>` | `<değerlendirme>` |
-| `<Senaryoya özgü belirleyici kriter>` | `<değerlendirme>` | `<değerlendirme>` | `<değerlendirme>` |
+| Performance | `<assessment>` | `<assessment>` | `<assessment>` |
+| Complexity | `<assessment>` | `<assessment>` | `<assessment>` |
+| Scalability | `<assessment>` | `<assessment>` | `<assessment>` |
+| Maintenance | `<assessment>` | `<assessment>` | `<assessment>` |
+| Cost | `<assessment>` | `<assessment>` | `<assessment>` |
+| `<Scenario-specific decisive criterion>` | `<assessment>` | `<assessment>` | `<assessment>` |
 
 ## Karar
 
-Seçilen alternatif: `<Numara ve alternatif adı>`
+Selected alternative: `<Number and alternative name>`
 
-Gerekçe: `<Belirleyici kriterlere göre neden en iyi denge olduğu.>`
+Rationale: `<Why this is the best balance against the decisive criteria.>`
 
-# ADR-XXXX: `<Kısa karar başlığı>`
+# ADR-XXXX: `<Short decision title>`
 
 ## Status
 
@@ -27,33 +27,33 @@ Proposed | Accepted | Superseded | Deprecated
 
 ## Context
 
-`<Kararın gerekli olduğu teknik ve ürün bağlamı; ilgili kısıtlar, mevcut davranış ve risk.>`
+`<Technical and product context, constraints, current behavior and risk requiring the decision.>`
 
 ## Decision
 
-`<Ne yapılacağı, sınırları ve uygulanacak temel mekanizma.>`
+`<What will be done, its boundaries and the core mechanism.>`
 
 ## Rejected Alternatives
 
-### 1. `<Alternatif>`
+### 1. `<Alternative>`
 
-`<Bu alternatifin güçlü yanı ve bu bağlamda kabul edilmediği teknik neden.>`
+`<Strength of this alternative and the technical reason it was rejected here.>`
 
-### 2. `<Alternatif>`
+### 2. `<Alternative>`
 
-`<Bu alternatifin güçlü yanı ve bu bağlamda kabul edilmediği teknik neden.>`
+`<Strength of this alternative and the technical reason it was rejected here.>`
 
 ## Consequences
 
-- `<Olumlu veya kaçınılmaz sonuç>`
-- `<Operasyonel/development sonucu>`
-- `<Test, izleme veya migrasyon gereksinimi>`
+- `<Positive or unavoidable consequence>`
+- `<Operational or development consequence>`
+- `<Test, monitoring or migration requirement>`
 
 ## Accepted Risks
 
-- `<Bilinçli olarak kabul edilen risk ve azaltma yaklaşımı>`
+- `<Consciously accepted risk and mitigation approach>`
 
 ## References
 
-- Spec: `<docs/specs/... veya yok>`
-- Supersedes / Superseded by: `<ADR yolu veya yok>`
+- Spec: `<docs/specs/... or none>`
+- Supersedes / Superseded by: `<ADR path or none>`

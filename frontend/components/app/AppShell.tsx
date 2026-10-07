@@ -25,14 +25,14 @@ import { CommandPalette } from './CommandPalette';
 import { PasswordChangeDialog } from './PasswordChangeDialog';
 
 const NAV = [
-  { to: '/', label: 'Çalışma alanları', icon: <SquaresFourIcon size={15} />, end: true },
+  { to: '/', label: "Workspaces", icon: <SquaresFourIcon size={15} />, end: true },
   { to: '/editor', label: 'SQL Studio', icon: <TerminalWindowIcon size={15} />, end: false },
 ];
 
 const THEME_LABEL: Record<ThemePreference, string> = {
-  system: 'Sistem',
-  light: 'Açık',
-  dark: 'Koyu',
+  system: "System",
+  light: "Light",
+  dark: "Dark",
 };
 
 export interface AppShellProps {
@@ -72,12 +72,12 @@ export const AppShell: React.FC<AppShellProps> = ({ children, fullBleed }) => {
      */
     <div className={cn('flex flex-col bg-canvas', fullBleed ? 'h-dvh overflow-hidden' : 'min-h-dvh')}>
       <a href="#main" className="skip-link">
-        İçeriğe geç
+        Skip to content
       </a>
 
       <header className="sticky top-0 z-[var(--z-nav)] border-b border-line bg-canvas">
         <nav
-          aria-label="Ana gezinme"
+          aria-label="Main navigation"
           className="mx-auto flex h-[var(--nav-h)] w-full max-w-[var(--shell-max)] items-center gap-2 px-4 sm:px-6"
         >
           <Link
@@ -110,7 +110,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, fullBleed }) => {
                 {({ isActive }) => (
                   <>
                     <GearSixIcon size={15} />
-                    Yönetim
+                    Administration
                     {isActive && (
                       <span
                         aria-hidden
@@ -133,12 +133,12 @@ export const AppShell: React.FC<AppShellProps> = ({ children, fullBleed }) => {
               )}
             >
               <MagnifyingGlassIcon size={14} />
-              <span className="pr-6">Ara</span>
+              <span className="pr-6">Search</span>
               <Kbd>{isMac ? '⌘' : 'Ctrl'} K</Kbd>
             </button>
 
             <IconButton
-              label="Ara"
+              label="Search"
               className="sm:hidden"
               onClick={() => setPaletteOpen(true)}
             >
@@ -147,7 +147,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, fullBleed }) => {
 
             <Menu>
               <MenuTrigger asChild>
-                <IconButton label="Görünüm ayarları">
+                <IconButton label="Appearance settings">
                   {preference === 'dark' ? (
                     <MoonIcon size={16} />
                   ) : preference === 'light' ? (
@@ -158,7 +158,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, fullBleed }) => {
                 </IconButton>
               </MenuTrigger>
               <MenuContent>
-                <MenuLabel>Tema</MenuLabel>
+                <MenuLabel>Theme</MenuLabel>
                 <MenuRadioGroup
                   value={preference}
                   onValueChange={(value) => setPreference(value as ThemePreference)}
@@ -174,48 +174,48 @@ export const AppShell: React.FC<AppShellProps> = ({ children, fullBleed }) => {
               <MenuTrigger asChild>
                 <button
                   type="button"
-                  aria-label="Hesap menüsü"
+                  aria-label="Account menu"
                   className={cn(
                     'inline-flex h-8 items-center gap-2 rounded-sm px-1.5 text-[13px] text-muted',
                     'transition-colors duration-[var(--dur-fast)] hover:bg-hover hover:text-fg',
                   )}
                 >
                   <span className="flex size-6 items-center justify-center rounded-xs bg-accent-soft text-[11px] font-medium text-accent">
-                    {(user?.username ?? '?').slice(0, 2).toLocaleUpperCase('tr')}
+                    {(user?.username ?? '?').slice(0, 2).toLocaleUpperCase("en")}
                   </span>
-                  <span className="hidden max-w-32 truncate lg:inline">{user?.username ?? 'Misafir'}</span>
+                  <span className="hidden max-w-32 truncate lg:inline">{user?.username ?? "Guest"}</span>
                 </button>
               </MenuTrigger>
               <MenuContent>
                 <div className="px-2 py-1.5">
-                  <p className="truncate text-[13px] font-medium text-fg">{user?.username ?? 'Misafir'}</p>
+                  <p className="truncate text-[13px] font-medium text-fg">{user?.username ?? "Guest"}</p>
                   <p className="truncate text-[12px] text-subtle">
-                    {user?.is_platform_owner ? 'Platform OWNER' : user?.is_admin ? 'Veritabanı yöneticisi' : 'Kullanıcı'}
+                    {user?.is_platform_owner ? 'Platform OWNER' : user?.is_admin ? "Database administrator" : "User"}
                   </p>
                 </div>
                 <MenuSeparator />
                 <div className="md:hidden">
                   <MenuItem icon={<SquaresFourIcon size={15} />} onSelect={() => navigate('/')}>
-                    Çalışma alanları
+                    Workspaces
                   </MenuItem>
                   <MenuItem icon={<TerminalWindowIcon size={15} />} onSelect={() => navigate('/editor')}>
                     SQL Studio
                   </MenuItem>
                   {(user?.is_admin || user?.is_platform_owner) && (
                     <MenuItem icon={<GearSixIcon size={15} />} onSelect={() => navigate('/admin')}>
-                      Yönetim
+                      Administration
                     </MenuItem>
                   )}
                   <MenuSeparator />
                 </div>
                 <MenuItem icon={<UserIcon size={15} />} onSelect={() => setPaletteOpen(true)}>
-                  Komut paleti
+                  Command palette
                 </MenuItem>
                 <MenuItem icon={<KeyIcon size={15} />} onSelect={() => setPasswordDialogOpen(true)}>
-                  Şifreni değiştir
+                  Change password
                 </MenuItem>
                 <MenuItem icon={<SignOutIcon size={15} />} onSelect={() => void handleSignOut()}>
-                  Oturumu kapat
+                  Sign out
                 </MenuItem>
               </MenuContent>
             </Menu>

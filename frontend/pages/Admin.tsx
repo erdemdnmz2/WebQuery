@@ -52,8 +52,8 @@ const Admin: React.FC = () => {
       <EmptyState
         className="my-auto"
         icon={<LockKeyIcon size={18} />}
-        title="Bu bölüme erişiminiz yok"
-        description="Yönetim paneli yalnızca yönetici hesapları için açıktır."
+        title="You do not have access to this section"
+        description="The administration panel is available only to administrator accounts."
       />
     );
   }
@@ -62,20 +62,20 @@ const Admin: React.FC = () => {
     <div className="flex flex-col gap-5 animate-enter">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1>Yönetim</h1>
+          <h1>Administration</h1>
           <p className="mt-1 max-w-[62ch] text-[13px] text-subtle">
-            Veritabanı yönetişimi, riskli sorgu talepleri ve kolon bazlı maskeleme kuralları.
+            Database governance, risky query requests and column-level masking rules.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           {user?.is_admin && (
-            <IconButton label="Bekleyen talepleri yenile" onClick={() => void loadRequests()}>
+            <IconButton label="Refresh pending requests" onClick={() => void loadRequests()}>
               <ArrowClockwiseIcon size={15} className={cn(loading && 'animate-spin-slow')} />
             </IconButton>
           )}
           <SegmentedControl<Tab>
-            label="Yönetim bölümü"
+            label="Administration section"
             value={visibleTab}
             onChange={setTab}
             segments={[
@@ -83,18 +83,18 @@ const Admin: React.FC = () => {
                 ? [
                     {
                       value: 'approvals' as const,
-                      label: 'Onaylar',
+                      label: "Approvals",
                       icon: <ShieldCheckIcon size={14} />,
                       count: requests.length,
                     },
                     {
                       value: 'access' as const,
-                      label: 'Erişimler',
+                      label: "Access",
                       icon: <UsersThreeIcon size={14} />,
                     },
                     {
                       value: 'masking' as const,
-                      label: 'Maskeleme',
+                      label: "Masking",
                       icon: <LockKeyIcon size={14} />,
                     },
                   ]

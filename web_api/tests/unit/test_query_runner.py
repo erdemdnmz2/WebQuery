@@ -7,7 +7,7 @@ worker's memory in full and *then* trimmed. Reads now stream.
 
 P1-5/P2-7: `fetchmany(size=LIMIT)` returns at most LIMIT rows, so the old
 `row_count >= LIMIT` check reported a result set of exactly LIMIT rows as
-truncated and the UI drew "İlk 1000 satır (kırpıldı)" over a complete answer.
+truncated and the UI drew "First 1000 rows (truncated)" over a complete answer.
 """
 import os
 import sys

@@ -1,576 +1,520 @@
-# WebQuery Tasarım Sistemi
+# WebQuery Design System
 
-Bu dosya WebQuery arayüzünün anayasasıdır. Bir ekran, bileşen veya stil
-değişikliğine başlamadan önce okunur; değişiklik bittiğinde burada yazan bir
-kural bozulduysa değişiklik yanlıştır.
+This file is the constitution of the WebQuery interface. Read it before
+changing a screen, component or style. A change is incorrect if it violates a
+rule written here.
 
-Kapsam: yalnızca `frontend/`. Backend sözleşmeleri, rota yapısı ve bilgi
-mimarisi bu dosyanın konusu değildir.
+Scope: `frontend/` only. Backend contracts, route structure and information
+architecture are documented elsewhere.
 
-İlgili kayıtlar: [mevcut özellik sözleşmeleri](../docs/features.md) ve
-[mimari karar özeti](../docs/architecture.md). Özgün SPEC-0010 / ADR-0010
-kimlikleri [geçiş analizinde](../docs/migration-analysis.md) eşlenmiştir.
+Related records: [implemented feature contracts](../docs/features.md) and the
+[architecture summary](../docs/architecture.md). Original SPEC-0010 and
+ADR-0010 identifiers are mapped in the [migration analysis](../docs/migration-analysis.md).
 
----
+## 1. Product definition
 
-## 1. Ürünün ne olduğu
+WebQuery is an enterprise console for running **auditable** SQL queries against
+registered databases. Users write queries, risky statements go through
+administrator approval, results pass through masking rules, and every step is
+logged.
 
-WebQuery, kayıtlı veritabanlarına **denetlenebilir** SQL sorguları çalıştırılan
-kurumsal bir konsoldur. Kullanıcı sorgu yazar, riskli ifadeler yönetici onayına
-düşer, sonuçlar maskeleme kurallarından geçer ve her adım loglanır.
+This has three direct design consequences:
 
-Bunun tasarıma üç doğrudan sonucu vardır:
+1. **Density must stay high.** This is a work tool that may remain open for
+   hours, not a marketing page. Generous empty space can hide information.
+2. **State must always be visible.** Users should never have to guess whether a
+   query is awaiting approval, which column was masked, or whether results were
+   truncated.
+3. **Destructive actions must not compete with decoration.** An administrator
+   deciding whether to approve or reject a request should immediately see the
+   relationship between risk and action.
 
-1. **Yoğunluk yüksek olmalı.** Bu bir pazarlama sayfası değil, günde saatlerce
-   açık kalan bir çalışma aracıdır. Boş alan cömertliği burada bilgi kaybıdır.
-2. **Durum her zaman görünür olmalı.** Kullanıcı sorgusunun onay bekleyip
-   beklemediğini, hangi sütunun maskelendiğini, sonucun kırpılıp
-   kırpılmadığını tahmin etmek zorunda kalmamalı.
-3. **Yıkıcı eylem asla dekoratif renkle yarışmamalı.** Onay/red kararı veren
-   bir yönetici, risk rozetiyle buton arasında bir saniye bile duraksamamalı.
+## 2. Core principle: color carries meaning
 
-## 2. Çekirdek ilke: renk anlam taşır
+**Application chrome is achromatic.** Use warm graphite (OKLCH hue 85–95,
+chroma ≤ 0.008). Backgrounds, borders, body text and panel headings are not
+colored.
 
-**Uygulama kromu akromatiktir.** Sıcak grafit (OKLCH hue 85–95, chroma ≤ 0.008).
-Arka planlar, kenarlar, gövde metni, panel başlıkları: hiçbiri renkli değildir.
+**Chroma is reserved for three jobs:**
 
-**Kroma yalnızca üç işe ayrılmıştır:**
-
-| Kullanım | Token ailesi |
+| Use | Token family |
 | --- | --- |
-| Durum: taslak / onay bekliyor / onaylandı / reddedildi / riskli | `--success`, `--warning`, `--danger` |
-| Odak, seçim, aktif gezinme, marka işareti | `--accent` (tek hue: 205, teal) |
-| SQL sözdizimi vurgusu | `--code-*` |
+| State: draft, pending, approved, rejected, risky | `--success`, `--warning`, `--danger` |
+| Focus, selection, active navigation, brand mark | `--accent` (one hue: 205, teal) |
+| SQL syntax highlighting | `--code-*` |
 
-**Birincil eylem butonu marka rengi değil, mürekkeptir** (`--primary`, sayfadaki
-en yüksek kontrastlı nesne). Böylece "Çalıştır" butonu bir durum rozeti gibi
-okunmaz; hiyerarşi kontrastla kurulur, renkle değil.
+**The primary action uses ink, not the brand color** (`--primary`). It is the
+highest-contrast object on the page, so an execution button is read as an
+action instead of a status badge.
 
-Bu tek kural sistemin geri kalanını türetir. Yeni bir renk eklemek istiyorsanız
-önce sorun: bu renk bir **durumu** mu işaretliyor? Hayırsa, akromatik kalır.
+Before adding a color, ask whether it communicates a state. If it does not,
+keep it achromatic.
 
-## 3. Tasarım kadranları
+## 3. Design dials
 
-Bu üç değer bilinçli seçildi; değiştirilmeden önce tartışılmalı.
+These values were chosen deliberately and should be discussed before changing.
 
-| Kadran | Değer (0–10) | Anlamı |
+| Dial | Value (0–10) | Meaning |
 | --- | --- | --- |
-| Görsel varyans | 3 | Sistematik ve öngörülebilir. Ekranlar birbirine benzer, sürpriz yok. |
-| Hareket yoğunluğu | 3 | Hareket geri bildirimdir, dekorasyon değil. 110–260 ms, tek easing. |
-| Görsel yoğunluk | 7 | Sıkı bir konsol. 32 px kontrol yüksekliği, 13 px gövde metni. |
+| Visual variance | 3 | Systematic and predictable; screens feel related. |
+| Motion intensity | 3 | Motion is feedback, not decoration; 110–260 ms with one easing curve. |
+| Visual density | 7 | A compact console with 32 px controls and 13 px body text. |
 
-## 4. Token katmanı
+## 4. Token layer
 
-Tek kaynak: [`styles/tokens.css`](styles/tokens.css). Değerler OKLCH; açık tema
-çıplak `:root` üzerinde, koyu tema hem `@media (prefers-color-scheme: dark)`
-altında hem de `:root[data-theme='dark']` üzerinde tanımlı, böylece kullanıcı
-seçimi her iki yönde de sistem tercihini yener.
+The single source is [`styles/tokens.css`](styles/tokens.css). Values use
+OKLCH. The light theme lives on the bare `:root`; the dark theme is defined
+both under `@media (prefers-color-scheme: dark)` and on
+`:root[data-theme='dark']`, so an explicit user choice overrides the system
+preference in either direction.
 
-[`styles/global.css`](styles/global.css) bu değişkenleri Tailwind v4'e
-`@theme inline` ile bağlar. `inline` kritiktir: üretilen utility sınıfı değeri
-kopyalamaz, `var(--...)`'a referans verir. Bu yüzden tema değişimi tek bir
-attribute yazımıyla, yeniden derleme olmadan çalışır.
+[`styles/global.css`](styles/global.css) connects these variables to Tailwind
+v4 through `@theme inline`. `inline` matters: generated utilities keep a
+reference to `var(--...)` instead of copying the value, so changing the theme
+requires only one attribute write and no rebuild.
 
-### 4.1 Yüzey merdiveni
+### 4.1 Surface ladder
 
-Dört basamak, aşağıdan yukarı:
+Four levels run from lower to higher:
 
-| Token | Utility | Nerede |
+| Token | Utility | Use |
 | --- | --- | --- |
-| `--bg-sunken` | `bg-sunken` | Editör alanı, tablo başlığı, devre dışı input. Sayfanın **altında** duran şeyler. |
-| `--bg-canvas` | `bg-canvas` | Sayfa zemini. `body` bunu kullanır. |
-| `--bg-surface` | `bg-surface` | Panel, kart, satır. İçerik burada yaşar. |
-| `--bg-raised` | `bg-raised` | Dialog, menü, popover, toast. Sayfanın **üstünde** duranlar. |
+| `--bg-sunken` | `bg-sunken` | Editor area, table header, disabled input. |
+| `--bg-canvas` | `bg-canvas` | Page background; used by `body`. |
+| `--bg-surface` | `bg-surface` | Panels, cards and rows. |
+| `--bg-raised` | `bg-raised` | Dialogs, menus, popovers and toasts. |
 
-Etkileşim: `--bg-hover` (`bg-hover`), `--bg-active` (`bg-pressed`),
-`--bg-selected` (`bg-selected`, tek renkli istisna: seçim accent taşır).
+Interaction states are `--bg-hover` (`bg-hover`), `--bg-active`
+(`bg-pressed`) and `--bg-selected` (`bg-selected`, the one selection state
+that carries accent color).
 
-**Kural:** hiyerarşi gölgeyle değil, bu merdiven artı saç çizgisiyle kurulur.
-Gölge yalnızca gerçekten üstte yüzen katmanlarda (`shadow-overlay`).
+Build hierarchy with this ladder and hairline borders, not with shadow. Use
+`shadow-overlay` only for layers that truly float above the page.
 
-### 4.2 Metin rampası
+### 4.2 Text ramp
 
-| Token | Utility | Kullanım | Kontrast hedefi |
+| Token | Utility | Use | Contrast target |
 | --- | --- | --- | --- |
-| `--fg` | `text-fg` | Gövde metni, başlık, veri hücresi | ≥ 4.5:1 |
-| `--fg-muted` | `text-muted` | Etiket, ikincil açıklama, ikon | ≥ 4.5:1 |
-| `--fg-subtle` | `text-subtle` | Placeholder, satır numarası, yardım metni | ≥ 4.5:1 |
-| `--fg-faint` | `text-faint` | **Yalnızca dekoratif**: ayraç, devre dışı glif | denetlenmez |
-| `--fg-on-solid` | `text-on-solid` | Dolu renkli zemin üzerindeki metin | ≥ 4.5:1 |
+| `--fg` | `text-fg` | Body text, headings and data cells | ≥ 4.5:1 |
+| `--fg-muted` | `text-muted` | Labels, secondary descriptions and icons | ≥ 4.5:1 |
+| `--fg-subtle` | `text-subtle` | Placeholders, line numbers and help text | ≥ 4.5:1 |
+| `--fg-faint` | `text-faint` | Decorative separators and disabled glyphs only | not assessed |
+| `--fg-on-solid` | `text-on-solid` | Text on solid color surfaces | ≥ 4.5:1 |
 
-**`text-faint` asla anlam taşıyan metinde kullanılmaz.** Bu tek istisna
-bilinçlidir ve `tokens.css` içinde yorumla işaretlidir.
+`text-faint` must never carry meaning. This exception is intentional and is
+marked in `tokens.css`.
 
-### 4.3 Çizgiler
+### 4.3 Borders
 
-| Token | Utility | Kullanım |
+| Token | Utility | Use |
 | --- | --- | --- |
-| `--line` | `border-line` | Varsayılan ayraç. Panel kenarı, satır arası. |
-| `--line-strong` | `border-line-strong` | Vurgulu ayraç, scrollbar başparmağı. |
-| `--control-line` | `border-control-line` | **Etkileşimli kontrolün kenarı.** 3:1'de tutulur (WCAG 1.4.11). |
+| `--line` | `border-line` | Default separators, panel edges and row dividers |
+| `--line-strong` | `border-line-strong` | Emphasized dividers and scrollbar thumbs |
+| `--control-line` | `border-control-line` | Interactive control borders at 3:1 (WCAG 1.4.11) |
 
-Bir input, select veya `secondary` buton `border-line` kullanamaz. Kontrolün
-sınırı, kontrol olduğunu belli edecek kadar kontrastlı olmak zorundadır.
+Inputs, selects and secondary buttons must not use `border-line`. A control
+border must have enough contrast to identify the element as interactive.
 
-### 4.4 Durum renkleri
+### 4.4 State colors
 
-Her durumun dört varyantı var ve hepsi bir arada kullanılır:
+Each state has four variants and they are used together:
 
-```
---success       metin tonu       text-success
---success-soft  yumuşak dolgu    bg-success-soft
---success-line  yumuşak kenar    border-success-line
---success-solid dolu işaret      bg-success-solid  (yalnız nokta/çubuk)
-```
-
-Aynı yapı `--warning` ve `--danger` için de geçerlidir. `--info` accent'e
-takma addır; ayrı bir bilgi rengi yoktur.
-
-Rozet formülü daima: `text-{tone} bg-{tone}-soft border border-{tone}-line`.
-
-### 4.5 Yarıçap, gölge, hareket, katman
-
-```
---r-xs  4px    ikon butonu, küçük çip, odak halkası yarıçapı
---r-sm  6px    KONTROLLER: buton, input, select, checkbox
---r-md  10px   PANELLER: kart, tablo çerçevesi, bölüm
---r-lg  14px   KATMANLAR: dialog, komut paleti
---r-pill       YALNIZCA durum rozeti ve scrollbar
+```text
+--success       text tone      text-success
+--success-soft  soft fill      bg-success-soft
+--success-line  soft border    border-success-line
+--success-solid solid marker   bg-success-solid (dots and bars only)
 ```
 
-Bu kilitli bir ölçektir. Beşinci bir yarıçap eklemek karışıklık üretir.
+The same pattern applies to `--warning` and `--danger`. `--info` is an alias
+for accent; there is no separate information color.
 
-```
---dur-fast 110ms   hover, aktif, renk geçişi
---dur      170ms   menü, tooltip, panel açılışı
---dur-slow 260ms   sayfa girişi, dialog
---ease     cubic-bezier(0.2, 0, 0, 1)   tek easing, istisnasız
+The badge formula is always:
+`text-{tone} bg-{tone}-soft border border-{tone}-line`.
+
+### 4.5 Radius, shadow, motion and layers
+
+```text
+--r-xs  4px    icon buttons, small chips, focus ring radius
+--r-sm  6px    controls: buttons, inputs, selects and checkboxes
+--r-md  10px   panels: cards, table frames and sections
+--r-lg  14px   layers: dialogs, menus and command palette
+--r-pill       status badges and scrollbars only
 ```
 
-`prefers-reduced-motion: reduce` altında tüm animasyon ve geçiş 1 ms'ye
-düşürülür. Hareket geri bildirimden ibaret olduğu için bunun bir maliyeti yok.
+This scale is fixed. Adding a fifth radius creates ambiguity.
 
+```text
+--dur-fast 110ms   hover, active and color transitions
+--dur      170ms   menus, tooltips and panel openings
+--dur-slow 260ms   page entry and dialogs
+--ease     cubic-bezier(0.2, 0, 0, 1)   one easing curve
 ```
---z-sticky   20   yapışkan tablo başlığı
---z-nav      30   üst gezinme
---z-overlay  50   dialog arka planı
+
+Under `prefers-reduced-motion: reduce`, all animation and transition durations
+fall to 1 ms.
+
+```text
+--z-sticky   20   sticky table header
+--z-nav      30   top navigation
+--z-overlay  50   dialog backdrop
 --z-dialog   60
 --z-toast    70
 --z-tooltip  80
 ```
 
-**Hiçbir bileşen kendi z-index'ini uydurmaz.** İhtiyaç varsa buraya eklenir.
+Components must not invent z-index values. Add a token here when a new layer
+is required.
 
-## 5. Tipografi
+## 5. Typography
 
-Geist Variable (metin) ve Geist Mono Variable (kod, tanımlayıcı, sayı). İkisi de
-`@fontsource-variable` ile **paketin içine gömülü**; CDN yok.
+Geist Variable is used for text and Geist Mono Variable for code, identifiers
+and numbers. Both are bundled through `@fontsource-variable`; there is no CDN.
 
-| Rol | Boyut | Ağırlık | Not |
+| Role | Size | Weight | Note |
 | --- | --- | --- | --- |
-| `h1` | 22px | 560 | Sayfa başlığı, sayfada bir tane |
-| `h2` | 16px | 560 | Bölüm başlığı |
-| `h3` | 14px | 560 | Panel başlığı |
-| Gövde | 14px | 400 | `body` varsayılanı |
-| Kontrol / tablo | 13px | 400 | Buton, input, hücre |
-| Yardım metni | 12px | 400 | `text-subtle` ile |
+| `h1` | 22px | 560 | One page heading |
+| `h2` | 16px | 560 | Section heading |
+| `h3` | 14px | 560 | Panel heading |
+| Body | 14px | 400 | `body` default |
+| Controls / tables | 13px | 400 | Buttons, inputs and cells |
+| Help text | 12px | 400 | With `text-subtle` |
 
-Başlıklarda `letter-spacing: -0.018em` ve `text-wrap: balance`; paragraflarda
-`text-wrap: pretty`.
+Headings use `letter-spacing: -0.018em` and `text-wrap: balance`; paragraphs
+use `text-wrap: pretty`.
 
-**Sayılar her yerde `tabular-nums`.** `th`, `td`, `code`, `kbd`, `pre` ve
-`[data-numeric]` taşıyan her element otomatik alır. Bu üründe her sayı başka
-bir sayıyla karşılaştırılır; hizalanmayan rakam okuma hatası üretir.
+Numbers use `tabular-nums` everywhere. `th`, `td`, `code`, `kbd`, `pre` and
+elements carrying `[data-numeric]` receive it automatically. Values in this
+product are compared with other values, so misaligned digits create reading
+errors.
 
-`font-feature-settings: 'cv11', 'ss01'` ile tek katlı `a` ve düz `l` açık,
-böylece `1`/`l`/`I` karışmaz.
+`font-feature-settings: 'cv11', 'ss01'` enables single-story `a` and straight
+`l` so `1`, `l` and `I` are easier to distinguish.
 
-## 6. Boşluk ve düzen
+## 6. Spacing and layout
 
-4 px tabanlı Tailwind ölçeği. Pratikte kullanılan değerler: `gap-1.5` (6),
-`gap-2` (8), `gap-3` (12), `gap-4` (16), `gap-6` (24).
+Use the 4 px Tailwind scale. Common values are `gap-1.5` (6), `gap-2` (8),
+`gap-3` (12), `gap-4` (16) and `gap-6` (24).
 
-- Gezinme yüksekliği: `--nav-h` = 56 px, tek satır.
-- İçerik genişliği: `--shell-max` = 1440 px.
-- Kontrol yükseklikleri: `sm` 28 px, `md` 32 px (varsayılan), `lg` 36 px.
+- Navigation height: `--nav-h` = 56 px, one line.
+- Content width: `--shell-max` = 1440 px.
+- Control heights: `sm` 28 px, `md` 32 px by default, `lg` 36 px.
 
-**Liste satırlarında flex-wrap yerine grid.** Birden çok satırda aynı bilginin
-farklı x konumunda başlaması taranabilirliği bitirir. Örnek
-([`pages/Workspaces.tsx`](pages/Workspaces.tsx)):
+Use grid instead of `flex-wrap` for list rows. A repeated piece of information
+must begin at the same x position across rows. For example,
+[`pages/Workspaces.tsx`](pages/Workspaces.tsx) uses
+`grid grid-cols-1 items-center gap-x-4 gap-y-2 px-4 py-3` and
+`md:grid-cols-[minmax(0,1fr)_15rem_8.5rem_9.5rem]`.
 
-```tsx
-'grid grid-cols-1 items-center gap-x-4 gap-y-2 px-4 py-3',
-'md:grid-cols-[minmax(0,1fr)_15rem_8.5rem_9.5rem]',
-```
+On mobile the layout becomes one column. Keep column widths stable and give
+buttons a fixed width such as `w-[6.25rem]` so row edges remain aligned.
 
-Mobilde tek sütuna iner, sütun genişlikleri sabit kalır, butonlar sabit
-genişlik alır (`w-[6.25rem]`) ki satırlar arasında tırtıklı kenar oluşmasın.
+## 7. Component inventory
 
-## 7. Bileşen envanteri
+### 7.1 Primitives (`components/ui/`)
 
-### 7.1 Primitifler (`components/ui/`, 18 dosya)
-
-| Dosya | Dışa aktarılan | Notlar |
+| File | Exports | Notes |
 | --- | --- | --- |
-| `Button.tsx` | `Button`, `IconButton` | 5 varyant, 3 boyut, `loading` durumu |
-| `Input.tsx` | `Input`, `Textarea`, `ReadonlyValue` | `controlClasses` paylaşır |
-| `Select.tsx` | `Select` | Radix Select, `Field` bağlamını okur |
+| `Button.tsx` | `Button`, `IconButton` | Five variants, three sizes, loading state |
+| `Input.tsx` | `Input`, `Textarea`, `ReadonlyValue` | Shares `controlClasses` |
+| `Select.tsx` | `Select` | Radix Select; reads `Field` context |
 | `Checkbox.tsx` | `Checkbox` | Radix Checkbox |
-| `Field.tsx` | `Field`, `useField`, `useOptionalField`, `controlClasses` | Etiket/hata/yardım ilişkilendirmesi |
-| `Panel.tsx` | `Panel`, `PanelHeader` | Yüzey + `--r-md` + saç çizgisi |
-| `Dialog.tsx` | `Dialog`, `ConfirmDialog` | 4 boyut; `ConfirmDialog` `window.confirm` yerine geçer |
-| `Menu.tsx` | `Menu`, `MenuTrigger`, `MenuContent`, `MenuItem`, `MenuRadioGroup`, `MenuRadioItem`, `MenuLabel`, `MenuSeparator` | Radix DropdownMenu |
-| `Toast.tsx` | `ToastProvider`, `useToast` | `window.alert` yerine geçer |
-| `Tooltip.tsx` | `TooltipProvider`, `Tooltip` | Yalnız ikon butonlarında zorunlu |
-| `Badge.tsx` | `Badge`, `Identifier` | `Identifier` mono, sunucu/veritabanı adı için |
-| `DataGrid.tsx` | `DataGrid` | Sonuç tablosu |
-| `EmptyState.tsx` | `EmptyState` | İkon + başlık + açıklama + eylem |
-| `Skeleton.tsx` | `Skeleton`, `SkeletonRows` | Yükleniyor iskeleti |
-| `Spinner.tsx` | `Spinner` | Yalnız butonda ve satır içinde |
-| `Kbd.tsx` | `Kbd` | Kısayol gösterimi |
-| `Picker.tsx` | `Picker` | Aranabilir liste (sunucu/veritabanı seçimi) |
-| `SegmentedControl.tsx` | `SegmentedControl` | `role="group"` + `aria-pressed` |
+| `Field.tsx` | `Field`, `useField`, `useOptionalField`, `controlClasses` | Associates labels, errors and help |
+| `Panel.tsx` | `Panel`, `PanelHeader` | Surface, `--r-md` and hairline |
+| `Dialog.tsx` | `Dialog`, `ConfirmDialog` | Four sizes; replaces `window.confirm` |
+| `Menu.tsx` | Menu primitives | Radix DropdownMenu |
+| `Toast.tsx` | `ToastProvider`, `useToast` | Replaces `window.alert` |
+| `Tooltip.tsx` | `TooltipProvider`, `Tooltip` | Required for icon-only buttons |
+| `Badge.tsx` | `Badge`, `Identifier` | Mono identifiers for servers and databases |
+| `DataGrid.tsx` | `DataGrid` | Result table |
+| `EmptyState.tsx` | `EmptyState` | Icon, title, description and action |
+| `Skeleton.tsx` | `Skeleton`, `SkeletonRows` | Loading placeholders |
+| `Spinner.tsx` | `Spinner` | Buttons and inline rows only |
+| `Kbd.tsx` | `Kbd` | Shortcut display |
+| `Picker.tsx` | `Picker` | Searchable server/database list |
+| `SegmentedControl.tsx` | `SegmentedControl` | `role="group"` and `aria-pressed` |
 
-### 7.2 Buton varyantları
+### 7.2 Button variants
 
+```text
+primary     bg-primary text-primary-fg          the page's main action
+secondary   bg-surface + border-control-line    default action
+ghost       transparent, bg-hover on hover      toolbars and icon neighbors
+danger      transparent + border-danger-line    destructive action
+quiet       underlined link appearance          inline secondary action
 ```
-primary     bg-primary text-primary-fg          Sayfadaki tek asıl eylem
-secondary   bg-surface + border-control-line    Varsayılan
-ghost       şeffaf, hover'da bg-hover           Araç çubuğu, ikon yanı
-danger      şeffaf + border-danger-line         Yıkıcı eylem
-quiet       altı çizili bağlantı görünümü       Satır içi ikincil eylem
-```
 
-**Bir ekranda birden fazla `primary` buton olamaz.** İki eşit önemde eylem
-varsa ikisi de `secondary` olur.
+An individual screen may have only one `primary` button. If two actions have
+equal importance, make both secondary.
 
-`danger` varyantı dolu değil, kenarlıdır. Silme butonu, ekrandaki en dikkat
-çekici nesne olmamalı; onay diyaloğu zaten yıkıcılığı anlatır.
+The `danger` variant is outlined rather than filled. The confirmation dialog
+communicates the destructive nature of the action.
 
-### 7.3 Ürün bileşenleri (`components/app/`)
+### 7.3 Product components (`components/app/`)
 
-| Dosya | İşi |
+| File | Responsibility |
 | --- | --- |
-| `AppShell.tsx` | 56 px gezinme, atlama bağlantısı, tema menüsü, hesap menüsü, palet tetikleyicisi |
-| `AuthLayout.tsx` | Giriş/kayıt için iki sütunlu düzen |
-| `BrandMark.tsx` | Geometrik SVG marka işareti |
-| `CodeEditor.tsx` | CodeMirror 6, token temalı, lehçe duyarlı |
-| `CommandPalette.tsx` | ⌘K; Git / Eylem / Çalışma alanları / Görünüm / Hesap grupları |
-| `ResultPanel.tsx` | Sonuç durumları + dışa aktarma menüsü |
-| `SplitPane.tsx` | Sürükle veya ok tuşuyla ayarlanır, oran kalıcı, `lg` altında dikey yığılır |
-| `admin/*.tsx` | Onaylar, inceleme diyaloğu, maskeleme, kimlik bilgisi ve kullanıcı aktivasyonu sekmeleri |
+| `AppShell.tsx` | 56 px navigation, skip link, theme and account menus, palette trigger |
+| `AuthLayout.tsx` | Two-column login and registration layout |
+| `BrandMark.tsx` | Geometric SVG brand mark |
+| `CodeEditor.tsx` | CodeMirror 6 with token theme and dialect support |
+| `CommandPalette.tsx` | ⌘K palette grouped by Git, actions, workspaces, appearance and account |
+| `ResultPanel.tsx` | Result states and export menu |
+| `SplitPane.tsx` | Drag or keyboard resizing, persistent ratio, vertical stack below `lg` |
+| `admin/*.tsx` | Approvals, review dialog, masking, credentials and user activation tabs |
 
-## 8. Durum örüntüleri
+## 8. State patterns
 
-Her veri gösteren yüzeyin **dört** durumu vardır ve dördü de yazılmak zorundadır:
+Every data surface has four states, and all four must be designed:
 
-| Durum | Ne gösterilir |
+| State | Display |
 | --- | --- |
-| Yükleniyor | `SkeletonRows` veya `Skeleton`. Asla ortada dönen tek spinner değil. |
-| Boş | `EmptyState`: ne olduğu, neden boş olduğu, sonraki adım. |
-| Hata | Satır içi mesaj + yeniden dene eylemi. Toast tek başına yeterli değil. |
-| Dolu | İçerik. |
+| Loading | `SkeletonRows` or `Skeleton`; never only a centered spinner |
+| Empty | `EmptyState`: what it is, why it is empty and the next step |
+| Error | Inline message plus retry action; a toast alone is insufficient |
+| Full | The content |
 
-`api.ts` içindeki `errorMessage(error)` her fırlatılan değeri kullanıcıya
-gösterilebilir tek bir cümleye çevirir. Ham `Error.message`'ı doğrudan
-basmayın.
+`errorMessage(error)` in `api.ts` turns any thrown value into one user-facing
+sentence. Do not render a raw `Error.message` directly.
 
-**Yükleniyor iskeleti gerçek düzeni taklit eder.** Yükleme bittiğinde içerik
-yerinden oynamamalı.
+Loading skeletons should follow the real layout so content does not jump when
+loading completes.
 
-## 9. Veri tablosu kuralları
+## 9. Data table rules
 
-[`components/ui/DataGrid.tsx`](components/ui/DataGrid.tsx):
+[`components/ui/DataGrid.tsx`](components/ui/DataGrid.tsx) renders 200 rows at
+a time and reveals more on demand. New results reset the counter with
+`useEffect(() => setVisible(PAGE), [rows])`.
 
-- Aynı anda 200 satır render edilir, kullanıcı istedikçe artar. Yeni sonuç
-  geldiğinde sayaç sıfırlanır (`useEffect(() => setVisible(PAGE), [rows])`).
-- Sayısal sütunlar sağa hizalı ve mono; `isNumericColumn()` ile tespit edilir.
-- Maskelenmiş sütunlar başlıkta işaretlenir. Kullanıcı gördüğü değerin
-  maskelendiğini bilmek zorundadır.
-- Bu işaret **yalnızca** yanıttaki `masked_columns` alanından beslenir; istenen
-  maskeleme kümesinden değil. İkisi ayrışır: veritabanı yöneticisi için
-  maskeleme bilinçli olarak atlanır, o zaman rozet de çıkmamalıdır. Rozeti
-  niyetten türetmek, maskelenmemiş veriyi maskeliymiş gibi göstermek demektir.
-  Bkz. SPEC-0012 BR-04.
-- `NULL`, boş metin ve gerçek değer üç ayrı görünümdür. `formatCell()` bunu
-  döndürür; `NULL`'u boş hücre gibi göstermek veri yanlışı üretir.
-- Başlık yapışkandır (`.grid-head-cell`), bulanıklık değil opak zemin kullanır.
-- Sonuç kırpıldıysa (`truncated`) tablo bunu açıkça söyler.
+Numeric columns are right-aligned and mono, detected by `isNumericColumn()`.
+Masked columns are marked in their headers. The marker is derived only from
+the response's `masked_columns`, never from the requested masking set. A
+database administrator may intentionally bypass masking, and the badge must
+then be absent.
 
-## 10. Erişilebilirlik sözleşmesi
+`NULL`, empty text and real values are three different displays. `formatCell()`
+preserves that distinction. Sticky headers use an opaque background. A
+truncated result is stated explicitly in the table.
 
-Bunlar isteğe bağlı değil, kabul kriteri (SPEC-0010 AC-07..AC-10).
+## 10. Accessibility contract
 
-1. **Tek odak göstergesi.** `global.css` içinde bir `:focus-visible` kuralı.
-   Bileşen bunu kaldıramaz, yerine kendi halkasını koyamaz.
-2. **Kontrast.** Metin 4.5:1, kontrol kenarı ve odak halkası 3:1.
-   `npm run audit:contrast` 32 renk çiftini iki temada da ölçer, toplam 64 kontrol.
-   Token değeri değiştiren her değişiklikte çalıştırılır.
-3. **İsimlendirme.** Her ikon butonunun `aria-label`'ı ve `Tooltip`'i var.
-   Her form kontrolü `Field` üzerinden etiketiyle ilişkili.
-4. **Klavye.** Tüm akış klavyeyle tamamlanabilir. Dialog ve menülerde odak
-   tuzağı Radix'ten gelir. `SplitPane` ok tuşlarıyla ayarlanır.
-5. **Atlama bağlantısı.** `.skip-link` ilk sekmede görünür ve gerçek içeriğe
-   iner.
-6. **Hareket.** `prefers-reduced-motion` her animasyonu iptal eder.
-7. **Rol dürüstlüğü.** Roving focus uygulamıyorsanız `role="radiogroup"`
-   kullanmayın. `SegmentedControl` bu yüzden `role="group"` + `aria-pressed`.
+These rules are acceptance criteria, not optional polish:
 
-## 11. Klavye haritası
+1. Use one global `:focus-visible` indicator in `global.css`. Components must
+   not remove it or replace it with a private ring.
+2. Text contrast is 4.5:1; control borders and focus rings are 3:1.
+   `npm run audit:contrast` checks 32 pairs in both themes, 64 checks total.
+3. Every icon-only button has an `aria-label` and a `Tooltip`. Every form
+   control is labelled through `Field`.
+4. The complete flow works from the keyboard. Radix supplies focus handling
+   for dialogs and menus; `SplitPane` responds to arrow keys.
+5. `.skip-link` appears on the first tab and reaches the actual main content.
+6. `prefers-reduced-motion` disables animation.
+7. Use `role="group"` and `aria-pressed` for `SegmentedControl`; use
+   `radiogroup` only when implementing roving focus.
 
-| Kısayol | Etki | Nerede |
+## 11. Keyboard map
+
+| Shortcut | Effect | Where |
 | --- | --- | --- |
-| `⌘K` / `Ctrl+K` | Komut paletini aç/kapat | Her yerde, metin alanı içinde bile |
-| `⌘↵` / `Ctrl+↵` | Sorguyu çalıştır | Studio, RunWorkspace |
-| `⌘S` / `Ctrl+S` | Çalışma alanını kaydet | Studio |
-| `Esc` | Katmanı kapat | Dialog, menü, palet |
+| `⌘K` / `Ctrl+K` | Toggle command palette | Everywhere, including text fields |
+| `⌘↵` / `Ctrl+↵` | Run query | Studio and RunWorkspace |
+| `⌘S` / `Ctrl+S` | Save workspace | Studio |
+| `Esc` | Close current layer | Dialog, menu and palette |
 
-**Çift tetikleme tuzağı:** CodeMirror `Mod-Enter`'ı kendi keymap'inde bağlar.
-Pencere seviyesindeki `useHotkey('mod+enter', ...)` bu yüzden
-`allowInEditable` **almaz**; alırsa sorgu iki kez çalışır. Bu hata bir kez
-yaşandı, tekrarlamayın.
+CodeMirror binds `Mod-Enter` in its own keymap. The window-level
+`useHotkey('mod+enter', ...)` must not set `allowInEditable`, or the query will
+run twice.
 
-## 12. Yasak listesi
+## 12. Avoid generic AI styling
 
-Bunlar "klasik AI tasarımı" izleridir ve bu kod tabanında bulunmamalıdır.
+The following patterns do not belong in this codebase:
 
-| Yasak | Neden |
+| Pattern | Reason |
 | --- | --- |
-| Gradient arka plan, glow, blur "blob" | Anlam taşımaz, kroma bütçesini yer |
-| Mor/indigo → pembe geçişli marka rengi | Ürünün rengi durum rengidir |
-| `uppercase tracking-[0.3em]` mikro etiket | Okunabilirliği düşürür, hiçbir bilgi eklemez |
-| Karışık yarıçap (`rounded-3xl` + `rounded-lg` aynı ekranda) | Ölçek Bölüm 4.5'te kilitli |
-| Dekoratif renkli nokta, atan gradient nokta | Renk yalnız durum içindir |
-| "Initialize / Establish / Purge" gibi sahte teknik dil | Kullanıcı taslak siler, "purge" etmez |
-| `window.alert` / `window.confirm` | `useToast` ve `ConfirmDialog` var |
-| Yeni z-index sayısı | `--z-*` ölçeğine ekleyin |
-| Yeni renk sabiti (hex, rgb) | Token yoksa token ekleyin |
-| CDN'den script, font veya stil | Bölüm 14'e bakın |
-| Emoji ikon | `@phosphor-icons/react` kullanılır |
-| Lucide ikonları | Bu projede Phosphor seçildi, karıştırmayın |
+| Gradient background, glow or blur blob | Adds no meaning and consumes the chroma budget |
+| Purple/indigo-to-pink brand gradient | State colors carry product meaning |
+| `uppercase tracking-[0.3em]` micro-labels | Reduces readability without adding information |
+| Mixed radii such as `rounded-3xl` and `rounded-lg` | The radius scale is fixed in section 4.5 |
+| Decorative colored dots or gradients | Color is reserved for state |
+| Fake technical words such as “initialize” or “purge” | Use the concrete action users understand |
+| New z-index values | Add a `--z-*` token |
+| CDN scripts, fonts or styles | The product must work on a closed network |
+| Emoji icons or mixed icon libraries | Use `@phosphor-icons/react` consistently |
 
-## 13. Dil ve terminoloji
+## 13. Product language
 
-Arayüz **tamamen Türkçedir**. Karışık dil bu üründe daha önce vardı ve
-kaldırıldı. Sözlük katmanı yok; metinler bileşenlerin içinde yaşar.
+The interface is entirely in English. Text lives in the components because the
+product currently has one supported language; do not introduce a translation
+observer or runtime dictionary for a single-language change.
 
-Çalışma alanı durumlarının tek kaynağı
-[`lib/workspace-status.ts`](lib/workspace-status.ts):
+Workspace states have one source in `lib/workspace-status.ts`:
 
-| Backend değeri | Etiket | Ton |
+| Backend value | Label | Tone |
 | --- | --- | --- |
-| `saved_in_workspace` | Taslak | neutral |
-| `waiting_for_approval` | Onay bekliyor | warning |
-| `approved_and_executed` | Onaylandı | success |
-| `approved_with_results` | Çalıştırılabilir | success |
-| `rejected` | Reddedildi | danger |
+| `draft` | Draft | neutral |
+| `pending_approval` | Pending approval | warning |
+| `approved_and_executed` | Approved | success |
+| `approved_with_results` | Ready to run | success |
+| `rejected` | Rejected | danger |
 
-Her durumun bir `hint` alanı vardır: kullanıcının bu durumda **ne
-yapabileceğini** bir cümleyle anlatır. Yeni bir ekran durum gösterecekse
-etiketi ve rengi buradan okur, kendi eşlemesini yazmaz.
+Each state has a `hint` that explains what the user can do. New screens read
+the label, tone and hint from that source instead of defining their own map.
 
-Yazım kuralları:
+Writing rules:
 
-- Butonlar fiil: "Kaydet", "Çalıştır", "Onayla". "Tamam" değil.
-- Hata mesajı ne olduğunu ve ne yapılacağını söyler: "Sunucuya ulaşılamıyor.
-  Ağ bağlantınızı kontrol edin."
-- Teknik terim şişirilmez. "Sorgu çalıştırılıyor", "Sorgu yürütme motoru
-  başlatılıyor" değil.
+- Buttons use verbs: “Save”, “Run”, “Approve”.
+- An error says what happened and what the user can do next.
+- Prefer “Running query” to inflated technical language such as “Initializing
+  the query execution engine”.
 
-## 14. Backend sözleşmesi
+## 14. Backend contract
 
-Bu bölüm bir kez gerçekten kayan sözleşmenin tekrar kaymaması içindir. Arayüz
-uzun süre, backend'in çoktan değiştirdiği bir API şekliyle konuştu ve hiçbir
-şey çalışma anına kadar hata vermedi.
+This section keeps the frontend aligned with the contract that actually runs.
 
-### 14.1 Tek kaynak: `types.ts`
+### 14.1 Types mirror the API
 
-[`types.ts`](types.ts) backend'in Pydantic şemalarını **birebir**, snake_case
-alan adlarıyla yansıtır. Alan adını arayüz için güzelleştirmek yasaktır; uyumsuzluk
-burada görünmelidir, çalışma anında değil. Yeniden şekillendirme `lib/` altında,
-onu yapan kodun yanında yaşar.
+[`types.ts`](types.ts) mirrors the backend Pydantic schemas with their exact
+snake_case field names. Do not rename fields for presentation. Reshaping lives
+in `lib/` beside the code that performs it.
 
-### 14.2 Hedef veritabanı uuid ile adreslenir
+### 14.2 Target databases use UUIDs
 
-`servername` ve `database_name` yalnızca **gösterim** içindir. Çalıştırma,
-maskeleme kuralı okuma ve çalışma alanı oluşturma çağrılarının hepsi `db_uuid`
-ister. Seçim bileşenlerinin `value`'su uuid'dir, etiketi addır.
+`servername` and `database_name` are display values only. Query execution,
+masking-rule reads and workspace creation all require `db_uuid`. Picker values
+are UUIDs and their labels are names.
 
-[`lib/targets.ts`](lib/targets.ts) bu dönüşümü kapsar. Bir çalışma alanının
-hedefi kullanıcının yetkileri arasında değilse hedef **boş bırakılır ve
-bildirilir**; sessizce başka bir veritabanına düşmek üretim verisinde yanlış
-yere sorgu çalıştırmak demektir.
+If a workspace target is not among the user's permitted targets, leave the
+target empty and report the problem. Silently falling back to another database
+could run a query against the wrong production data.
 
-### 14.3 Çalıştırma sonucu tek yerde çözümlenir
+### 14.3 Resolve execution results once
 
-`SQLResponse` `{response_type, data, message, error, masked_columns}` döndürür.
-`masked_columns`, bu yanıtta **gerçekten** maskelenmiş sütunların adlarını
-sonuç satırlarındaki yazımıyla taşır. Satır
-sayısı ve kırpma bilgisi İngilizce `message` metninin içindedir
-(`"Truncated to MAX_ROW_COUNT_LIMIT (1000)"`, `"42 rows affected"`).
+`SQLResponse` returns `{response_type, data, message, error, masked_columns}`.
+`masked_columns` contains the names of columns actually masked in the response,
+using the spelling from result rows. Row counts and truncation are encoded in
+the English `message`.
 
-[`lib/execution.ts`](lib/execution.ts) bu metni bir kez ayrıştırıp
-`ExecutionOutcome` üretir. Hiçbir ekran `message` içinde arama yapmaz.
+[`lib/execution.ts`](lib/execution.ts) parses that message once and produces an
+`ExecutionOutcome`. Screens must not search inside `message` themselves.
 
-### 14.4 Hata zarfı
+### 14.4 Error envelope
 
-Servis katmanı hataları `{success, error_code, message, error, trace_id}`
-döndürür. `ApiError` bunlardan `code` ve `traceId` alanlarını taşır.
+Service errors return `{success, error_code, message, error, trace_id}`. `ApiError`
+exposes the `code` and `traceId` fields.
 
-- **`error_code` ile dallanın, mesaj metniyle değil.** Mesaj değişir, kod
-  geçmiş veri sözleşmesidir.
-- **`QUERY_REJECTED_BY_ANALYZER` bir hata değildir.** Risk analizi sorguyu
-  çalışma alanı olarak kaydedip yöneticiye yönlendirmiştir. Arayüz bunu kırmızı
-  başarısızlık değil, sarı bekleme durumu olarak gösterir.
-- **`QUERY_SYNTAX_ERROR` ile karıştırmayın.** Bu kod, ifadenin hiç
-  çözümlenemediğini ve bir rol kararına varılmadığını söyler; çalışma alanı da
-  oluşturulmaz. Kullanıcı bir yöneticiyi beklemez, kendi SQL'ine döner.
-- `trace_id` kullanıcıya gösterilir; destek talebinde tek bağlayıcı referans odur.
+- Branch on `error_code`, not message text. Messages can change; codes are the
+  historical data contract.
+- `QUERY_REJECTED_BY_ANALYZER` is a pending state, not an execution failure.
+- `QUERY_SYNTAX_ERROR` means the statement could not be parsed and no role
+  decision was reached; no workspace is created.
+- `trace_id` is the single support reference shown to the user.
 
-### 14.5 Oturum kendini yeniler
+### 14.5 Session refresh
 
-Erişim çerezi kısa ömürlüdür (`ACCESS_TOKEN_EXPIRE_MINUTES`, varsayılan 20
-dakika); dönen refresh çerezi saatlerce yaşar. Oturum ortasında gelen 401
-neredeyse her zaman "yeni erişim jetonu üret" demektir, "tekrar giriş yap"
-değil.
+The access cookie is short-lived (`ACCESS_TOKEN_EXPIRE_MINUTES`, 20 minutes by
+default); the refresh cookie lasts longer. `services/api.ts` tries
+`POST /api/refresh` once before redirecting and retries the original request
+with the same body when refresh succeeds.
 
-`services/api.ts` içindeki `request`, yönlendirmeden önce bir kez
-`POST /api/refresh` dener ve başarılıysa özgün isteği aynı gövdeyle tekrarlar.
-Tekrarlanan istek ikinci kez yenileme denemez.
+Refresh tokens are single-use. Concurrent 401 responses share one in-flight
+refresh promise so that one request does not consume the token needed by the
+next request. Login, registration and refresh itself remain outside this path.
 
-- **Refresh jetonu tek kullanımlıktır.** Aynı anda 401 alan istekler kendi
-  yenilemelerini gönderirse biri hariç hepsi bir sonraki isteğin ihtiyaç duyduğu
-  jetonu yakar. Bu yüzden uçuştaki tek bir yenileme sözü paylaştırılır
-  (`refreshInFlight`).
-- **Giriş, kayıt ve yenilemenin kendisi bu yolun dışındadır.** Üçünde de 401
-  normal sonuçtur; henüz kurulmamış bir oturum yenilenemez. `skipAuthRedirect`
-  bu üçünü işaretler.
-- **Arayüz jetonu görmez.** Çerezler `httponly`'dir; yenileme yalnızca çerezle
-  çalışır. Jetonu okumaya, saklamaya veya bir gövdeye yazmaya çalışmayın.
+The browser never reads the token. Cookies are `httponly`; refresh works only
+through cookies.
 
-### 14.6 Onay kararı geri alınamaz ve gerekçelidir
+### 14.6 Approval decisions are final and explained
 
-- **Reddetme gerekçe ister.** Backend 3-500 karakter zorunlu tutar. Arayüz aynı
-  kuralı önden uygular ki kullanıcı yazdığını 422 ile kaybetmesin. İstemci
-  doğrulaması sunucununkinin yerine geçmez, önüne geçer.
-- **Gerekçe talep sahibine gider.** Karar servisi çalışma alanının açıklamasını
-  `"Rejected by <yönetici>: <gerekçe>"` olarak yazar ve çalışma alanları listesi
-  bu açıklamayı gösterir. Gerekçe alanının yardım metni bunu vaat eder; vaadi
-  bozacak bir değişiklik yardım metnini de düzeltmelidir.
-- **`APPROVAL_CONFLICT` yeniden denenmez.** Karar sunucuda atomiktir; 409 alan
-  taraf yarışı kaybetmiştir. Bayat olan karar değil listedir: uyarı gösterilir,
-  diyalog kapanır, liste yenilenir.
+Rejection requires a reason of 3–500 characters. The client validates this
+early so the user does not lose input to a 422 response, while the server
+remains authoritative.
 
-### 14.7 Bilinen sözleşme sınırları
+The decision service writes the reason into the workspace description as
+`Rejected by <administrator>: <reason>`. A stale list is refreshed after a
+conflict; the decision itself is not silently repeated.
 
-| Sınır | Sonuç |
+### 14.7 Known contract boundaries
+
+| Boundary | Result |
 | --- | --- |
-| `PUT /api/workspaces/{id}` yalnız `query` ve `status` kabul eder | Ad, açıklama ve hedef arayüzden güncellenemez |
-| `GET /api/me` e-posta döndürmez | Hesap menüsü kullanıcı adı ve rol gösterir |
-| `POST /api/workspaces` `{success, workspace_id}` döndürür | Oluşturulan kayıt ayrıca okunur |
-| `POST /api/admin/associate_user` `user_id` ister; kullanıcı listesi/aktivasyonu platform admin ekranında bulunur, DB rol ataması ayrı kapsamlıdır | Kullanıcı aktivasyon ekranı yapılabilir; DB rol atama ekranı ilgili DB ADMIN kapsamıyla ayrıca tasarlanmalıdır |
-| `GET /api/admin/audit_log` var, arayüzü yok | Denetim kayıtları yalnız API'den okunur |
+| `PUT /api/workspaces/{id}` accepts only `query` and `status` | Name, description and target are not edited through that route |
+| `GET /api/me` does not return email | The account menu shows username and role |
+| `POST /api/workspaces` returns `{success, workspace_id}` | The created record is read separately |
+| `POST /api/admin/associate_user` requires `user_id` | Platform user activation and database role assignment remain separate scopes |
+| `GET /api/admin/audit_log` exists without a UI | Audit records are read through the API |
 
-### 14.8 Otomatik denetim
+`scripts/api-contract-audit.mjs` compares every call in `services/api.ts` with
+the FastAPI routes and lists backend-only routes for information. Run it after
+adding or changing an endpoint. It checks paths and methods, not request body
+fields; read the relevant Pydantic schema for body changes.
 
-```bash
-npm --prefix frontend run audit:api
-```
+## 15. Hard technical constraints
 
-[`scripts/api-contract-audit.mjs`](scripts/api-contract-audit.mjs) `services/api.ts`
-içindeki her çağrıyı FastAPI router'larındaki rotalarla karşılaştırır ve
-karşılığı olmayan çağrıda sıfırdan farklı çıkış verir. Ayrıca arayüzü olmayan
-backend rotalarını bilgi olarak listeler. Endpoint ekleyen veya değiştiren her
-işten sonra çalıştırılır.
+1. No CDN at runtime. The application queries production databases and must
+   work on a closed network; fonts, styles and scripts are bundled.
+2. Apply the theme before the first paint so users do not see a white flash.
+3. TypeScript keeps strict checks such as `noFallthroughCasesInSwitch`; do not
+   silence errors with `any`.
+4. Heavy modules load lazily: Studio, RunWorkspace and Admin use `React.lazy`,
+   and `xlsx` uses dynamic `import()`. Keep the first load close to 150 kB
+   gzip unless a larger size is justified.
+5. Routes remain `/`, `/login`, `/register`, `/editor`, `/editor/:id`,
+   `/execute/:id` and `/admin` through `HashRouter`.
+6. Components call the API only through the `api` object in `services/api.ts`;
+   they do not call `fetch` directly.
 
-Bu betik yolu ve metodu doğrular, gövde alanlarını **doğrulamaz**. Gövde
-değişikliklerinde ilgili Pydantic şeması hâlâ elle okunmalıdır.
+## 16. Adding a new thing
 
-## 15. Kırılmaz teknik kısıtlar
+Follow this order:
 
-1. **Çalışma zamanında CDN yok.** Bu uygulama üretim veritabanlarını sorgular
-   ve kapalı ağda çalışabilmelidir. Font, stil ve script paketin içinde
-   gelir. `index.html`'e `<script src="https://...">` eklemek regresyondur.
-2. **Tema ilk boyamadan önce uygulanır.** `index.html` içindeki satır içi
-   script `localStorage['webquery.theme']` okur. Bu script silinirse koyu tema
-   kullanıcısı beyaz bir flaş görür.
-3. **TypeScript strict.** `noUnusedLocals`, `noUnusedParameters`,
-   `noFallthroughCasesInSwitch` açık. `any` ile susturmayın.
-4. **Ağır modüller tembel yüklenir.** Studio, RunWorkspace ve Admin
-   `React.lazy`; `xlsx` dinamik `import()`. İlk yük ~150 kB gzip; bunu
-   büyüten değişiklik gerekçelendirilmeli.
-5. **Rota yapısı sabit.** `/`, `/login`, `/register`, `/editor`,
-   `/editor/:id`, `/execute/:id`, `/admin`. HashRouter kullanılıyor.
-6. **API sözleşmesi frontend'den değiştirilmez.** Tüm çağrılar
-   [`services/api.ts`](services/api.ts) içindeki `api` nesnesinden geçer;
-   bileşenler doğrudan `fetch` çağırmaz.
+1. Reuse an existing primitive or add a variant before creating a new pattern.
+2. Use design tokens. If a token is missing, add it to `tokens.css` and wire it
+   into the `@theme inline` block in `global.css`.
+3. Design loading, empty, error and full states.
+4. Test with the keyboard: tab order, focus visibility and Escape behavior.
+5. Check both themes.
+6. Validate with `npm run typecheck`, `npm run build` and the relevant audits.
 
-## 16. Yeni bir şey eklerken
+There is no committed frontend test command. Do not invent a passing test
+result; the build, audits and browser inspection are the current validation
+surface.
 
-Sırayla:
+## 17. File map
 
-1. **Var olanı kullan.** İhtiyacınız olan şey `components/ui/` içinde büyük
-   ihtimalle var. Yoksa, var olanın bir varyantı olarak eklenebilir mi?
-2. **Token kullan.** Sabit renk, sabit yarıçap, sabit süre yazmayın.
-   İhtiyacınız olan token yoksa `tokens.css`'e ekleyin ve `global.css`'teki
-   `@theme inline` bloğuna bağlayın. İkisini birden yapın.
-3. **Dört durumu da yaz.** Yükleniyor, boş, hata, dolu.
-4. **Klavyeyle dene.** Sekme sırası mantıklı mı, odak görünüyor mu, Esc
-   çalışıyor mu?
-5. **İki temayı da aç.** Koyu temada kontrast kaybı en sık burada çıkar.
-6. **Doğrula:**
-
-```bash
-npm --prefix frontend run typecheck && npm --prefix frontend run audit:contrast && npm --prefix frontend run audit:api && npm --prefix frontend run build
-```
-
-Bu projede frontend için otomatik test komutu **yoktur**. Test sonucu
-uydurmayın; yukarıdaki üç komut artı tarayıcı kontrolü mevcut doğrulama
-yüzeyidir.
-
-## 17. Dosya haritası
-
-```
+```text
 frontend/
-├── DESIGN.md            bu dosya
-├── README.md            kurulum, komutlar, mimari özet
-├── index.html           tema ön-yükleyici, favicon, noscript
-├── index.tsx            kök, global.css importu
-├── App.tsx              sağlayıcı zinciri, rotalar, guard'lar
-├── types.ts             backend sözleşmesinin TypeScript karşılığı
+├── README.md                  setup, commands and architecture summary
+├── index.html                 theme preloader, favicon and noscript message
+├── App.tsx                    provider chain, routes and guards
+├── types.ts                   TypeScript form of the backend contract
 ├── styles/
-│   ├── tokens.css       TEK renk/ölçek kaynağı
-│   └── global.css       Tailwind bağlama + base + components + utilities
+│   ├── tokens.css             single color and scale source
+│   └── global.css             Tailwind binding, base, components and utilities
 ├── lib/
-│   ├── cn.ts            clsx + tailwind-merge
-│   ├── theme.tsx        tema tercihi ve çözümlemesi
-│   ├── session.tsx      oturum durumu
-│   ├── workspaces.tsx   paylaşılan çalışma alanı önbelleği
-│   ├── workspace-status.ts  durum sözlüğü
-│   ├── targets.ts       db_uuid <-> sunucu/veritabanı çözümlemesi
-│   ├── execution.ts     SQLResponse -> ExecutionOutcome adaptörü
-│   ├── format.ts        sayı, boyut, süre, hücre biçimleme
-│   ├── hooks.ts         useHotkey, useIsMac, usePersistentState
-│   └── export.ts        xlsx ve csv dışa aktarma
+│   ├── theme.tsx              theme preference and resolution
+│   ├── workspaces.tsx         shared workspace cache
+│   ├── workspace-status.ts    state dictionary
+│   ├── targets.ts             db_uuid to server/database resolution
+│   ├── execution.ts           SQLResponse to ExecutionOutcome adapter
+│   ├── format.ts              number, size, duration and cell formatting
+│   └── export.ts              xlsx and csv export
 ├── components/
-│   ├── ui/              18 primitif
-│   └── app/             ürün bileşenleri + admin/
-├── pages/               Workspaces, Studio, RunWorkspace, Admin, Login,
-│                        Register, NotFound
-├── services/api.ts      tek tip API istemcisi
+│   ├── ui/                    reusable primitives
+│   └── app/                   product components and admin flows
 └── scripts/
-    ├── contrast-audit.mjs      WCAG kontrast kapısı
-    └── api-contract-audit.mjs  frontend/backend endpoint kapısı
+    ├── contrast-audit.mjs     WCAG contrast gate
+    └── api-contract-audit.mjs frontend/backend endpoint gate
 ```
 
-## 18. Sonraki oturum için kısa özet
+## 18. Quick reference for the next session
 
-Bir şey değiştirecekseniz dört dosyaya bakmanız yeter:
+For a change, start with the relevant one of these four files:
 
-1. Renk veya ölçek → `styles/tokens.css`
-2. Bir kontrolün nasıl göründüğü → `components/ui/` içindeki ilgili dosya
-3. Bir ekranın nasıl kurulduğu → `pages/` içindeki ilgili dosya
-4. Bir endpoint'in ne kabul ettiği → `services/api.ts` ve `types.ts`
+1. Color or scale: `styles/tokens.css`
+2. Control appearance: the related file in `components/ui/`
+3. Screen composition: the related file in `pages/`
+4. Endpoint contract: `services/api.ts` and `types.ts`
 
-Ve bir kural hatırlayın: **renk anlam taşır.** Eklediğiniz renk bir durumu
-işaretlemiyorsa, gri olmalı.
+Remember the core rule: color carries meaning. If a new color does not mark a
+state, it should be gray.

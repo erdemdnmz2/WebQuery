@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="WebQuery platform OWNER bootstrap")
     parser.add_argument("--email", required=True, help="Mevcut veya yeni OWNER e-posta adresi")
-    parser.add_argument("--username", help="Yalnızca yeni kullanıcı oluşturulacaksa gerekir")
+    parser.add_argument("--username", help="Required only when creating a new user")
     return parser.parse_args()
 
 
@@ -24,10 +24,10 @@ async def _run(args: argparse.Namespace) -> None:
     try:
         password: str | None = None
         if args.username:
-            password = getpass.getpass("Yeni OWNER parolası: ")
-            confirmation = getpass.getpass("Yeni OWNER parolası (tekrar): ")
+            password = getpass.getpass("New OWNER password: ")
+            confirmation = getpass.getpass("New OWNER password (again): ")
             if password != confirmation:
-                raise ValueError("Parolalar eşleşmiyor.")
+                raise ValueError("Passwords do not match.")
 
         user_id, changed = await bootstrap_owner(
             app_db,
@@ -36,7 +36,7 @@ async def _run(args: argparse.Namespace) -> None:
             password=password,
         )
         logger.info(
-            "OWNER bootstrap tamamlandı: user_id=%s changed=%s",
+            "OWNER bootstrap complete: user_id=%s changed=%s",
             user_id,
             changed,
         )
@@ -49,10 +49,10 @@ def main() -> None:
     try:
         asyncio.run(_run(_arguments()))
     except ValueError as exc:
-        logger.critical("OWNER bootstrap başarısız: %s", exc)
+        logger.critical("OWNER bootstrap failed: %s", exc)
         raise SystemExit(1) from exc
     except Exception as exc:
-        logger.critical("OWNER bootstrap başarısız: %s", type(exc).__name__)
+        logger.critical("OWNER bootstrap failed: %s", type(exc).__name__)
         raise SystemExit(1) from exc
 
 

@@ -34,24 +34,24 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ title, subtitle, childre
     <aside className="hidden flex-col justify-center border-l border-line bg-sunken px-12 py-12 lg:flex xl:px-16">
       <div className="max-w-md">
         <p className="text-[21px] font-medium leading-snug tracking-tight text-fg">
-          Üretim veritabanlarına giden her sorgu kayıt altında.
+          Every query to your production databases is recorded.
         </p>
 
         <dl className="mt-8 flex flex-col divide-y divide-line border-y border-line">
           {[
             {
-              term: 'Risk analizi',
+              term: "Risk analysis",
               detail:
-                'Yazdığınız SQL çalıştırılmadan önce sınıflandırılır. Şema değiştiren veya toplu veri silen ifadeler yönetici onayına düşer.',
+                "SQL is classified before execution. Schema changes and bulk deletes are sent for administrator approval.",
             },
             {
-              term: 'Maskeleme',
+              term: "Masking",
               detail:
-                'Yönetici tarafından işaretlenen kolonlar sonuç setine hiç girmez. Geçici kurallarınızı kendiniz de ekleyebilirsiniz.',
+                "Administrator-defined columns are masked in query results. You can also add temporary rules.",
             },
             {
-              term: 'Denetim izi',
-              detail: 'Her çalıştırma; kullanıcı, sunucu, veritabanı ve sorgu metniyle birlikte saklanır.',
+              term: "Audit trail",
+              detail: "Each execution is recorded with its user, server, database and SQL statement.",
             },
           ].map((item) => (
             <div key={item.term} className="py-4">
@@ -61,7 +61,7 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ title, subtitle, childre
           ))}
         </dl>
 
-        <p className="mt-6 text-[12.5px] text-subtle">Erişiminiz yoksa veritabanı yöneticinizle görüşün.</p>
+        <p className="mt-6 text-[12.5px] text-subtle">Contact your database administrator if you need access.</p>
       </div>
     </aside>
   </div>
