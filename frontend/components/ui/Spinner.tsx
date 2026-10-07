@@ -9,7 +9,7 @@ import { cn } from '../../lib/cn';
 export const Spinner: React.FC<{ className?: string; label?: string }> = ({ className, label }) => (
   <span
     role="status"
-    aria-label={label ?? 'Yükleniyor'}
+    aria-label={label ?? "Loading"}
     className={cn(
       'inline-block size-3.5 shrink-0 rounded-full border-[1.5px] border-current border-r-transparent align-[-2px] animate-spin-slow',
       className,

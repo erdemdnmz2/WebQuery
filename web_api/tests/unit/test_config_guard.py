@@ -27,7 +27,7 @@ def test_bos_secret_key_acilmayi_engeller(monkeypatch):
         verify_startup_config()
 
 
-def test_bilinen_varsayilan_reddedilir(monkeypatch):
+def test_known_defaults_are_rejected(monkeypatch):
     _set_valid_config(monkeypatch)
     monkeypatch.setenv("SECRET_KEY", "your-secret-key-here-change-in-production")
 
@@ -35,7 +35,7 @@ def test_bilinen_varsayilan_reddedilir(monkeypatch):
         verify_startup_config()
 
 
-def test_kisa_secret_key_reddedilir(monkeypatch):
+def test_short_secret_key_is_rejected(monkeypatch):
     _set_valid_config(monkeypatch)
     monkeypatch.setenv("SECRET_KEY", "kisa")
 
@@ -43,7 +43,7 @@ def test_kisa_secret_key_reddedilir(monkeypatch):
         verify_startup_config()
 
 
-def test_gecersiz_fernet_key_reddedilir(monkeypatch):
+def test_invalid_fernet_key_is_rejected(monkeypatch):
     _set_valid_config(monkeypatch)
     monkeypatch.setenv("QUERY_ENCRYPTION_KEY", "not-a-fernet-key")
 
@@ -72,10 +72,10 @@ def test_yuksek_yetkili_merkezi_hesap_uyarisi_loglanir(monkeypatch, caplog):
     with caplog.at_level("WARNING", logger="web_api.config_guard"):
         verify_startup_config()
 
-    assert "yüksek yetkili bir hesapla çalışıyorsunuz" in caplog.text
+    assert "you are using a highly privileged account" in caplog.text
 
 
-def test_sifreleme_anahtari_yokken_fallback_kullanilmaz(monkeypatch):
+def test_fallback_is_not_used_without_an_encryption_key(monkeypatch):
     from app_database.models import EncryptedText
 
     monkeypatch.delenv("QUERY_ENCRYPTION_KEY", raising=False)
@@ -95,7 +95,7 @@ async def test_lifespan_config_guard_veritabani_baslatmadan_once_calisir(monkeyp
 
     class UnexpectedDatabaseConstruction:
         def __init__(self):
-            raise AssertionError("AppDatabase config guard'dan önce başlatıldı")
+            raise AssertionError("AppDatabase started before config guard")
 
     monkeypatch.setattr(app_module, "AppDatabase", UnexpectedDatabaseConstruction)
 

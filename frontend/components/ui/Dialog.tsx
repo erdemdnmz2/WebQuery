@@ -71,7 +71,7 @@ export const Dialog: React.FC<DialogProps> = ({
             )}
           </div>
           <RadixDialog.Close asChild>
-            <IconButton label="Kapat" size="sm" disabled={busy} className="-mr-1.5 -mt-1">
+            <IconButton label="Close" size="sm" disabled={busy} className="-mr-1.5 -mt-1">
               <XIcon size={15} />
             </IconButton>
           </RadixDialog.Close>
@@ -113,7 +113,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   title,
   description,
   confirmLabel,
-  cancelLabel = 'Vazgeç',
+  cancelLabel = "Cancel",
   destructive,
   busy,
   onConfirm,

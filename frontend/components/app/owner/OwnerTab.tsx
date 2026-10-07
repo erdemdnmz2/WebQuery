@@ -39,9 +39,9 @@ const CONNECTION_MODES = (['ro', 'ro_rw', 'ro_rw_ddl'] as const).map((value) => 
   label: CONNECTION_MODE[value].label,
 }));
 const statusLabel: Record<OwnerUser['status'], string> = {
-  pending: 'Aktivasyon bekliyor',
-  active: 'Aktif',
-  disabled: 'Devre dışı',
+  pending: "Awaiting activation",
+  active: "Active",
+  disabled: "Disabled",
 };
 const statusTone: Record<OwnerUser['status'], Tone> = {
   pending: 'warning',
@@ -108,14 +108,14 @@ export const OwnerTab: React.FC = () => {
   const activeUsers = useMemo(() => users.filter((user) => user.is_active), [users]);
   const userOptions = useMemo(
     () => [
-      { value: NONE, label: 'Kullanıcı seçin', disabled: true },
+      { value: NONE, label: "Select a user", disabled: true },
       ...activeUsers.map((user) => ({ value: String(user.id), label: `${user.username} · ${user.email}` })),
     ],
     [activeUsers],
   );
   const databaseOptions = useMemo(
     () => [
-      { value: NONE, label: 'Veritabanı seçin', disabled: true },
+      { value: NONE, label: "Select a database", disabled: true },
       ...databases.map((database) => ({
         value: String(database.id),
         label: `${database.database_name} · ${database.servername}`,
@@ -128,10 +128,10 @@ export const OwnerTab: React.FC = () => {
     setBusyUser(user.id);
     try {
       await api.enableOwnerUser(user.id);
-      toast.success('Kullanıcı etkinleştirildi', `${user.username} artık giriş yapabilir`);
+      toast.success("User activated", `${user.username} can now sign in`);
       await load();
     } catch (caught) {
-      toast.error('Kullanıcı etkinleştirilemedi', errorMessage(caught));
+      toast.error("Could not activate user", errorMessage(caught));
     } finally {
       setBusyUser(null);
     }
@@ -142,11 +142,11 @@ export const OwnerTab: React.FC = () => {
     setBusyUser(disableTarget.id);
     try {
       await api.disableOwnerUser(disableTarget.id);
-      toast.success('Kullanıcı devre dışı bırakıldı', `${disableTarget.username} oturumları sonlandırıldı`);
+      toast.success("User disabled", `${disableTarget.username} sessions ended`);
       setDisableTarget(null);
       await load();
     } catch (caught) {
-      toast.error('Kullanıcı devre dışı bırakılamadı', errorMessage(caught));
+      toast.error("Could not disable user", errorMessage(caught));
     } finally {
       setBusyUser(null);
     }
@@ -173,10 +173,10 @@ export const OwnerTab: React.FC = () => {
           : {}),
       });
       setForm(EMPTY_FORM);
-      toast.success('Veritabanı kaydedildi', `Kayıt kimliği: ${created.db_uuid}`);
+      toast.success("Database registered", `Registration ID: ${created.db_uuid}`);
       await load();
     } catch (caught) {
-      toast.error('Veritabanı kaydedilemedi', errorMessage(caught));
+      toast.error("Could not register database", errorMessage(caught));
     } finally {
       setAdding(false);
     }
@@ -187,11 +187,11 @@ export const OwnerTab: React.FC = () => {
     setChangingAdmin(true);
     try {
       await api.grantDatabaseAdmin(Number(grantDatabaseId), Number(grantUserId));
-      toast.success('DB ADMIN atandı', 'Kullanıcının mevcut veri rolleri korundu.');
+      toast.success("DB ADMIN assigned", "The user's existing data roles were preserved.");
       setGrantUserId(NONE);
       await load();
     } catch (caught) {
-      toast.error('DB ADMIN atanamadı', errorMessage(caught));
+      toast.error("Could not assign DB ADMIN", errorMessage(caught));
     } finally {
       setChangingAdmin(false);
     }
@@ -203,13 +203,13 @@ export const OwnerTab: React.FC = () => {
     try {
       await api.retireOwnerDatabase(retireTarget.id);
       toast.success(
-        'Veritabanı pasifleştirildi',
-        `${retireTarget.database_name} artık sorgu için seçilemez. Aynı sunucu/veritabanıyla yeniden kaydedilirse kayıt canlanır.`,
+        "Database deactivated",
+        `${retireTarget.database_name} is no longer available for queries. Register the same server/database again to reactivate it.`,
       );
       setRetireTarget(null);
       await load();
     } catch (caught) {
-      toast.error('Pasifleştirilemedi', errorMessage(caught));
+      toast.error("Could not deactivate", errorMessage(caught));
     } finally {
       setRetiring(false);
     }
@@ -220,11 +220,11 @@ export const OwnerTab: React.FC = () => {
     setChangingAdmin(true);
     try {
       await api.revokeDatabaseAdmin(revokeTarget.database_id, revokeTarget.user_id);
-      toast.success('DB ADMIN kaldırıldı', `${revokeTarget.username} · ${revokeTarget.database_name}`);
+      toast.success("DB ADMIN removed", `${revokeTarget.username} · ${revokeTarget.database_name}`);
       setRevokeTarget(null);
       await load();
     } catch (caught) {
-      toast.error('DB ADMIN kaldırılamadı', errorMessage(caught));
+      toast.error("Could not remove DB ADMIN", errorMessage(caught));
     } finally {
       setChangingAdmin(false);
     }
@@ -249,9 +249,9 @@ export const OwnerTab: React.FC = () => {
     return (
       <EmptyState
         icon={<WarningCircleIcon size={18} />}
-        title="OWNER verileri alınamadı"
+        title="Could not load OWNER data"
         description={error}
-        action={<Button onClick={() => void load()}>Yeniden dene</Button>}
+        action={<Button onClick={() => void load()}>Try again</Button>}
       />
     );
   }
@@ -260,10 +260,10 @@ export const OwnerTab: React.FC = () => {
     <div className="flex flex-col gap-4">
       <Panel flush as="section">
         <PanelHeader
-          title="Platform kullanıcıları"
-          description="Hesap yaşam döngüsünü yönetin. OWNER yetkisi yalnız sunucu bootstrap komutuyla verilir."
+          title="Platform users"
+          description="Manage account lifecycles. OWNER privileges are assigned only through the server bootstrap command."
           actions={
-            <IconButton label="OWNER verilerini yenile" size="sm" onClick={() => void load()}>
+            <IconButton label="Refresh OWNER data" size="sm" onClick={() => void load()}>
               <ArrowClockwiseIcon size={14} className={cn(loading && 'animate-spin-slow')} />
             </IconButton>
           }
@@ -272,8 +272,8 @@ export const OwnerTab: React.FC = () => {
           <EmptyState
             size="sm"
             icon={<UserCircleIcon size={18} />}
-            title="Kayıtlı kullanıcı yok"
-            description="İzinli şirket domaininden gelen ilk başvuru burada görünür."
+            title="No registered users"
+            description="Applications from an allowed company domain will appear here."
           />
         ) : (
           <ul className="divide-y divide-line">
@@ -288,11 +288,11 @@ export const OwnerTab: React.FC = () => {
                   <p className="truncate font-mono text-[11.5px] text-subtle">{user.email}</p>
                 </div>
                 <span className="text-[12px] text-subtle">
-                  {user.is_platform_owner ? 'Platform yönetişim yetkisi' : 'DB erişimi ayrıca atanır'}
+                  {user.is_platform_owner ? "Platform governance privileges" : "Database access is assigned separately"}
                 </span>
                 {user.is_active ? (
                   <Button size="sm" variant="danger" onClick={() => setDisableTarget(user)}>
-                    Devre dışı bırak
+                    Disable
                   </Button>
                 ) : (
                   <Button
@@ -301,7 +301,7 @@ export const OwnerTab: React.FC = () => {
                     loading={busyUser === user.id}
                     onClick={() => void enableUser(user)}
                   >
-                    Etkinleştir
+                    Activate
                   </Button>
                 )}
               </li>
@@ -313,56 +313,56 @@ export const OwnerTab: React.FC = () => {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Panel flush as="section">
           <PanelHeader
-            title="Veritabanı kaydet"
-            description="Kayıt ve ilk aktif DB ADMIN ataması tek işlemde tamamlanır."
+            title="Register database"
+            description="Registration and the first active DB ADMIN assignment complete in one operation."
           />
           <form onSubmit={addDatabase} className="flex flex-col gap-3.5 p-4">
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-              <Field label="Sunucu adresi" required>
-                <Input value={form.servername} onChange={(event) => setForm({ ...form, servername: event.target.value })} required className="font-mono" placeholder="sql-prod-01.sirket.local" />
+              <Field label="Server address" required>
+                <Input value={form.servername} onChange={(event) => setForm({ ...form, servername: event.target.value })} required className="font-mono" placeholder="sql-prod-01.company.local" />
               </Field>
-              <Field label="Veritabanı adı" required>
-                <Input value={form.database_name} onChange={(event) => setForm({ ...form, database_name: event.target.value })} required className="font-mono" placeholder="Satis" />
+              <Field label="Database name" required>
+                <Input value={form.database_name} onChange={(event) => setForm({ ...form, database_name: event.target.value })} required className="font-mono" placeholder="Sales" />
               </Field>
-              <Field label="Teknoloji">
+              <Field label="Engine">
                 <Select value={form.technology} onValueChange={(technology) => setForm({ ...form, technology })} options={TECHNOLOGIES} />
               </Field>
-              <Field label="İlk DB ADMIN" required hint="Yalnız aktif kullanıcılar listelenir.">
+              <Field label="Initial DB ADMIN" required hint="Only active users are listed.">
                 <Select value={form.initial_admin_user_id} onValueChange={(initial_admin_user_id) => setForm({ ...form, initial_admin_user_id })} options={userOptions} />
               </Field>
             </div>
-            <Field label="Bağlantı modu" required hint="Seçilmeyen kademedeki sorgular reddedilir.">
-              <SegmentedControl value={form.connection_mode} onChange={(connection_mode) => setForm({ ...form, connection_mode })} segments={CONNECTION_MODES} label="Bağlantı modu" className="w-full overflow-x-auto" />
+            <Field label="Connection mode" required hint="Queries requiring an unconfigured tier are rejected.">
+              <SegmentedControl value={form.connection_mode} onChange={(connection_mode) => setForm({ ...form, connection_mode })} segments={CONNECTION_MODES} label="Connection mode" className="w-full overflow-x-auto" />
             </Field>
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-              <Field label="RO kullanıcı adı" required><Input value={form.username_ro} onChange={(event) => setForm({ ...form, username_ro: event.target.value })} required autoComplete="off" /></Field>
-              <Field label="RO şifre" required><Input type="password" value={form.password_ro} onChange={(event) => setForm({ ...form, password_ro: event.target.value })} required autoComplete="new-password" /></Field>
+              <Field label="RO username" required><Input value={form.username_ro} onChange={(event) => setForm({ ...form, username_ro: event.target.value })} required autoComplete="off" /></Field>
+              <Field label="RO password" required><Input type="password" value={form.password_ro} onChange={(event) => setForm({ ...form, password_ro: event.target.value })} required autoComplete="new-password" /></Field>
               {form.connection_mode !== 'ro' && (
                 <>
-                  <Field label="RW kullanıcı adı" required><Input value={form.username_rw} onChange={(event) => setForm({ ...form, username_rw: event.target.value })} required autoComplete="off" /></Field>
-                  <Field label="RW şifre" required><Input type="password" value={form.password_rw} onChange={(event) => setForm({ ...form, password_rw: event.target.value })} required autoComplete="new-password" /></Field>
+                  <Field label="RW username" required><Input value={form.username_rw} onChange={(event) => setForm({ ...form, username_rw: event.target.value })} required autoComplete="off" /></Field>
+                  <Field label="RW password" required><Input type="password" value={form.password_rw} onChange={(event) => setForm({ ...form, password_rw: event.target.value })} required autoComplete="new-password" /></Field>
                 </>
               )}
               {form.connection_mode === 'ro_rw_ddl' && (
                 <>
-                  <Field label="DDL kullanıcı adı" required><Input value={form.username_ddl} onChange={(event) => setForm({ ...form, username_ddl: event.target.value })} required autoComplete="off" /></Field>
-                  <Field label="DDL şifre" required><Input type="password" value={form.password_ddl} onChange={(event) => setForm({ ...form, password_ddl: event.target.value })} required autoComplete="new-password" /></Field>
+                  <Field label="DDL username" required><Input value={form.username_ddl} onChange={(event) => setForm({ ...form, username_ddl: event.target.value })} required autoComplete="off" /></Field>
+                  <Field label="DDL password" required><Input type="password" value={form.password_ddl} onChange={(event) => setForm({ ...form, password_ddl: event.target.value })} required autoComplete="new-password" /></Field>
                 </>
               )}
             </div>
             <Button type="submit" variant="primary" icon={<PlusIcon size={14} />} loading={adding} disabled={!formComplete} className="self-start">
-              Veritabanını ve ilk ADMIN’i kaydet
+              Register database and initial ADMIN
             </Button>
           </form>
         </Panel>
 
         <Panel flush as="section">
           <PanelHeader
-            title="Kayıtlı veritabanları"
-            description={`${formatCount(databases.length)} kayıt · şifre rotasyonu, mod değişikliği ve pasifleştirme`}
+            title="Registered databases"
+            description={`${formatCount(databases.length)} records · credential rotation, connection modes and deactivation`}
           />
           {databases.length === 0 ? (
-            <EmptyState size="sm" icon={<DatabaseIcon size={18} />} title="Kayıtlı veritabanı yok" />
+            <EmptyState size="sm" icon={<DatabaseIcon size={18} />} title="No registered databases" />
           ) : (
             <ul className="max-h-[280px] divide-y divide-line overflow-y-auto">
               {databases.map((database) => (
@@ -371,19 +371,19 @@ export const OwnerTab: React.FC = () => {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
                       <span className="truncate font-mono text-[12.5px] text-fg">{database.database_name}</span>
-                      {database.is_active === false && <Badge tone="neutral">Pasif</Badge>}
+                      {database.is_active === false && <Badge tone="neutral">Inactive</Badge>}
                     </span>
                     <span className="block truncate text-[11.5px] text-subtle">{database.servername}</span>
                   </span>
                   <Badge tone={CONNECTION_MODE[database.connection_mode ?? 'ro'].tone}>
-                    {database.connection_mode ? CONNECTION_MODE[database.connection_mode].label : 'Kademe tanımsız'}
+                    {database.connection_mode ? CONNECTION_MODE[database.connection_mode].label : "Tier not configured"}
                   </Badge>
                   {database.is_active !== false && (
                     <>
-                      <IconButton label="Kaydı güncelle" size="sm" onClick={() => setEditTarget(database)}>
+                      <IconButton label="Update registration" size="sm" onClick={() => setEditTarget(database)}>
                         <PencilSimpleIcon size={14} />
                       </IconButton>
-                      <IconButton label="Kaydı pasifleştir" size="sm" onClick={() => setRetireTarget(database)}>
+                      <IconButton label="Deactivate registration" size="sm" onClick={() => setRetireTarget(database)}>
                         <TrashIcon size={14} className="text-danger" />
                       </IconButton>
                     </>
@@ -396,18 +396,18 @@ export const OwnerTab: React.FC = () => {
 
         <Panel flush as="section">
           <PanelHeader
-            title="DB ADMIN atamaları"
-            description={`${formatCount(databases.length)} veritabanı · ${formatCount(admins.length)} ADMIN ataması`}
+            title="DB ADMIN assignments"
+            description={`${formatCount(databases.length)} databases · ${formatCount(admins.length)} ADMIN assignments`}
           />
           <div className="grid grid-cols-1 gap-3 border-b border-line p-4 sm:grid-cols-[1fr_1fr_auto]">
-            <Field label="Veritabanı"><Select value={grantDatabaseId} onValueChange={setGrantDatabaseId} options={databaseOptions} /></Field>
-            <Field label="Aktif kullanıcı"><Select value={grantUserId} onValueChange={setGrantUserId} options={userOptions} /></Field>
+            <Field label="Database"><Select value={grantDatabaseId} onValueChange={setGrantDatabaseId} options={databaseOptions} /></Field>
+            <Field label="Active user"><Select value={grantUserId} onValueChange={setGrantUserId} options={userOptions} /></Field>
             <Button className="self-end" icon={<ShieldCheckIcon size={14} />} loading={changingAdmin} disabled={grantDatabaseId === NONE || grantUserId === NONE} onClick={() => void grantAdmin()}>
-              ADMIN ata
+              Assign ADMIN
             </Button>
           </div>
           {admins.length === 0 ? (
-            <EmptyState size="sm" icon={<DatabaseIcon size={18} />} title="DB ADMIN ataması yok" description="Her kayıtlı veritabanında en az bir ADMIN bulunmalıdır." />
+            <EmptyState size="sm" icon={<DatabaseIcon size={18} />} title="No DB ADMIN assignments" description="Each registered database must have at least one ADMIN." />
           ) : (
             <ul className="max-h-[420px] divide-y divide-line overflow-y-auto">
               {admins.map((admin) => (
@@ -418,7 +418,7 @@ export const OwnerTab: React.FC = () => {
                     <span className="block truncate text-[12px] text-subtle">{admin.username}</span>
                   </span>
                   <Badge tone="accent">ADMIN</Badge>
-                  <Button size="sm" variant="danger" onClick={() => setRevokeTarget(admin)}>Kaldır</Button>
+                  <Button size="sm" variant="danger" onClick={() => setRevokeTarget(admin)}>Remove</Button>
                 </li>
               ))}
             </ul>
@@ -429,9 +429,9 @@ export const OwnerTab: React.FC = () => {
       <ConfirmDialog
         open={disableTarget !== null}
         onOpenChange={(open) => !open && setDisableTarget(null)}
-        title="Kullanıcı devre dışı bırakılsın mı?"
-        description="Tüm aktif oturumları iptal edilir. Son aktif OWNER koruması sunucuda ayrıca uygulanır."
-        confirmLabel="Devre dışı bırak"
+        title="Disable user?"
+        description="All active sessions will end. The server also prevents disabling the last active OWNER."
+        confirmLabel="Disable"
         destructive
         busy={disableTarget !== null && busyUser === disableTarget.id}
         onConfirm={() => void disableUser()}
@@ -448,9 +448,9 @@ export const OwnerTab: React.FC = () => {
       <ConfirmDialog
         open={retireTarget !== null}
         onOpenChange={(open) => !open && setRetireTarget(null)}
-        title="Veritabanı kaydı pasifleştirilsin mi?"
-        description="Erişim yetkileri, maskeleme kuralları ve denetim kaydı silinmez; kayıt yalnız sorgu için seçilemez hâle gelir. Aynı sunucu/veritabanıyla yeniden kaydedilirse kayıt canlanır."
-        confirmLabel="Pasifleştir"
+        title="Deactivate database registration?"
+        description="Permissions, masking rules and audit records are retained; this registration only becomes unavailable for queries. Register the same server/database again to reactivate it."
+        confirmLabel="Deactivate"
         destructive
         busy={retiring}
         onConfirm={() => void retireDatabase()}
@@ -465,9 +465,9 @@ export const OwnerTab: React.FC = () => {
       <ConfirmDialog
         open={revokeTarget !== null}
         onOpenChange={(open) => !open && setRevokeTarget(null)}
-        title="DB ADMIN yetkisi kaldırılsın mı?"
-        description="Kullanıcının diğer veri rolleri korunur. Son DB ADMIN sunucu tarafından kaldırılamaz."
-        confirmLabel="ADMIN yetkisini kaldır"
+        title="Remove DB ADMIN privileges?"
+        description="The user's other data roles are preserved. The server prevents removing the last DB ADMIN."
+        confirmLabel="Remove ADMIN privileges"
         destructive
         busy={changingAdmin}
         onConfirm={() => void revokeAdmin()}

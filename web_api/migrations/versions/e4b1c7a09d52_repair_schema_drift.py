@@ -66,8 +66,8 @@ def _dependent_indexes(bind, table_name: str, column_name: str) -> list[dict]:
             continue
         if index.get("unique"):
             raise RuntimeError(
-                f"'{table_name}.{column_name}' üzerinde unique index "
-                f"'{index['name']}' var; NOT NULL değişikliği elle yapılmalı."
+                f"A unique index '{index['name']}' exists on "
+                f"'{table_name}.{column_name}'; the NOT NULL change must be applied manually."
             )
         dependent.append(index)
     return dependent
@@ -154,9 +154,9 @@ def upgrade() -> None:
         duplicates = _duplicate_group_count(bind, spec.table, spec.columns)
         if duplicates:
             raise RuntimeError(
-                f"'{spec.table}' tablosunda ({', '.join(spec.columns)}) için "
-                f"{duplicates} yinelenen grup var. '{spec.name}' kısıtı "
-                "oluşturulamaz; önce yinelenen kayıtları temizleyin."
+                f"There are {duplicates} duplicate groups for ({', '.join(spec.columns)}) "
+                f"in table '{spec.table}'. Constraint '{spec.name}' cannot be "
+                "created; clean up duplicate records first."
             )
         # batch_alter_table so the repair also runs under SQLite, which cannot
         # ALTER a constraint in place. On SQL Server it compiles to the same

@@ -46,14 +46,14 @@ export const PasswordChangeDialog: React.FC<PasswordChangeDialogProps> = ({ open
     try {
       const result = await api.changePassword(currentPassword, newPassword);
       toast.success(
-        'Şifreniz güncellendi',
+        "Password updated",
         result.revoked_sessions > 0
-          ? `Diğer ${result.revoked_sessions} oturum sonlandırıldı. Bu oturum açık kalır.`
-          : 'Bu oturum açık kalır.',
+          ? `Other sessions ended: ${result.revoked_sessions}. This session remains active.`
+          : "This session remains active.",
       );
       close(false);
     } catch (caught) {
-      toast.error('Şifre değiştirilemedi', errorMessage(caught));
+      toast.error("Could not change password", errorMessage(caught));
     } finally {
       setSubmitting(false);
     }
@@ -63,14 +63,14 @@ export const PasswordChangeDialog: React.FC<PasswordChangeDialogProps> = ({ open
     <Dialog
       open={open}
       onOpenChange={close}
-      title="Şifreni değiştir"
-      description="Diğer oturumlarınız değişiklikten sonra sonlandırılır; bu oturum açık kalır."
+      title="Change password"
+      description="Your other sessions will end after this change. This session will remain active."
       size="sm"
       busy={submitting}
       footer={
         <>
           <Button variant="ghost" onClick={() => close(false)} disabled={submitting}>
-            Vazgeç
+            Cancel
           </Button>
           <Button
             type="submit"
@@ -79,13 +79,13 @@ export const PasswordChangeDialog: React.FC<PasswordChangeDialogProps> = ({ open
             loading={submitting}
             disabled={!canSubmit}
           >
-            Şifreyi değiştir
+            Change password
           </Button>
         </>
       }
     >
       <form id="password-change-form" onSubmit={(event) => void submit(event)} className="flex flex-col gap-3.5">
-        <Field label="Mevcut şifre" required>
+        <Field label="Current password" required>
           <Input
             type="password"
             value={currentPassword}
@@ -95,7 +95,7 @@ export const PasswordChangeDialog: React.FC<PasswordChangeDialogProps> = ({ open
             required
           />
         </Field>
-        <Field label="Yeni şifre" required hint="En az 12 karakter, bir büyük harf ve bir rakam içermeli.">
+        <Field label="New password" required hint="At least 12 characters, including an uppercase letter and a number.">
           <Input
             type="password"
             value={newPassword}
@@ -104,7 +104,7 @@ export const PasswordChangeDialog: React.FC<PasswordChangeDialogProps> = ({ open
             required
           />
         </Field>
-        <Field label="Yeni şifre (tekrar)" required error={mismatch ? 'Şifreler eşleşmiyor.' : undefined}>
+        <Field label="Confirm new password" required error={mismatch ? "Passwords do not match." : undefined}>
           <Input
             type="password"
             value={confirmPassword}

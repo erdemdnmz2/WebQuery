@@ -65,26 +65,26 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
     const base: Command[] = [
       {
         id: 'nav-workspaces',
-        label: 'Çalışma alanları',
-        group: 'Git',
+        label: "Workspaces",
+        group: "Navigate",
         icon: <SquaresFourIcon size={15} />,
-        keywords: 'workspace liste ana sayfa',
+        keywords: "workspace list home",
         run: go('/'),
       },
       {
         id: 'nav-studio',
         label: 'SQL Studio',
-        group: 'Git',
+        group: "Navigate",
         icon: <TerminalWindowIcon size={15} />,
-        keywords: 'sorgu editor query',
+        keywords: "sql editor query",
         run: go('/editor'),
       },
       {
         id: 'new-workspace',
-        label: 'Yeni sorgu yaz',
-        group: 'Eylem',
+        label: "Write a new query",
+        group: "Action",
         icon: <PlusIcon size={15} />,
-        keywords: 'oluştur create yeni',
+        keywords: "create new query",
         run: go('/editor'),
       },
     ];
@@ -92,10 +92,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
     if (user?.is_admin) {
       base.push({
         id: 'nav-admin',
-        label: 'Yönetim paneli',
-        group: 'Git',
+        label: "Administration panel",
+        group: "Navigate",
         icon: <GearSixIcon size={15} />,
-        keywords: 'admin onay maskeleme veritabanı',
+        keywords: "admin approval masking database",
         run: go('/admin'),
       });
     }
@@ -105,7 +105,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
       base.push({
         id: `ws-${workspace.id}`,
         label: workspace.name,
-        group: 'Çalışma alanları',
+        group: "Workspaces",
         icon: <DatabaseIcon size={15} />,
         keywords: `${workspace.servername} ${workspace.database_name} ${workspace.description ?? ''}`,
         hint: meta.label,
@@ -116,11 +116,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
     base.push(
       {
         id: 'theme-light',
-        label: 'Açık temaya geç',
-        group: 'Görünüm',
+        label: "Switch to light theme",
+        group: "Appearance",
         icon: <SunIcon size={15} />,
-        keywords: 'tema light aydınlık',
-        hint: preference === 'light' ? 'Etkin' : undefined,
+        keywords: "theme light",
+        hint: preference === 'light' ? "Active" : undefined,
         run: () => {
           setPreference('light');
           close();
@@ -128,11 +128,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
       },
       {
         id: 'theme-dark',
-        label: 'Koyu temaya geç',
-        group: 'Görünüm',
+        label: "Switch to dark theme",
+        group: "Appearance",
         icon: <MoonIcon size={15} />,
-        keywords: 'tema dark karanlık',
-        hint: preference === 'dark' ? 'Etkin' : undefined,
+        keywords: "theme dark",
+        hint: preference === 'dark' ? "Active" : undefined,
         run: () => {
           setPreference('dark');
           close();
@@ -140,10 +140,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
       },
       {
         id: 'sign-out',
-        label: 'Oturumu kapat',
-        group: 'Hesap',
+        label: "Sign out",
+        group: "Account",
         icon: <SignOutIcon size={15} />,
-        keywords: 'çıkış logout',
+        keywords: "sign out logout",
         run: () => {
           close();
           void signOut().then(() => navigate('/login'));
@@ -155,10 +155,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
   }, [navigate, onOpenChange, preference, setPreference, signOut, user?.is_admin, workspaces]);
 
   const filtered = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase('tr');
+    const needle = query.trim().toLocaleLowerCase("en");
     if (!needle) return commands;
     return commands.filter((command) =>
-      `${command.label} ${command.group} ${command.keywords ?? ''}`.toLocaleLowerCase('tr').includes(needle),
+      `${command.label} ${command.group} ${command.keywords ?? ''}`.toLocaleLowerCase("en").includes(needle),
     );
   }, [commands, query]);
 
@@ -206,9 +206,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
             'data-[state=open]:animate-[dialog-in_var(--dur-slow)_var(--ease)]',
           )}
         >
-          <RadixDialog.Title className="sr-only">Komut paleti</RadixDialog.Title>
+          <RadixDialog.Title className="sr-only">Command palette</RadixDialog.Title>
           <RadixDialog.Description className="sr-only">
-            Sayfalar, çalışma alanları ve eylemler arasında arama yapın.
+            Search pages, workspaces and actions.
           </RadixDialog.Description>
 
           <div className="flex items-center gap-2.5 border-b border-line px-3.5">
@@ -220,8 +220,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
                 setQuery(event.target.value);
                 setActiveIndex(0);
               }}
-              placeholder="Sayfa, çalışma alanı veya eylem ara"
-              aria-label="Komut ara"
+              placeholder="Search pages, workspaces or actions"
+              aria-label="Search commands"
               className="h-11 w-full bg-transparent text-[14px] outline-none"
             />
             <Kbd>esc</Kbd>
@@ -230,7 +230,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
           <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1.5">
             {flat.length === 0 ? (
               <p className="px-3 py-10 text-center text-[13px] text-subtle">
-                &ldquo;{query}&rdquo; için sonuç yok.
+                &ldquo;{query}&rdquo; — no results found.
               </p>
             ) : (
               grouped.map(([group, items]) => (

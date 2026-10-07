@@ -27,9 +27,9 @@ export interface ReviewDialogProps {
 }
 
 const FACTS: { label: string; get: (request: PendingQuery) => string }[] = [
-  { label: 'Talep eden', get: (request) => request.username },
-  { label: 'Sunucu', get: (request) => request.servername || 'Bilinmiyor' },
-  { label: 'Veritabanı', get: (request) => request.database },
+  { label: "Requested by", get: (request) => request.username },
+  { label: "Server", get: (request) => request.servername || "Unknown" },
+  { label: "Database", get: (request) => request.database },
 ];
 
 /**
@@ -90,7 +90,7 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
     if (action === 'reject' && trimmedReason.length < REASON_MIN) {
       // Caught here rather than at the server so the reviewer keeps what they
       // typed and lands on the field that needs work.
-      setReasonError(`Red gerekçesi en az ${REASON_MIN} karakter olmalıdır.`);
+      setReasonError(`The rejection reason must contain at least ${REASON_MIN} characters.`);
       reasonRef.current?.focus();
       return;
     }
@@ -99,14 +99,14 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
     try {
       if (action === 'reject') {
         await api.rejectQuery(request.workspace_id, trimmedReason);
-        toast.success('Talep reddedildi', request.username);
+        toast.success("Request rejected", request.username);
       } else {
         await api.approveQuery(request.workspace_id, action === 'approve-share');
         toast.success(
-          action === 'approve-share' ? 'Onaylandı ve paylaşıldı' : 'Onaylandı',
+          action === 'approve-share' ? "Approved and shared" : "Approved",
           action === 'approve-share'
-            ? 'Kullanıcı sorguyu çalıştırıp sonuçları dışa aktarabilir.'
-            : 'Sonuçlar kullanıcıyla paylaşılmadı.',
+            ? "The user can execute the query and export its results."
+            : "Results were not shared with the user.",
         );
       }
       resetDecisionState();
@@ -115,12 +115,12 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
       if (caught instanceof ApiError && caught.code === APPROVAL_CONFLICT) {
         // Another reviewer got there first. The decision is already final on
         // the server, so the list is what is stale here, not the request.
-        toast.warning('Bu talep başka bir yönetici tarafından sonuçlandırıldı', 'Liste yenilendi.');
+        toast.warning("Another administrator has already decided this request", "The list has been refreshed.");
         resetDecisionState();
         onDecided();
         return;
       }
-      toast.error('İşlem tamamlanamadı', errorMessage(caught));
+      toast.error("Could not complete the operation", errorMessage(caught));
     } finally {
       setDeciding(false);
     }
@@ -134,8 +134,8 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
         resetDecisionState();
         onClose();
       }}
-      title="Sorgu talebini incele"
-      description="Karar verilene kadar kullanıcı bu sorguyu düzenleyemez veya çalıştıramaz."
+      title="Review query request"
+      description="The user cannot edit or run this query until a decision is made."
       size="xl"
       busy={deciding || previewing}
       footer={
@@ -146,11 +146,11 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
             disabled={deciding || previewing}
             onClick={() => void decide('reject')}
           >
-            Reddet
+            Reject
           </Button>
           <div className="flex-1" />
           <Button icon={<CheckIcon size={14} />} disabled={deciding || previewing} onClick={() => void decide('approve')}>
-            Onayla, paylaşma
+            Approve without sharing
           </Button>
           <Button
             variant="primary"
@@ -159,7 +159,7 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
             disabled={previewing}
             onClick={() => void decide('approve-share')}
           >
-            Onayla ve paylaş
+            Approve and share
           </Button>
         </>
       }
@@ -179,26 +179,26 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
                 {request.risk_type ? (
                   <Badge tone="danger">{request.risk_type}</Badge>
                 ) : (
-                  <Badge tone="neutral">Sınıflandırılmadı</Badge>
+                  <Badge tone="neutral">Not classified</Badge>
                 )}
               </dd>
             </div>
           </dl>
 
           <section>
-            <h3 className="mb-2 text-[12.5px] font-medium text-muted">Gönderilen SQL</h3>
+            <h3 className="mb-2 text-[12.5px] font-medium text-muted">Submitted SQL</h3>
             <div className="h-56 overflow-hidden rounded-md border border-line">
-              <CodeEditor value={request.query} readOnly ariaLabel="İncelenen SQL sorgusu" />
+              <CodeEditor value={request.query} readOnly ariaLabel="SQL query under review" />
             </div>
           </section>
 
           <section>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-[12.5px] font-medium text-muted">
-                Sonuç önizleme
+                Result preview
                 {previewRows.length > 0 && (
                   <span className="ml-2 font-normal text-subtle">
-                    {formatCount(preview?.row_count ?? previewRows.length)} satır
+                    {formatCount(preview?.row_count ?? previewRows.length)} rows
                   </span>
                 )}
               </h3>
@@ -210,7 +210,7 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
                   loading={previewing}
                   onClick={() => void runPreview()}
                 >
-                  Önizlemeyi çalıştır
+                  Run preview
                 </Button>
                 {previewing && <QueryCancelControl cancellation={cancellation} size="sm" />}
               </div>
@@ -219,12 +219,12 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
             <div className="h-52 overflow-hidden rounded-md border border-line bg-sunken">
               {previewing ? (
                 <div className="p-3.5" role="status" aria-busy="true">
-                  <span className="sr-only">Sorgu çalışıyor</span>
+                  <span className="sr-only">Query running</span>
                   <SkeletonRows />
                 </div>
               ) : previewCancelled ? (
                 <div role="status">
-                  <EmptyState size="sm" title="Sorgu iptal edildi" description="Önizleme hedef veritabanında durduruldu." />
+                  <EmptyState size="sm" title="Query cancelled" description="Preview execution stopped on the target database." />
                 </div>
               ) : previewError ? (
                 <div className="p-3.5">
@@ -235,20 +235,20 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
               ) : previewRows.length > 0 ? (
                 <DataGrid rows={previewRows} truncated={previewTruncated} className="h-full" />
               ) : preview ? (
-                <EmptyState size="sm" title="Sorgu satır döndürmedi" />
+                <EmptyState size="sm" title="The query returned no rows" />
               ) : (
                 <EmptyState
                   size="sm"
-                  title="Önizleme çalıştırılmadı"
-                  description="Sorgu hedef veritabanında çalıştırılır ve sonucun ilk satırları burada gösterilir."
+                  title="Preview not run yet"
+                  description="The query runs on the target database. The first result rows appear here."
                 />
               )}
             </div>
           </section>
 
           <Field
-            label="Red gerekçesi"
-            hint="Yalnızca reddederken zorunludur. Talebi gönderen kullanıcı ve denetim kaydı bu metni görür."
+            label="Rejection reason"
+            hint="Required only when rejecting. This text is visible to the requester and included in the audit record."
             error={reasonError ?? undefined}
             aside={
               <span className="font-mono text-[11.5px] text-subtle">
@@ -261,7 +261,7 @@ export const ReviewDialog: React.FC<ReviewDialogProps> = ({ request, onClose, on
               value={reason}
               maxLength={REASON_MAX}
               disabled={deciding}
-              placeholder="Örn. Tam tablo güncellemesi, WHERE koşulu olmadan çalıştırılamaz."
+              placeholder="For example: A full-table update cannot run without a WHERE clause."
               onChange={(event) => {
                 setReason(event.target.value);
                 if (reasonError) setReasonError(null);

@@ -122,7 +122,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   technology,
   placeholder = 'SELECT ...',
   className,
-  ariaLabel = 'SQL düzenleyici',
+  ariaLabel = "SQL editor",
 }) => {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);

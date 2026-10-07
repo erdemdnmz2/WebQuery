@@ -171,7 +171,7 @@ def missing_objects(inspector) -> list[str]:
         | {table for table, _ in REQUIRED_NOT_NULL}
     )
     for table in sorted(required_tables - tables):
-        missing.append(f"tablo eksik: {table}")
+        missing.append(f"missing table: {table}")
 
     for spec in REQUIRED_INDEXES:
         if spec.table not in tables:
@@ -179,22 +179,22 @@ def missing_objects(inspector) -> list[str]:
         names = {index["name"] for index in inspector.get_indexes(spec.table)}
         if spec.name not in names:
             columns = ", ".join(spec.columns)
-            missing.append(f"index eksik: {spec.name} ({spec.table}.{columns})")
+            missing.append(f"missing index: {spec.name} ({spec.table}.{columns})")
 
     for spec in REQUIRED_UNIQUE:
         if spec.table not in tables:
             continue
         if frozenset(spec.columns) not in unique_column_sets(inspector, spec.table):
             columns = ", ".join(spec.columns)
-            label = spec.name or "adsız"
-            missing.append(f"unique kısıtı eksik: {label} ({spec.table}: {columns})")
+            label = spec.name or "unnamed"
+            missing.append(f"missing unique constraint: {label} ({spec.table}: {columns})")
 
     for table, column in REQUIRED_NOT_NULL:
         if table not in tables:
             continue
         for info in inspector.get_columns(table):
             if info["name"] == column and info.get("nullable", True):
-                missing.append(f"NOT NULL değil: {table}.{column}")
+                missing.append(f"not NOT NULL: {table}.{column}")
                 break
 
     return missing

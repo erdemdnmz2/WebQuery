@@ -69,9 +69,9 @@ class OwnerService:
         async with self.app_db.get_app_db() as db, db.begin():
             target = await db.get(User, user_id, with_for_update=True)
             if target is None:
-                raise OwnerUserNotFoundError("Kullanıcı bulunamadı.")
+                raise OwnerUserNotFoundError("User not found.")
             if target.is_active:
-                return {"success": True, "message": "Kullanıcı zaten aktif."}
+                return {"success": True, "message": "User is already active."}
 
             target.is_active = True
             target.disabled_at = None
@@ -86,7 +86,7 @@ class OwnerService:
                 client_ip=client_ip,
                 trace_id=trace_id,
             )
-        return {"success": True, "message": "Kullanıcı etkinleştirildi."}
+        return {"success": True, "message": "User activated."}
 
     async def disable_user(
         self,
@@ -96,14 +96,14 @@ class OwnerService:
         trace_id: str | None = None,
     ) -> dict[str, Any]:
         if user_id == actor.id:
-            raise CannotDisableSelfError("Kendi OWNER hesabınızı devre dışı bırakamazsınız.")
+            raise CannotDisableSelfError("You cannot disable your own OWNER account.")
 
         async with self.app_db.get_app_db() as db, db.begin():
             target = await db.get(User, user_id, with_for_update=True)
             if target is None:
-                raise OwnerUserNotFoundError("Kullanıcı bulunamadı.")
+                raise OwnerUserNotFoundError("User not found.")
             if not target.is_active:
-                return {"success": True, "message": "Kullanıcı zaten devre dışı."}
+                return {"success": True, "message": "User is already disabled."}
 
             if target.is_platform_owner:
                 active_owners = list(
@@ -120,7 +120,7 @@ class OwnerService:
                 )
                 if len(active_owners) <= 1:
                     raise LastActiveOwnerError(
-                        "Son aktif OWNER devre dışı bırakılamaz. Önce başka bir OWNER bootstrap edin."
+                        "The last active OWNER cannot be disabled. Bootstrap another OWNER first."
                     )
 
             target.is_active = False
@@ -141,7 +141,7 @@ class OwnerService:
                 client_ip=client_ip,
                 trace_id=trace_id,
             )
-        return {"success": True, "message": "Kullanıcı devre dışı bırakıldı."}
+        return {"success": True, "message": "User disabled."}
 
     async def list_databases(self, include_retired: bool = False) -> list[Databases]:
         """Registrations, active first.
@@ -222,16 +222,16 @@ class OwnerService:
                 # loading the initial admin below.
                 existing_result.close()
                 if existing is not None and existing.is_active:
-                    raise OwnerDatabaseAlreadyExistsError("Veritabanı zaten kayıtlı.")
+                    raise OwnerDatabaseAlreadyExistsError("Database is already registered.")
 
                 initial_admin = await db.get(
                     User, request.initial_admin_user_id, with_for_update=True
                 )
                 if initial_admin is None:
-                    raise OwnerUserNotFoundError("İlk veritabanı yöneticisi bulunamadı.")
+                    raise OwnerUserNotFoundError("The initial database administrator was not found.")
                 if not initial_admin.is_active:
                     raise InactiveDatabaseAdminError(
-                        "Pasif kullanıcı veritabanı yöneticisi yapılamaz."
+                        "A disabled user cannot be made a database administrator."
                     )
 
                 if existing is not None:
@@ -319,16 +319,16 @@ class OwnerService:
                     trace_id=trace_id,
                 )
         except IntegrityError as exc:
-            raise OwnerDatabaseAlreadyExistsError("Veritabanı zaten kayıtlı.") from exc
+            raise OwnerDatabaseAlreadyExistsError("Database is already registered.") from exc
 
         db_info = await self.app_db.get_db_info()
         self.db_provider.set_db_info(db_info)
         logger.info(
-            "Hedef veritabanı OWNER tarafından kaydedildi: database_uuid=%s initial_admin_id=%s",
+            "Target database registered by OWNER: database_uuid=%s initial_admin_id=%s",
             db_uuid,
             request.initial_admin_user_id,
         )
-        return {"success": True, "message": "Veritabanı kaydedildi.", "db_uuid": db_uuid}
+        return {"success": True, "message": "Database registered.", "db_uuid": db_uuid}
 
     async def update_database(
         self,
@@ -358,7 +358,7 @@ class OwnerService:
         async with self.app_db.get_app_db() as db, db.begin():
             database = await db.get(Databases, database_id, with_for_update=True)
             if database is None or not database.is_active:
-                raise OwnerDatabaseNotFoundError("Veritabanı bulunamadı.")
+                raise OwnerDatabaseNotFoundError("Database not found.")
 
             previous_mode = mode_from_credentials(
                 has_ro=bool(database.username_ro and database.password_ro),
@@ -389,8 +389,8 @@ class OwnerService:
                 )
                 if conflicts:
                     raise ConnectionModeConflictError(
-                        "Bu bağlantı modu, mevcut kullanıcı yetkileriyle çelişiyor. "
-                        "Önce çakışan yetkileri düşürün.",
+                        "This connection mode conflicts with the current user privileges. "
+                        "Remove the conflicting privileges first.",
                         conflicts=conflicts,
                     )
                 for tier in ("ro", "rw", "ddl"):
@@ -435,7 +435,7 @@ class OwnerService:
                 clash_result.close()
                 if clash is not None:
                     raise OwnerDatabaseAlreadyExistsError(
-                        "Bu sunucu ve veritabanı adıyla başka bir kayıt var."
+                        "Another registration already uses this server and database name."
                     )
                 database.servername = next_servername
                 database.database_name = next_database_name
@@ -485,13 +485,13 @@ class OwnerService:
         await self.db_provider.close_database_engines(db_uuid)
         self.db_provider.set_db_info(await self.app_db.get_db_info())
         logger.info(
-            "Hedef veritabanı kaydı güncellendi: database_uuid=%s degisen_kademeler=%s",
+            "Target database registration updated: database_uuid=%s changed_tiers=%s",
             db_uuid,
             ",".join(changed_tiers) or "-",
         )
         return {
             "success": True,
-            "message": "Veritabanı kaydı güncellendi.",
+            "message": "Database registration updated.",
             "updated_tiers": changed_tiers,
             "connection_mode": resulting_mode,
         }
@@ -539,9 +539,9 @@ class OwnerService:
         async with self.app_db.get_app_db() as db, db.begin():
             database = await db.get(Databases, database_id, with_for_update=True)
             if database is None:
-                raise OwnerDatabaseNotFoundError("Veritabanı bulunamadı.")
+                raise OwnerDatabaseNotFoundError("Database not found.")
             if not database.is_active:
-                return {"success": True, "message": "Veritabanı zaten pasif."}
+                return {"success": True, "message": "Database is already inactive."}
 
             database.is_active = False
             database.retired_at = _db_now()
@@ -565,8 +565,8 @@ class OwnerService:
 
         await self.db_provider.close_database_engines(db_uuid)
         self.db_provider.set_db_info(await self.app_db.get_db_info())
-        logger.info("Hedef veritabanı kaydı pasifleştirildi: database_uuid=%s", db_uuid)
-        return {"success": True, "message": "Veritabanı kaydı pasifleştirildi."}
+        logger.info("Target database registration deactivated: database_uuid=%s", db_uuid)
+        return {"success": True, "message": "Database registration deactivated."}
 
     async def grant_database_admin(
         self,
@@ -579,13 +579,13 @@ class OwnerService:
         async with self.app_db.get_app_db() as db, db.begin():
             database = await db.get(Databases, database_id)
             if database is None:
-                raise OwnerDatabaseNotFoundError("Veritabanı bulunamadı.")
+                raise OwnerDatabaseNotFoundError("Database not found.")
             target = await db.get(User, user_id, with_for_update=True)
             if target is None:
-                raise OwnerUserNotFoundError("Kullanıcı bulunamadı.")
+                raise OwnerUserNotFoundError("User not found.")
             if not target.is_active:
                 raise InactiveDatabaseAdminError(
-                    "Pasif kullanıcı veritabanı yöneticisi yapılamaz."
+                    "A disabled user cannot be made a database administrator."
                 )
 
             association = (
@@ -601,7 +601,7 @@ class OwnerService:
             previous_role = association.role if association else None
             roles = parse(previous_role)
             if ADMIN in roles:
-                return {"success": True, "message": "Kullanıcı zaten DB ADMIN."}
+                return {"success": True, "message": "User is already a DB ADMIN."}
             roles.add(ADMIN)
             new_role = format_roles(roles)
             if association is None:
@@ -644,7 +644,7 @@ class OwnerService:
         async with self.app_db.get_app_db() as db, db.begin():
             database = await db.get(Databases, database_id)
             if database is None:
-                raise OwnerDatabaseNotFoundError("Veritabanı bulunamadı.")
+                raise OwnerDatabaseNotFoundError("Database not found.")
             associations = list(
                 (
                     await db.execute(
@@ -656,10 +656,10 @@ class OwnerService:
             )
             target = next((item for item in associations if item.user_id == user_id), None)
             if target is None or not is_admin(target.role):
-                return {"success": True, "message": "Kullanıcı DB ADMIN değil."}
+                return {"success": True, "message": "User is not a DB ADMIN."}
             if sum(1 for item in associations if is_admin(item.role)) <= 1:
                 raise LastDatabaseAdminError(
-                    "Veritabanının son ADMIN yetkisi kaldırılamaz. Önce başka bir ADMIN atayın."
+                    "The last database ADMIN privilege cannot be removed. Assign another ADMIN first."
                 )
 
             previous_role = target.role
@@ -686,4 +686,4 @@ class OwnerService:
                 client_ip=client_ip,
                 trace_id=trace_id,
             )
-        return {"success": True, "message": "DB ADMIN yetkisi kaldırıldı."}
+        return {"success": True, "message": "DB ADMIN privilege removed."}

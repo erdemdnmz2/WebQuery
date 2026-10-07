@@ -94,7 +94,7 @@ async def test_owner_disable_revokes_sessions_and_blocks_existing_tokens(async_c
         assert response.status_code == 200, response.text
         assert response.json() == {
             "success": True,
-            "message": "Kullanıcı devre dışı bırakıldı.",
+            "message": "User disabled.",
         }
 
         # The middleware blocks the already-issued access token before the

@@ -55,7 +55,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
       <div
         tabIndex={0}
         role="region"
-        aria-label="Sorgu sonuçları"
+        aria-label="Query results"
         className="min-h-0 flex-1 overflow-auto focus-visible:outline-none"
       >
         <table className="w-full border-separate border-spacing-0 text-left">
@@ -81,7 +81,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
                     {column}
                     {masked && (
                       <span className="ml-1.5 rounded-xs bg-warning-soft px-1 text-[9.5px] font-medium text-warning">
-                        maskeli
+                        masked
                       </span>
                     )}
                   </th>
@@ -120,12 +120,12 @@ export const DataGrid: React.FC<DataGridProps> = ({
       {(visible < rows.length || truncated) && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface px-3 py-2">
           <p className="text-[12px] text-subtle">
-            {formatCount(shown.length)} / {formatCount(rows.length)} satır gösteriliyor
-            {truncated && (truncationNote ? ` · ${truncationNote}` : ' · sonuç sunucu tarafında kırpıldı')}
+            {formatCount(shown.length)} / {formatCount(rows.length)} rows shown
+            {truncated && (truncationNote ? ` · ${truncationNote}` : " · result truncated by the server")}
           </p>
           {visible < rows.length && (
             <Button size="sm" icon={<ArrowsOutSimpleIcon size={13} />} onClick={() => setVisible((v) => v + PAGE)}>
-              {formatCount(Math.min(PAGE, rows.length - visible))} satır daha
+              {formatCount(Math.min(PAGE, rows.length - visible))} more rows
             </Button>
           )}
         </div>

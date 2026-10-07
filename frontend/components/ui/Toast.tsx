@@ -77,7 +77,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               )}
             </div>
             <RadixToast.Close asChild>
-              <IconButton label="Kapat" size="sm" className="-mr-1.5 -mt-1 size-6">
+              <IconButton label="Close" size="sm" className="-mr-1.5 -mt-1 size-6">
                 <XIcon size={13} />
               </IconButton>
             </RadixToast.Close>

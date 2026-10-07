@@ -42,7 +42,7 @@ class NotificationService:
         Returns True on success, False on failure.
         """
         if not self.slack_url:
-            logger.warning("Slack webhook yapılandırılmamış; bildirim gönderilmedi")
+            logger.warning("Slack webhook is not configured; notification not sent")
             return False
 
         headers = {"Content-Type": "application/json; charset=utf-8"}
@@ -63,9 +63,9 @@ class NotificationService:
             async with httpx.AsyncClient(timeout=8.0) as client:
                 resp = await client.post(self.slack_url, headers=headers, json=payload)
                 if resp.status_code >= 400:
-                    logger.warning("Slack webhook isteği başarısız oldu: HTTP %d", resp.status_code)
+                    logger.warning("Slack webhook request failed: HTTP %d", resp.status_code)
                     return False
                 return True
         except httpx.RequestError as exc:
-            logger.warning("Slack webhook isteği başarısız oldu: %s", type(exc).__name__)
+            logger.warning("Slack webhook request failed: %s", type(exc).__name__)
             return False

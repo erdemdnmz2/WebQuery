@@ -44,7 +44,7 @@ def test_ordinary_identifier_is_accepted():
     ],
 )
 def test_identifiers_that_could_break_out_of_ddl_are_rejected(hostile):
-    with pytest.raises(ValueError, match="güvenli bir SQL tanımlayıcı değil"):
+    with pytest.raises(ValueError, match="is not a safe SQL identifier"):
         _validate_identifier(hostile, "field")
 
 

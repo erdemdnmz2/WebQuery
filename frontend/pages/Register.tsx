@@ -11,10 +11,10 @@ import { cn } from '../lib/cn';
 /** Four independent checks, shown live so the rule is never a surprise. */
 function passwordChecks(password: string) {
   return [
-    { label: 'En az 12 karakter', ok: password.length >= 12 },
-    { label: 'Bir büyük harf', ok: /[A-ZĞÜŞİÖÇ]/.test(password) },
-    { label: 'Bir rakam', ok: /\d/.test(password) },
-    { label: 'Bir sembol', ok: /[^\p{L}\d]/u.test(password) },
+    { label: "At least 12 characters", ok: password.length >= 12 },
+    { label: "An uppercase letter", ok: /\p{Lu}/u.test(password) },
+    { label: "A number", ok: /\d/.test(password) },
+    { label: "A symbol", ok: /[^\p{L}\d]/u.test(password) },
   ];
 }
 
@@ -38,7 +38,7 @@ const Register: React.FC = () => {
     try {
       const result = await api.register(username, email, password);
       setDone(true);
-      setSuccessMessage(result.message ?? 'Kayıt başvurunuz alındı.');
+      setSuccessMessage(result.message ?? "Your registration request has been received.");
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -48,13 +48,13 @@ const Register: React.FC = () => {
 
   return (
     <AuthLayout
-      title="Hesap oluşturun"
-      subtitle="Hesabınız açıldıktan sonra yöneticinizin size veritabanı yetkisi tanımlaması gerekir."
+      title="Create an account"
+      subtitle="Once your account is created, an administrator needs to grant you database access."
       footer={
         <p>
-          Hesabınız var mı?{' '}
+          Already have an account?{' '}
           <Link to="/login" className="font-medium text-accent underline-offset-4 hover:underline">
-            Oturum açın
+            Sign in
           </Link>
         </p>
       }
@@ -76,11 +76,11 @@ const Register: React.FC = () => {
             className="flex items-start gap-2 rounded-sm border border-success-line bg-success-soft px-3 py-2.5 text-[13px] text-success"
           >
             <CheckCircleIcon size={15} weight="fill" className="mt-px shrink-0" />
-            <span>{successMessage ?? 'Kayıt başvurunuz alındı.'} Giriş yapmadan önce hesabınızın etkinleştirilmesi gerekebilir.</span>
+            <span>{successMessage ?? "Your registration request has been received."} Your account may need to be activated before you can sign in.</span>
           </div>
         )}
 
-        <Field label="Kullanıcı adı" required hint="Denetim kayıtlarında bu ad görünür.">
+        <Field label="Username" required hint="This name appears in audit records.">
           <Input
             value={username}
             onChange={(event) => setUsername(event.target.value)}
@@ -88,22 +88,22 @@ const Register: React.FC = () => {
             autoFocus
             required
             minLength={3}
-            placeholder="ali.donmez"
+            placeholder="alex.morgan"
           />
         </Field>
 
-        <Field label="E-posta" required>
+        <Field label="Email" required>
           <Input
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             autoComplete="email"
             required
-            placeholder="ad.soyad@sirket.com"
+            placeholder="firstname.lastname@company.com"
           />
         </Field>
 
-        <Field label="Parola" required>
+        <Field label="Password" required>
           <Input
             type={showPassword ? 'text' : 'password'}
             value={password}
@@ -112,7 +112,7 @@ const Register: React.FC = () => {
             required
             addon={
               <IconButton
-                label={showPassword ? 'Parolayı gizle' : 'Parolayı göster'}
+                label={showPassword ? "Hide password" : "Show password"}
                 size="sm"
                 className="size-6"
                 onClick={() => setShowPassword((visible) => !visible)}
@@ -147,7 +147,7 @@ const Register: React.FC = () => {
           disabled={!passwordReady || done}
           className="mt-1"
         >
-          Hesabı oluştur
+          Create account
         </Button>
       </form>
     </AuthLayout>

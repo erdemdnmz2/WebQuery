@@ -1,6 +1,6 @@
 """
 Workspaces Module
-Kullanıcı workspace (kaydedilmiş query) yönetimi
+User workspace (saved query) management.
 """
 from .exceptions import WorkspaceAccessDeniedError, WorkspaceNotFoundError
 from .services import WorkspaceService

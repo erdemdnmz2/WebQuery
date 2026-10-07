@@ -42,8 +42,8 @@ export const Picker: React.FC<PickerProps> = ({
   placeholder,
   label,
   disabled,
-  emptyMessage = 'Kayıt bulunamadı',
-  searchPlaceholder = 'Ara',
+  emptyMessage = "No records found",
+  searchPlaceholder = "Search",
   header,
   triggerClassName,
   leading,
@@ -55,12 +55,12 @@ export const Picker: React.FC<PickerProps> = ({
   const listRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase('tr');
+    const needle = query.trim().toLocaleLowerCase("en");
     if (!needle) return items;
     return items.filter(
       (item) =>
-        item.label.toLocaleLowerCase('tr').includes(needle) ||
-        (item.meta ?? '').toLocaleLowerCase('tr').includes(needle),
+        item.label.toLocaleLowerCase("en").includes(needle) ||
+        (item.meta ?? '').toLocaleLowerCase("en").includes(needle),
     );
   }, [items, query]);
 

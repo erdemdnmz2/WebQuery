@@ -27,15 +27,15 @@ export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ requests, loading, e
         ) : error ? (
           <EmptyState
             icon={<WarningCircleIcon size={18} />}
-            title="Bekleyen talepler yüklenemedi"
+            title="Could not load pending requests"
             description={error}
-            action={<Button onClick={reload}>Yeniden dene</Button>}
+            action={<Button onClick={reload}>Try again</Button>}
           />
         ) : requests.length === 0 ? (
           <EmptyState
             icon={<CheckCircleIcon size={18} />}
-            title="Bekleyen talep yok"
-            description="Riskli olarak sınıflandırılan her sorgu burada listelenir ve karar verilene kadar çalıştırılamaz."
+            title="No pending requests"
+            description="Queries classified as risky appear here and cannot run until a decision is made."
           />
         ) : (
           <ul>
@@ -54,7 +54,7 @@ export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ requests, loading, e
                     {request.risk_type ? (
                       <Badge tone="danger">{request.risk_type}</Badge>
                     ) : (
-                      <Badge tone="warning">Onay bekliyor</Badge>
+                      <Badge tone="warning">Awaiting approval</Badge>
                     )}
                     <Identifier>{request.servername}</Identifier>
                     <span aria-hidden className="text-faint">
@@ -73,7 +73,7 @@ export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ requests, loading, e
                   className="mt-0.5"
                   onClick={() => setSelected(request)}
                 >
-                  İncele
+                  Review
                 </Button>
               </li>
             ))}

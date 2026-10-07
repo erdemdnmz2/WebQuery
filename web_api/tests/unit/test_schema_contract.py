@@ -82,7 +82,7 @@ def test_a_dropped_index_is_reported(schema_engine):
     with schema_engine.connect() as connection:
         missing = missing_objects(sa.inspect(connection))
 
-    assert missing == ["index eksik: ix_ActionLogging_trace_id (ActionLogging.trace_id)"]
+    assert missing == ["missing index: ix_ActionLogging_trace_id (ActionLogging.trace_id)"]
 
 
 def test_a_missing_table_is_reported_once_not_as_every_index(schema_engine):
@@ -92,5 +92,5 @@ def test_a_missing_table_is_reported_once_not_as_every_index(schema_engine):
     with schema_engine.connect() as connection:
         missing = missing_objects(sa.inspect(connection))
 
-    assert "tablo eksik: MaskingRules" in missing
+    assert "missing table: MaskingRules" in missing
     assert not any("ix_MaskingRules_id" in item for item in missing)

@@ -25,9 +25,9 @@ import { useToast } from '../../ui/Toast';
 
 const NONE = '__none__';
 const ROLE_OPTIONS = [
-  { value: 'READER', label: 'READER — salt okuma' },
-  { value: 'WRITER', label: 'WRITER — okuma + yazma' },
-  { value: 'DDL', label: 'DDL — şema değişikliği' },
+  { value: 'READER', label: "READER — read only" },
+  { value: 'WRITER', label: "WRITER — read + write" },
+  { value: 'DDL', label: "DDL — schema changes" },
 ];
 
 /**
@@ -62,7 +62,7 @@ export const AccessTab: React.FC = () => {
     try {
       setDatabases(await api.registeredDatabases());
     } catch (caught) {
-      toast.error('Veritabanı listesi alınamadı', errorMessage(caught));
+      toast.error("Could not load databases", errorMessage(caught));
     } finally {
       setLoadingDatabases(false);
     }
@@ -94,7 +94,7 @@ export const AccessTab: React.FC = () => {
 
   const candidateOptions = useMemo(
     () => [
-      { value: NONE, label: 'Kullanıcı seçin', disabled: true },
+      { value: NONE, label: "Select a user", disabled: true },
       ...(detail?.candidates ?? []).map((candidate) => ({
         value: String(candidate.user_id),
         label: `${candidate.username} · ${candidate.email}`,
@@ -112,11 +112,11 @@ export const AccessTab: React.FC = () => {
         database_id: selected.id,
         role: role as 'READER' | 'WRITER' | 'DDL',
       });
-      toast.success('Erişim verildi', `${role} rolüyle ${selected.database_name} üzerinde`);
+      toast.success("Access granted", `${role} access on ${selected.database_name}`);
       setCandidateId(NONE);
       await loadDetail(selected);
     } catch (caught) {
-      toast.error('Erişim verilemedi', errorMessage(caught));
+      toast.error("Could not grant access", errorMessage(caught));
     } finally {
       setGranting(false);
     }
@@ -127,11 +127,11 @@ export const AccessTab: React.FC = () => {
     setRevoking(true);
     try {
       await api.revokeDatabaseAccess(selected.id, revokeTarget.user_id);
-      toast.success('Erişim kaldırıldı', `${revokeTarget.username} · ${selected.database_name}`);
+      toast.success("Access removed", `${revokeTarget.username} · ${selected.database_name}`);
       setRevokeTarget(null);
       await loadDetail(selected);
     } catch (caught) {
-      toast.error('Erişim kaldırılamadı', errorMessage(caught));
+      toast.error("Could not remove access", errorMessage(caught));
     } finally {
       setRevoking(false);
     }
@@ -142,10 +142,10 @@ export const AccessTab: React.FC = () => {
       <div className="flex flex-col gap-4 lg:col-span-5">
         <Panel flush as="section" className="flex min-h-0 flex-col">
           <PanelHeader
-            title="Kayıtlı veritabanları"
-            description={loadingDatabases ? undefined : `${formatCount(databases.length)} kayıt`}
+            title="Registered databases"
+            description={loadingDatabases ? undefined : `${formatCount(databases.length)} records`}
             actions={
-              <IconButton label="Listeyi yenile" size="sm" onClick={() => void loadDatabases()}>
+              <IconButton label="Refresh list" size="sm" onClick={() => void loadDatabases()}>
                 <ArrowClockwiseIcon size={14} className={cn(loadingDatabases && 'animate-spin-slow')} />
               </IconButton>
             }
@@ -160,8 +160,8 @@ export const AccessTab: React.FC = () => {
             <EmptyState
               size="sm"
               icon={<DatabaseIcon size={18} />}
-              title="Kayıtlı veritabanı yok"
-              description="Hedef veritabanı kaydı platform OWNER tarafından yapılır."
+              title="No registered databases"
+              description="Target databases are registered by the platform OWNER."
             />
           ) : (
             <ul className="max-h-[420px] overflow-y-auto p-1.5">
@@ -204,8 +204,8 @@ export const AccessTab: React.FC = () => {
           <Panel className="flex h-full min-h-[420px] items-center justify-center">
             <EmptyState
               icon={<UsersThreeIcon size={18} />}
-              title="Veritabanı erişimleri"
-              description="Soldaki listeden bir veritabanı seçin. Kimin erişimi olduğunu görüp yeni erişim verebilir veya kaldırabilirsiniz."
+              title="Database access"
+              description="Select a database on the left to view, grant or remove user access."
             />
           </Panel>
         ) : loadingDetail ? (
@@ -218,9 +218,9 @@ export const AccessTab: React.FC = () => {
           <Panel className="flex h-full min-h-[420px] items-center justify-center">
             <EmptyState
               icon={<WarningCircleIcon size={18} />}
-              title="Erişim listesi alınamadı"
+              title="Could not load access list"
               description={detailError}
-              action={<Button onClick={() => void loadDetail(selected)}>Yeniden dene</Button>}
+              action={<Button onClick={() => void loadDetail(selected)}>Try again</Button>}
             />
           </Panel>
         ) : (
@@ -232,14 +232,14 @@ export const AccessTab: React.FC = () => {
                   <span className="ml-2 font-sans text-[12px] font-normal text-subtle">{selected.servername}</span>
                 </span>
               }
-              description={`${formatCount(detail?.members.length ?? 0)} kullanıcının erişimi var`}
+              description={`${formatCount(detail?.members.length ?? 0)} users have access`}
             />
 
             <div className="grid grid-cols-1 gap-3 border-b border-line p-4 sm:grid-cols-[1fr_auto_auto]">
-              <Field label="Aktif kullanıcı" hint="Zaten erişimi olanlar listelenmez.">
+              <Field label="Active user" hint="Users who already have access are not listed.">
                 <Select value={candidateId} onValueChange={setCandidateId} options={candidateOptions} />
               </Field>
-              <Field label="Rol">
+              <Field label="Role">
                 <Select value={role} onValueChange={setRole} options={ROLE_OPTIONS} />
               </Field>
               <Button
@@ -249,7 +249,7 @@ export const AccessTab: React.FC = () => {
                 disabled={candidateId === NONE}
                 onClick={() => void grant()}
               >
-                Erişim ver
+                Grant access
               </Button>
             </div>
 
@@ -257,8 +257,8 @@ export const AccessTab: React.FC = () => {
               <EmptyState
                 size="sm"
                 icon={<ShieldCheckIcon size={18} />}
-                title="Henüz erişim verilmemiş"
-                description="Bu veritabanına yalnız siz erişebiliyorsunuz."
+                title="No access granted yet"
+                description="Only you currently have access to this database."
               />
             ) : (
               <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
@@ -267,7 +267,7 @@ export const AccessTab: React.FC = () => {
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
                         <span className="truncate text-[13px] font-medium text-fg">{member.username}</span>
-                        {!member.is_active && <Badge tone="neutral">Pasif kullanıcı</Badge>}
+                        {!member.is_active && <Badge tone="neutral">Inactive user</Badge>}
                       </span>
                       <span className="block truncate text-[11.5px] text-subtle">{member.email}</span>
                     </span>
@@ -275,12 +275,12 @@ export const AccessTab: React.FC = () => {
                       {member.role}
                     </Badge>
                     {member.is_admin ? (
-                      <span className="text-[11.5px] text-subtle" title="DB ADMIN yalnız platform OWNER tarafından yönetilir">
-                        OWNER yönetir
+                      <span className="text-[11.5px] text-subtle" title="DB ADMIN is managed only by the platform OWNER">
+                        Managed by OWNER
                       </span>
                     ) : (
                       <Button size="sm" variant="danger" onClick={() => setRevokeTarget(member)}>
-                        Erişimi kaldır
+                        Remove access
                       </Button>
                     )}
                   </li>
@@ -294,9 +294,9 @@ export const AccessTab: React.FC = () => {
       <ConfirmDialog
         open={revokeTarget !== null}
         onOpenChange={(open) => !open && setRevokeTarget(null)}
-        title="Veritabanı erişimi kaldırılsın mı?"
-        description="Kullanıcı bu veritabanında artık hiçbir sorgu çalıştıramaz. Hesabı başka bir veritabanında etkilenmez."
-        confirmLabel="Erişimi kaldır"
+        title="Remove database access?"
+        description="The user will no longer be able to run queries on this database. Access to other databases is unaffected."
+        confirmLabel="Remove access"
         destructive
         busy={revoking}
         onConfirm={() => void revoke()}

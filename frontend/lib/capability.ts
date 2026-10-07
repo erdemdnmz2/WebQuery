@@ -23,38 +23,38 @@ export interface ModeMeta {
 /** Admin panel: the credential tiers stored on the registration. */
 export const CONNECTION_MODE: Record<ConnectionMode, ModeMeta> = {
   ro: {
-    label: 'Salt-okuma',
+    label: "Read only",
     tone: 'neutral',
-    hint: 'Kayıtta yalnız RO hesabı var. Bu veritabanında veri değiştirilemez.',
+    hint: "Only an RO account is configured. Data cannot be changed on this database.",
   },
   ro_rw: {
-    label: 'Okuma ve yazma',
+    label: "Read and write",
     tone: 'warning',
-    hint: 'Kayıtta RO ve RW hesapları var. Şema değiştiren sorgular reddedilir.',
+    hint: "RO and RW accounts are configured. Schema-changing queries are rejected.",
   },
   ro_rw_ddl: {
-    label: 'Gelişmiş / DDL',
+    label: "Advanced / DDL",
     tone: 'danger',
-    hint: 'Kayıtta RO, RW ve DDL hesapları var. Şema değişikliği mümkündür.',
+    hint: "RO, RW and DDL accounts are configured. Schema changes are supported.",
   },
 };
 
 /** SQL editor: what this user may actually execute on this database. */
 export const CAPABILITY: Record<ConnectionMode, ModeMeta> = {
   ro: {
-    label: 'Salt-okuma',
+    label: "Read only",
     tone: 'neutral',
-    hint: 'Bu veritabanında veri okuyabilirsiniz. Veri değiştiren sorgular reddedilir.',
+    hint: "You can read data on this database. Data-changing queries are rejected.",
   },
   ro_rw: {
-    label: 'Okuma + yazma',
+    label: "Read + write",
     tone: 'warning',
-    hint: 'Veri okuyabilir ve değiştirebilirsiniz. Şema değiştiren sorgular reddedilir.',
+    hint: "You can read and change data. Schema-changing queries are rejected.",
   },
   ro_rw_ddl: {
-    label: 'Şema değişikliği',
+    label: "Schema changes",
     tone: 'danger',
-    hint: 'Veri ve şema değişikliği yapabilirsiniz. Riskli ifadeler onaya düşer.',
+    hint: "You can change data and schema. Risky statements require approval.",
   },
 };
 
@@ -65,15 +65,15 @@ export const CAPABILITY: Record<ConnectionMode, ModeMeta> = {
  * "read-only" — that would understate what a legacy record can still run.
  */
 const UNKNOWN_CONNECTION_MODE: ModeMeta = {
-  label: 'Kademe tanımsız',
+  label: "Tier not configured",
   tone: 'neutral',
-  hint: 'Bu kayıtta rol bazlı hesap tanımlı değil. Yöneticinin kaydı güncellemesi gerekir.',
+  hint: "Role-based accounts are not configured. An administrator needs to update this registration.",
 };
 
 const UNKNOWN_CAPABILITY: ModeMeta = {
-  label: 'Yetki tanımsız',
+  label: "Capability unknown",
   tone: 'neutral',
-  hint: 'Bu veritabanındaki erişim kademeniz belirlenemedi. Yöneticinize başvurun.',
+  hint: "Your access tier on this database could not be determined. Contact your administrator.",
 };
 
 export function connectionModeMeta(mode: ConnectionMode | null | undefined): ModeMeta {
@@ -93,7 +93,7 @@ export function tiersOf(mode: ConnectionMode | null | undefined): Array<'ro' | '
 }
 
 export const TIER_LABEL: Record<'ro' | 'rw' | 'ddl', string> = {
-  ro: 'Salt-okuma sorguları',
-  rw: 'Veri değiştiren sorgular',
-  ddl: 'Şema değiştiren sorgular',
+  ro: "Read-only queries",
+  rw: "Data-changing queries",
+  ddl: "Schema-changing queries",
 };

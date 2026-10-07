@@ -59,7 +59,7 @@ export function outcomeFromResponse(response: SqlResponse): ExecutionOutcome {
   const message = response.message ?? '';
 
   if (response.response_type === 'error' || response.error) {
-    outcome.error = response.error || 'Sorgu çalıştırılamadı.';
+    outcome.error = response.error || "Could not execute the query.";
     return outcome;
   }
 
@@ -97,13 +97,13 @@ export function outcomeFromError(error: unknown): ExecutionOutcome {
       // The analyzer could not parse the statement, so it never reached a role
       // decision and no approval request was created. Saying so keeps the user
       // on their own SQL instead of waiting on an administrator.
-      outcome.error = 'Sorgu çözümlenemedi. SQL sözdizimini kontrol edip tekrar deneyin.';
+      outcome.error = "Could not parse the query. Check the SQL syntax and try again.";
     } else if (error.code === QUERY_ROLE_DENIED) {
       outcome.error =
-        'Rolünüz bu ifadeyi çalıştırmaya yetkili değil. Erişim için veritabanı yöneticinize başvurun.';
+        "Your role cannot execute this statement. Contact your database administrator for access.";
     } else if (error.code === DATABASE_ACCESS_DENIED) {
       outcome.error =
-        'Bu veritabanına erişim yetkiniz yok. Erişim için veritabanı yöneticinize başvurun.';
+        "You do not have access to this database. Contact your database administrator for access.";
     } else if (error.code === QUERY_BLOCKED) {
       // A hard-blocked risk class. No approval can lift it, so the user must
       // not be told to wait for one.
@@ -116,9 +116,9 @@ export function outcomeFromError(error: unknown): ExecutionOutcome {
 /** One line summarising a completed run, in the language of the interface. */
 export function summarise(outcome: ExecutionOutcome, format: (value: number) => string): string | null {
   if (outcome.error || outcome.cancelled) return null;
-  if (outcome.affectedRows !== null) return `${format(outcome.affectedRows)} satır etkilendi`;
+  if (outcome.affectedRows !== null) return `${format(outcome.affectedRows)} rows affected`;
   if (outcome.truncated && outcome.limit !== null) {
-    return `İlk ${format(outcome.limit)} satır (kırpıldı)`;
+    return `First ${format(outcome.limit)} rows (truncated)`;
   }
-  return `${format(outcome.rowCount)} satır`;
+  return `${format(outcome.rowCount)} rows`;
 }

@@ -260,15 +260,15 @@ class AdminService(BaseAdminService):
                 ).scalars().first()
                 if target is None:
                     raise DatabaseAccessNotFoundError(
-                        "Bu kullanıcının bu veritabanında erişimi yok."
+                        "This user has no access to this database."
                     )
 
                 previous_role = target.role
                 remaining = parse(previous_role) & {ADMIN}
                 if not (parse(previous_role) - {ADMIN}):
                     raise DatabaseAdminOwnerRequiredError(
-                        "Bu kullanıcının kaldırılacak bir veri erişimi yok. "
-                        "DB ADMIN yetkisini platform OWNER yönetir."
+                        "This user has no data access to revoke. "
+                        "The platform OWNER manages DB ADMIN privileges."
                     )
 
                 new_role = format_roles(remaining) if remaining else None
@@ -298,7 +298,7 @@ class AdminService(BaseAdminService):
 
         return {
             "success": True,
-            "message": "Veritabanı erişimi kaldırıldı.",
+            "message": "Database access revoked.",
             "remaining_role": new_role,
         }
 
@@ -648,7 +648,7 @@ class AdminApprovalService(BaseAdminService):
                 if is_admin(role)
             ]
         except Exception as exc:
-            logger.error("Onay bekleyen çalışma alanları alınamadı: %s", type(exc).__name__)
+            logger.error("Failed to load workspaces awaiting approval: %s", type(exc).__name__)
             return []
         
     async def execute_for_preview(
@@ -710,7 +710,7 @@ class AdminApprovalService(BaseAdminService):
             try:
                 plan = analyzer.plan(query_text, technology=db_entry.technology)
             except sqlglot.errors.ParseError:
-                reason = "Sorgu ayrıştırılamadı ve güvenlik gereği engellendi."
+                reason = "The query could not be parsed and was blocked for security."
                 await self.app_db.update_log(log_id=log_id, successfull=False, error=reason)
                 return {"success": False, "error": reason}
 
@@ -774,7 +774,7 @@ class AdminApprovalService(BaseAdminService):
                     error=safe_log_error,
                 )
 
-            logger.error("Sorgu önizlemesi başarısız oldu: %s", type(exc).__name__)
+            logger.error("Query preview failed: %s", type(exc).__name__)
             return {
                 "response_type": "error",
                 "data": [],
@@ -845,7 +845,7 @@ class AdminUserAuthService(BaseAdminService):
         roles_list = parse(role)
         if ADMIN in roles_list:
             raise DatabaseAdminOwnerRequiredError(
-                "DB ADMIN atamalarını yalnızca platform OWNER yönetebilir."
+                "Only the platform OWNER can manage DB ADMIN assignments."
             )
         if not roles_list or any(r not in ["READER", "WRITER", "DDL"] for r in roles_list):
             raise BaseServiceException("Invalid role. Role must be READER, WRITER, or DDL.")
@@ -886,9 +886,9 @@ class AdminUserAuthService(BaseAdminService):
             unsupported_tier = exceeds_mode(connection_mode, requested_role)
             if unsupported_tier:
                 raise RoleNotSupportedByDatabaseError(
-                    f"Bu veritabanı '{connection_mode}' bağlantı moduyla kayıtlı; "
-                    f"'{unsupported_tier.upper()}' kademesi tanımlı değil. "
-                    "Önce veritabanı kaydına bu kademenin kimlik bilgilerini ekleyin."
+                    f"This database is registered with '{connection_mode}' connection mode; "
+                    f"the '{unsupported_tier.upper()}' tier is not configured. "
+                    "Add credentials for this tier to the database registration first."
                 )
                 
             # Check existing association

@@ -44,14 +44,14 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
   emptyTitle,
   emptyDescription,
   className,
-  title = 'Sonuçlar',
+  title = "Results",
 }) => {
   const rows = outcome?.rows ?? [];
   const hasRows = rows.length > 0;
   const summary = outcome ? summarise(outcome, formatCount) : null;
 
   const description = running
-    ? 'Sorgu çalışıyor'
+    ? "Query running"
     : summary
       ? `${summary}${durationMs !== null ? ` · ${formatDuration(durationMs)}` : ''}`
       : undefined;
@@ -70,7 +70,7 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
             <Menu>
               <MenuTrigger asChild>
                 <Button size="sm" icon={<DownloadSimpleIcon size={13} />}>
-                  Dışa aktar
+                  Export
                 </Button>
               </MenuTrigger>
               <MenuContent>
@@ -89,7 +89,7 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-md bg-sunken">
         {running ? (
           <div className="flex flex-col gap-2 p-4" aria-live="polite">
-            <span className="sr-only">Sorgu çalışıyor</span>
+            <span className="sr-only">Query running</span>
             <Skeleton className="h-6 w-full" />
             {['w-full', 'w-[92%]', 'w-full', 'w-[78%]', 'w-[95%]', 'w-[64%]', 'w-[86%]'].map((width, index) => (
               <Skeleton key={index} className={cn('h-4', width)} />
@@ -99,8 +99,8 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
           <div role="status" className="flex min-h-0 flex-1">
             <EmptyState
               icon={<StopIcon size={18} />}
-              title="Sorgu iptal edildi"
-              description="Çalıştırma hedef veritabanında durduruldu. Sorguyu düzenleyip tekrar çalıştırabilirsiniz."
+              title="Query cancelled"
+              description="Execution stopped on the target database. You can edit and run the query again."
             />
           </div>
         ) : outcome?.sentForApproval ? (
@@ -113,11 +113,10 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
             <div className="rounded-sm border border-warning-line bg-warning-soft p-3.5">
               <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-warning">
                 <ShieldCheckIcon size={14} weight="fill" />
-                Sorgu onaya gönderildi
+                Query sent for approval
               </p>
               <p className="mt-2 text-[12.5px] leading-relaxed text-warning">
-                Risk analizi bu ifadeyi doğrudan çalıştırmadı. Sorgu çalışma alanlarınıza kaydedildi ve
-                yönetici incelemesine düştü. Karar verildiğinde listede durumu değişecek.
+                Risk analysis prevented direct execution. The query was saved to your workspaces for administrator review. Its status will update once a decision is made.
               </p>
               {outcome.error && (
                 <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-warning">
@@ -131,13 +130,13 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
             <div className="rounded-sm border border-danger-line bg-danger-soft p-3.5">
               <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-danger">
                 <WarningCircleIcon size={14} weight="fill" />
-                Sorgu çalıştırılamadı
+                Could not execute query
               </p>
               <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-danger">
                 {outcome.error}
               </pre>
               {outcome.traceId && (
-                <p className="mt-2 font-mono text-[11.5px] text-danger">İz kaydı: {outcome.traceId}</p>
+                <p className="mt-2 font-mono text-[11.5px] text-danger">Trace ID: {outcome.traceId}</p>
               )}
             </div>
           </div>
@@ -148,7 +147,7 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
             truncated={outcome?.truncated}
             truncationNote={
               outcome?.truncated && outcome.limit !== null
-                ? `Sunucu ilk ${formatCount(outcome.limit)} satırı döndürdü. Tamamı için sorguyu daraltın.`
+                ? `The server returned the first ${formatCount(outcome.limit)} rows. Narrow your query to retrieve all matching results.`
                 : undefined
             }
             className="flex-1"
@@ -156,14 +155,14 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
         ) : outcome?.affectedRows !== null && outcome?.affectedRows !== undefined ? (
           <EmptyState
             icon={<TableIcon size={18} />}
-            title="Sorgu tamamlandı"
-            description={`${formatCount(outcome.affectedRows)} satır etkilendi. Bu ifade sonuç kümesi döndürmez.`}
+            title="Query completed"
+            description={`${formatCount(outcome.affectedRows)} rows affected. This statement does not return a result set.`}
           />
         ) : outcome ? (
           <EmptyState
             icon={<TableIcon size={18} />}
-            title="Sonuç kümesi boş"
-            description="Sorgu başarıyla çalıştı ancak koşullara uyan satır bulunamadı."
+            title="Empty result set"
+            description="The query completed successfully, but no rows matched the conditions."
           />
         ) : (
           <EmptyState icon={<TableIcon size={18} />} title={emptyTitle} description={emptyDescription} />

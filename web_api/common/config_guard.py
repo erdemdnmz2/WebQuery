@@ -28,7 +28,7 @@ _REQUIRED = (
 
 
 def _fail(message: str) -> None:
-    logger.critical("KONFIGÜRASYON HATASI: %s", message)
+    logger.critical("CONFIGURATION ERROR: %s", message)
     raise SystemExit(1)
 
 
@@ -42,14 +42,14 @@ def verify_startup_config() -> None:
 
     if missing:
         _fail(
-            "Şu ortam değişkenleri eksik veya varsayılan değerde: "
+            "The following environment variables are missing or use default values: "
             + ", ".join(missing)
-            + ". .env dosyanızı kontrol edin."
+            + ". Check your .env file."
         )
 
     secret_key = os.environ["SECRET_KEY"]
     if len(secret_key) < 32:
-        _fail("SECRET_KEY en az 32 karakter olmalıdır.")
+        _fail("SECRET_KEY must be at least 32 characters long.")
 
     # QUERY_ENCRYPTION_KEYS (plural, comma-separated, newest first) enables
     # rotation; every key in it is validated the same way QUERY_ENCRYPTION_KEY
@@ -63,20 +63,20 @@ def verify_startup_config() -> None:
     )
     if not candidate_keys:
         _fail(
-            "QUERY_ENCRYPTION_KEY veya QUERY_ENCRYPTION_KEYS tanımlı değil. "
-            "En az bir Fernet anahtarı gereklidir."
+            "QUERY_ENCRYPTION_KEY or QUERY_ENCRYPTION_KEYS is not configured. "
+            "At least one Fernet key is required."
         )
     for candidate in candidate_keys:
         try:
             Fernet(candidate.encode())
         except Exception as exc:
-            _fail(f"QUERY_ENCRYPTION_KEY(S) içinde geçerli olmayan bir Fernet anahtarı var: {exc}")
+            _fail(f"QUERY_ENCRYPTION_KEY(S) contains an invalid Fernet key: {exc}")
 
     central_db_user = os.environ["CENTRAL_DB_USER"].strip()
     if central_db_user.lower() in _PRIVILEGED_DB_USERS:
         logger.warning(
-            "CENTRAL_DB_USER='%s' — yüksek yetkili bir hesapla çalışıyorsunuz. "
-            "Rol bazlı ayrı hedef DB kimlik bilgileri için ADR-0005'e bakın.",
+            "CENTRAL_DB_USER='%s' — you are using a highly privileged account. "
+            "See ADR-0005 for separate role-based target database credentials.",
             central_db_user,
         )
 
@@ -86,7 +86,7 @@ def verify_startup_config() -> None:
         if domain.strip().lstrip("@")
     }
     if not allowed_domains:
-        logger.warning("ALLOWED_EMAIL_DOMAINS boş — self-registration kapalı.")
+        logger.warning("ALLOWED_EMAIL_DOMAINS is empty — self-registration is disabled.")
 
     # DEBUG is the only signal this app has for "this is a production run"
     # (see app.py, where it also gates uvicorn's --reload). A session cookie
@@ -97,8 +97,8 @@ def verify_startup_config() -> None:
     cookie_secure = os.getenv("COOKIE_SECURE", "False").strip().lower() == "true"
     if not debug and not cookie_secure:
         _fail(
-            "DEBUG=false (üretim modu) iken COOKIE_SECURE=true olmalıdır. "
-            "Oturum çerezleri düz HTTP üzerinden gönderilmemelidir."
+            "COOKIE_SECURE must be true when DEBUG=false (production mode). "
+            "Session cookies must not be sent over plain HTTP."
         )
 
-    logger.info("Konfigürasyon doğrulandı: %d kritik ayar mevcut", len(_REQUIRED))
+    logger.info("Configuration verified: %d critical settings present", len(_REQUIRED))

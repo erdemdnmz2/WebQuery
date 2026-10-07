@@ -30,12 +30,12 @@ def verify_schema(connection) -> None:
     """
     missing = missing_objects(sa_inspect(connection))
     if not missing:
-        logger.info("Şema doğrulandı: tüm index ve kısıtlar mevcut")
+        logger.info("Schema verified: all indexes and constraints are present")
         return
 
     logger.critical(
-        "ŞEMA HATASI: %d şema garantisi eksik: %s. Alembic onarımı için "
-        "docs/architecture.md (ADR-0015) belgesine bakın.",
+        "SCHEMA ERROR: %d schema guarantees are missing: %s. See "
+        "docs/architecture.md (ADR-0015) for Alembic repair instructions.",
         len(missing),
         ", ".join(missing),
     )

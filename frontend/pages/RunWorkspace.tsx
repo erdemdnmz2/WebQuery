@@ -92,11 +92,11 @@ const RunWorkspace: React.FC = () => {
     return (
       <EmptyState
         icon={<WarningCircleIcon size={18} />}
-        title="Çalışma alanı açılamadı"
-        description={loadError ?? 'Bu kayda erişim yetkiniz olmayabilir.'}
+        title="Could not open workspace"
+        description={loadError ?? "You may not have access to this record."}
         action={
           <Button icon={<ArrowLeftIcon size={14} />} onClick={() => navigate('/')}>
-            Listeye dön
+            Back to list
           </Button>
         }
       />
@@ -114,7 +114,7 @@ const RunWorkspace: React.FC = () => {
             className="mb-1.5 inline-flex items-center gap-1 text-[12.5px] text-subtle hover:text-fg"
           >
             <ArrowLeftIcon size={13} />
-            Çalışma alanları
+            Workspaces
           </Link>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate">{workspace.name}</h1>
@@ -141,7 +141,7 @@ const RunWorkspace: React.FC = () => {
               loading={running}
               onClick={() => void execute()}
             >
-              Sorguyu çalıştır
+              Run query
             </Button>
           </Tooltip>
           {running && <QueryCancelControl cancellation={cancellation} size="lg" />}
@@ -151,17 +151,17 @@ const RunWorkspace: React.FC = () => {
       <SplitPane
         storageKey="webquery.run.split"
         defaultRatio={0.38}
-        firstLabel="Sorgu"
-        secondLabel="Sonuçlar"
+        firstLabel="Query"
+        secondLabel="Results"
         className="min-h-0 flex-1"
         first={
           <section className="flex min-h-0 w-full flex-col overflow-hidden rounded-md border border-line bg-surface">
-            <PanelHeader dense title="Onaylanan sorgu" description="Salt okunur" />
+            <PanelHeader dense title="Approved query" description="Read only" />
             <div className="min-h-0 flex-1 overflow-hidden rounded-b-md">
               <CodeEditor
                 value={workspace.query ?? ''}
                 readOnly
-                ariaLabel="Onaylanan SQL sorgusu"
+                ariaLabel="Approved SQL query"
                 onRun={() => void execute()}
               />
             </div>
@@ -173,8 +173,8 @@ const RunWorkspace: React.FC = () => {
             running={running}
             durationMs={durationMs}
             exportBaseName={workspace.name}
-            emptyTitle="Sonuç bekleniyor"
-            emptyDescription="Onaylanan sorguyu çalıştırdığınızda sonuçlar burada listelenir ve dışa aktarılabilir."
+            emptyTitle="Awaiting results"
+            emptyDescription="Run the approved query to view and export its results here."
           />
         }
       />

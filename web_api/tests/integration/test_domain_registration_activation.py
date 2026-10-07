@@ -54,7 +54,7 @@ async def test_registration_is_domain_scoped_and_pending(async_client, monkeypat
         },
     )
     assert registered.status_code == 200, registered.text
-    assert "etkinleştirdiğinde" in registered.json()["message"]
+    assert "activates your account" in registered.json()["message"]
 
     pending = await _user_by_email("pending@company.com")
     assert pending.is_active is False

@@ -181,7 +181,7 @@ class EngineCache:
                 # which meant TTL cleanup never ran again for the lifetime of
                 # the process and nothing said so. Log and keep the loop alive.
                 logger.exception(
-                    "Engine cache temizlik döngüsünde beklenmeyen hata; döngü sürüyor"
+                    "Unexpected error in engine cache cleanup loop; continuing loop"
                 )
 
     async def stop_loop(self) -> None:

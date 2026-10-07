@@ -7,13 +7,13 @@ from common.logging_config import configured_log_level
 from database_provider.database import DatabaseProvider
 
 
-def test_log_level_cozulur_ve_gecersiz_deger_infoya_duser():
+def test_log_level_resolves_and_invalid_value_falls_back_to_info():
     assert configured_log_level("debug") == logging.DEBUG
     assert configured_log_level("WARNING") == logging.WARNING
     assert configured_log_level("not-a-level") == logging.INFO
 
 
-def test_production_python_modullerinde_print_cagrisi_yoktur():
+def test_production_python_modules_do_not_call_print():
     web_api_root = Path(__file__).parents[2]
     excluded_parts = {"tests", "migrations", "__pycache__"}
 
@@ -28,10 +28,10 @@ def test_production_python_modullerinde_print_cagrisi_yoktur():
             and isinstance(node.func, ast.Name)
             and node.func.id == "print"
         ]
-        assert not print_calls, f"print() kaldı: {path}"
+        assert not print_calls, f"print() remains: {path}"
 
 
-def test_db_katalog_debug_kaydi_credential_ve_yapilandirma_icermez(caplog):
+def test_db_catalog_debug_log_excludes_credentials_and_configuration(caplog):
     provider = DatabaseProvider()
     catalogue = {
         "internal-sql.example": {
@@ -51,11 +51,11 @@ def test_db_katalog_debug_kaydi_credential_ve_yapilandirma_icermez(caplog):
     with caplog.at_level(logging.DEBUG, logger="database_provider.database"):
         provider.set_db_info(catalogue)
 
-    assert "1 sunucu, 1 veritabanı" in caplog.text
+    assert "1 servers, 1 databases" in caplog.text
     for sensitive_value in ("internal-sql.example", "finance", "finance_ro", "secret-value", "db-1"):
         assert sensitive_value not in caplog.text
 
 
-def test_bootstrap_engine_sql_echo_devre_disi():
+def test_bootstrap_engine_sql_echo_is_disabled():
     source = (Path(__file__).parents[2] / "create_db.py").read_text(encoding="utf-8")
     assert "create_engine(sa_url, echo=False" in source

@@ -43,9 +43,9 @@ class LoginThrottleSettings:
         key_prefix = os.getenv("LOGIN_THROTTLE_KEY_PREFIX", "webquery:login-throttle").strip()
 
         if not redis_url:
-            raise ValueError("REDIS_URL boş olamaz.")
+            raise ValueError("REDIS_URL cannot be empty.")
         if not key_prefix:
-            raise ValueError("LOGIN_THROTTLE_KEY_PREFIX boş olamaz.")
+            raise ValueError("LOGIN_THROTTLE_KEY_PREFIX cannot be empty.")
 
         return cls(
             redis_url=redis_url,
@@ -60,9 +60,9 @@ def _positive_int(name: str, default: str) -> int:
     try:
         value = int(raw_value)
     except ValueError as exc:
-        raise ValueError(f"{name} pozitif tam sayı olmalıdır.") from exc
+        raise ValueError(f"{name} must be a positive integer.") from exc
     if value <= 0:
-        raise ValueError(f"{name} pozitif tam sayı olmalıdır.")
+        raise ValueError(f"{name} must be a positive integer.")
     return value
 
 
@@ -134,7 +134,7 @@ class RedisLoginThrottle:
         try:
             await self._client.ping()
         except RedisError as exc:
-            raise LoginThrottleUnavailable("Redis login throttle erişilemez.") from exc
+            raise LoginThrottleUnavailable("Redis login throttle is unavailable.") from exc
 
     async def close(self) -> None:
         try:
@@ -161,7 +161,7 @@ class RedisLoginThrottle:
         try:
             await self._client.delete(self._account_key(email))
         except RedisError as exc:
-            raise LoginThrottleUnavailable("Redis login throttle erişilemez.") from exc
+            raise LoginThrottleUnavailable("Redis login throttle is unavailable.") from exc
 
     async def _run_for_keys(
         self,
@@ -182,17 +182,17 @@ class RedisLoginThrottle:
             )
             return [self._parse_response(response) for response in raw_responses]
         except RedisError as exc:
-            raise LoginThrottleUnavailable("Redis login throttle erişilemez.") from exc
+            raise LoginThrottleUnavailable("Redis login throttle is unavailable.") from exc
 
     @staticmethod
     def _parse_response(response: object) -> tuple[bool, int]:
         if not isinstance(response, (list, tuple)) or len(response) != 2:
-            raise LoginThrottleUnavailable("Redis login throttle geçersiz yanıt verdi.")
+            raise LoginThrottleUnavailable("Redis login throttle returned an invalid response.")
         try:
             blocked = bool(int(response[0]))
             retry_after = int(response[1])
         except (TypeError, ValueError) as exc:
-            raise LoginThrottleUnavailable("Redis login throttle geçersiz yanıt verdi.") from exc
+            raise LoginThrottleUnavailable("Redis login throttle returned an invalid response.") from exc
         return blocked, max(0, retry_after)
 
     def _account_key(self, email: str) -> str:

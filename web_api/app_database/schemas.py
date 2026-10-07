@@ -7,8 +7,7 @@ from pydantic import BaseModel, EmailStr
 
 
 class UserCreate(BaseModel):
-    """Kullanıcı oluşturma şeması"""
+    """User creation schema."""
     username: str
     password: str
     email: EmailStr
-

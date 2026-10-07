@@ -280,7 +280,7 @@ class AppDatabase:
                 duration = log.logout_date - log.login_date
                 log.login_duration_ms = int(duration.total_seconds() * 1000)
             else:
-                logger.warning("Aktif giriş kaydı bulunamadı: kullanıcı_id=%d", user_id)
+                logger.warning("No active login record found: user_id=%d", user_id)
         
     async def get_db_info(self) -> dict[str, dict[str, Any]]:
         """

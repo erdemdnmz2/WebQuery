@@ -30,7 +30,7 @@ def test_read_only_mode_accepts_only_ro_credentials():
 
 
 def test_read_write_mode_requires_rw_credentials():
-    with pytest.raises(ValidationError, match="RW kullanıcı adı ve şifresi zorunludur"):
+    with pytest.raises(ValidationError, match="RW username and password are required"):
         OwnerDatabaseCreate(**payload(connection_mode="ro_rw"))
 
 
@@ -49,5 +49,5 @@ def test_ddl_mode_requires_all_three_credential_tiers():
 
 
 def test_read_only_mode_rejects_unselected_rw_credentials():
-    with pytest.raises(ValidationError, match="RW bilgileri seçilen bağlantı modunda gönderilemez"):
+    with pytest.raises(ValidationError, match="RW credentials cannot be submitted for the selected connection mode"):
         OwnerDatabaseCreate(**payload(username_rw="sales_rw"))

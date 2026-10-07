@@ -27,7 +27,7 @@ class QueryCancelled(BaseServiceException):
     code = "QUERY_CANCELLED"
 
     def __init__(self):
-        super().__init__("Sorgu hedef veritabanında iptal edildi.")
+        super().__init__("The query was cancelled on the target database.")
 
 
 class CancellationUnavailable(BaseServiceException):
@@ -35,7 +35,7 @@ class CancellationUnavailable(BaseServiceException):
     code = "QUERY_CANCELLATION_UNAVAILABLE"
 
     def __init__(self):
-        super().__init__("Sorgu iptal hizmetine ulaşılamıyor. Tekrar deneyin.")
+        super().__init__("The query cancellation service is unavailable. Try again.")
 
 
 class ExecutionConflict(BaseServiceException):
@@ -87,7 +87,7 @@ class ExecutionRegistry:
             return
         key = self.key(user_id, execution_id)
         if not await self._call(self.client.set, key, "running", nx=True, ex=self.ttl):
-            raise ExecutionConflict("Bu çalıştırma kimliği zaten kullanılıyor.")
+            raise ExecutionConflict("This execution ID is already in use.")
         handle = TargetExecution(self, key)
         token = current_execution.set(handle)
         try:
@@ -99,7 +99,7 @@ class ExecutionRegistry:
             try:
                 await self._call(self.client.set, key, "sealed", ex=30)
             except CancellationUnavailable:
-                logger.warning("Sorgu iptal kaydı temizlenemedi; TTL ile silinecek")
+                logger.warning("Could not clean up query cancellation record; TTL will remove it")
 
     async def close(self):
         await self.client.aclose()
@@ -191,7 +191,7 @@ class TargetExecution:
                     except Exception as exc:
                         # Don't report completion here. The original SQL must
                         # end and rollback before QUERY_CANCELLED is returned.
-                        logger.warning("Hedef iptal sinyali başarısız: %s", type(exc).__name__)
+                        logger.warning("Target cancellation signal failed: %s", type(exc).__name__)
                     # A signal may arrive just before the driver actually
                     # starts SQL (e.g. executor queueing). Repeat until the
                     # original target block ends, never after it is released.

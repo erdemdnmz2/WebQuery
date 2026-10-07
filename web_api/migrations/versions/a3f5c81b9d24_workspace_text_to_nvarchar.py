@@ -4,7 +4,8 @@ Revision ID: a3f5c81b9d24
 Revises: f6d4a7b9c2e1
 
 The baseline created Workspaces.name and Workspaces.description as VARCHAR,
-which on MSSQL is bound to the server codepage: "Veritabanı envanteri" comes
+which on MSSQL is bound to the server codepage: a value such as "Database
+inventory" may come
 back as "Veritabani envanteri". The model declares these columns as
 AppNVarChar, so a database built from the baseline alone disagrees with the
 ORM and still loses Turkish letters. See SPEC-0012 BR-05.

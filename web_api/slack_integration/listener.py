@@ -41,7 +41,7 @@ class SlackListener:
 
     async def start(self):
         if not SLACK_APP_TOKEN:
-            logger.warning("SLACK_APP_TOKEN eksik; Slack Socket Mode başlatılamadı")
+            logger.warning("SLACK_APP_TOKEN is missing; Slack Socket Mode could not start")
             return
         self.handler = AsyncSocketModeHandler(self.app, SLACK_APP_TOKEN)
         await self.handler.start_async()
@@ -164,12 +164,12 @@ class SlackListener:
                     "private_metadata": metadata,
                     "title": {"type": "plain_text", "text": "Sorguyu reddet"},
                     "submit": {"type": "plain_text", "text": "Reddet"},
-                    "close": {"type": "plain_text", "text": "Vazgeç"},
+                    "close": {"type": "plain_text", "text": "Cancel"},
                     "blocks": [
                         {
                             "type": "input",
                             "block_id": "reason_block",
-                            "label": {"type": "plain_text", "text": "Red gerekçesi"},
+                            "label": {"type": "plain_text", "text": "Rejection reason"},
                             "element": {
                                 "type": "plain_text_input",
                                 "action_id": "reason_input",

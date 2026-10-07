@@ -79,7 +79,7 @@ const callKeys = new Set(calls.map((call) => `${call.method} ${call.path}`));
 
 let failures = 0;
 
-console.log(`Frontend çağrısı: ${calls.length}  ·  Backend rotası: ${routes.length}\n`);
+console.log(`Frontend calls: ${calls.length}  ·  Backend routes: ${routes.length}\n`);
 
 console.log('FRONTEND -> BACKEND');
 for (const call of calls) {
@@ -95,13 +95,13 @@ const uncalled = routes.filter(
 );
 
 if (uncalled.length > 0) {
-  console.log('\nARAYÜZÜ OLMAYAN BACKEND ROTALARI (bilgi amaçlı)');
+  console.log('\nBACKEND ROUTES WITHOUT A FRONTEND CALL (informational)');
   for (const route of uncalled) {
     console.log(`  ---   ${route.method.padEnd(6)} ${route.path}  (${route.file})`);
   }
 }
 
 console.log(
-  `\n${failures === 0 ? 'Tüm frontend çağrıları bir backend rotasına karşılık geliyor.' : `${failures} çağrının backend karşılığı yok.`}`,
+  `\n${failures === 0 ? 'All frontend calls match a backend route.' : `${failures} frontend calls have no matching backend route.`}`,
 );
 process.exit(failures === 0 ? 0 : 1);

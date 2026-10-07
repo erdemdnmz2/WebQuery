@@ -19,7 +19,7 @@ export function QueryCancelControl({
         disabled={cancellation.requested}
         onClick={() => void cancellation.cancel()}
       >
-        {cancellation.pending || cancellation.requested ? 'İptal ediliyor…' : 'İptal et'}
+        {cancellation.pending || cancellation.requested ? "Cancelling…" : "Cancel"}
       </Button>
       {cancellation.error && (
         <p role="alert" className="max-w-xs text-[12px] text-danger">
@@ -27,7 +27,7 @@ export function QueryCancelControl({
         </p>
       )}
       {cancellation.requested && (
-        <span role="status" className="sr-only">Sorgunun hedef veritabanında durması bekleniyor.</span>
+        <span role="status" className="sr-only">Waiting for the query to stop on the target database.</span>
       )}
     </div>
   );

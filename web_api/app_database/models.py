@@ -54,9 +54,9 @@ _DUMMY_HASH = bcrypt.hashpw(b"webquery-timing-equaliser", bcrypt.gensalt(rounds=
 def validate_password_policy(plain_password: str) -> None:
     """Raise ValueError unless the password meets the B2B policy."""
     if len(plain_password) < 12:
-        raise ValueError("Şifre en az 12 karakter olmalıdır.")
+        raise ValueError("Password must be at least 12 characters long.")
     if not re.search(r'[A-Z]', plain_password) or not re.search(r'[0-9]', plain_password):
-        raise ValueError("Şifre en az bir büyük harf ve bir rakam içermelidir.")
+        raise ValueError("Password must contain at least one uppercase letter and one digit.")
 
 
 def hash_password(plain_password: str) -> str:
@@ -126,7 +126,7 @@ class EncryptedText(TypeDecorator):
             )
             if not raw_keys or not raw_keys[0]:
                 raise RuntimeError(
-                    "QUERY_ENCRYPTION_KEY(S) tanımlı değil. Şifreleme yapılamaz."
+                    "QUERY_ENCRYPTION_KEY(S) is not configured. Encryption is unavailable."
                 )
             cls._fernet = MultiFernet([Fernet(key) for key in raw_keys])
         return cls._fernet
@@ -155,9 +155,9 @@ class EncryptedText(TypeDecorator):
             # value was expected, with nothing pointing at the cause. It is
             # loud now instead.
             logger.error(
-                "EncryptedText çözülemedi; ham değer döndürülüyor. "
-                "QUERY_ENCRYPTION_KEY(S) yanlış olabilir veya bu satır hiç "
-                "şifrelenmemiş (eski veri)."
+                "EncryptedText could not be decrypted; returning the raw value. "
+                "QUERY_ENCRYPTION_KEY(S) may be incorrect or this row may be "
+                "legacy data that was never encrypted."
             )
             return value
 
@@ -315,8 +315,8 @@ class Workspace(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("Users.id"), nullable=False)
     # Free text the user types. String() maps to VARCHAR on MSSQL, and the
-    # server codepage has no room for the Turkish-specific letters: a name
-    # saved as "Veritabanı envanteri" reads back as "Veritabani envanteri".
+    # server codepage has no room for Turkish-specific letters: a name saved as
+    # Values containing Turkish-specific letters may read back without them.
     # User-entered text therefore has to be NVARCHAR. See SPEC-0012 BR-05.
     name = Column(AppNVarChar, nullable=False)
     description = Column(AppNVarChar, nullable=True)
@@ -484,10 +484,10 @@ class AuditLogImmutableError(RuntimeError):
 @event.listens_for(AuditLog, "before_update")
 def _reject_audit_update(mapper, connection, target: AuditLog) -> None:
     raise AuditLogImmutableError(
-        "AuditLog kayıtları değiştirilemez; düzeltme için yeni kayıt yazın."
+        "AuditLog records are immutable; write a new record to correct one."
     )
 
 
 @event.listens_for(AuditLog, "before_delete")
 def _reject_audit_delete(mapper, connection, target: AuditLog) -> None:
-    raise AuditLogImmutableError("AuditLog kayıtları silinemez.")
+    raise AuditLogImmutableError("AuditLog records cannot be deleted.")

@@ -48,7 +48,7 @@ export const MaskingTab: React.FC = () => {
     try {
       setDatabases(await api.registeredDatabases());
     } catch (caught) {
-      toast.error('Veritabanı listesi alınamadı', errorMessage(caught));
+      toast.error("Could not load databases", errorMessage(caught));
     } finally {
       setLoadingDatabases(false);
     }
@@ -103,9 +103,9 @@ export const MaskingTab: React.FC = () => {
     try {
       await api.saveMaskingRules(selected.id, rules);
       setSavedMasked(new Set(masked));
-      toast.success('Maskeleme kuralları kaydedildi', `${formatCount(rules.length)} kolon maskeleniyor`);
+      toast.success("Masking rules saved", `${formatCount(rules.length)} columns configured for masking`);
     } catch (caught) {
-      toast.error('Kurallar kaydedilemedi', errorMessage(caught));
+      toast.error("Could not save rules", errorMessage(caught));
     } finally {
       setSaving(false);
     }
@@ -133,7 +133,7 @@ export const MaskingTab: React.FC = () => {
   };
 
   const visibleTables = useMemo(() => {
-    const needle = filter.trim().toLocaleLowerCase('tr');
+    const needle = filter.trim().toLocaleLowerCase("en");
     const entries = Object.entries(schema);
     if (!needle) return entries;
     return entries
@@ -156,10 +156,10 @@ export const MaskingTab: React.FC = () => {
       <div className="flex flex-col gap-4 lg:col-span-5">
         <Panel flush as="section" className="flex min-h-0 flex-col">
           <PanelHeader
-            title="Kayıtlı veritabanları"
-            description={loadingDatabases ? undefined : `${formatCount(databases.length)} kayıt`}
+            title="Registered databases"
+            description={loadingDatabases ? undefined : `${formatCount(databases.length)} records`}
             actions={
-              <IconButton label="Listeyi yenile" size="sm" onClick={() => void loadDatabases()}>
+              <IconButton label="Refresh list" size="sm" onClick={() => void loadDatabases()}>
                 <ArrowClockwiseIcon size={14} className={cn(loadingDatabases && 'animate-spin-slow')} />
               </IconButton>
             }
@@ -175,8 +175,8 @@ export const MaskingTab: React.FC = () => {
             <EmptyState
               size="sm"
               icon={<DatabaseIcon size={18} />}
-              title="Kayıtlı veritabanı yok"
-              description="Hedef veritabanı kaydı platform OWNER tarafından yapılır."
+              title="No registered databases"
+              description="Target databases are registered by the platform OWNER."
             />
           ) : (
             <ul className="max-h-[380px] overflow-y-auto p-1.5">
@@ -207,7 +207,7 @@ export const MaskingTab: React.FC = () => {
                         <span className="block truncate text-[11.5px] text-subtle">{database.servername}</span>
                       </span>
                       <Badge tone="neutral" mono>
-                        {database.technology.toLocaleUpperCase('tr')}
+                        {database.technology.toLocaleUpperCase("en")}
                       </Badge>
                       <Badge tone={connectionModeMeta(database.connection_mode).tone}>
                         {connectionModeMeta(database.connection_mode).label}
@@ -230,8 +230,8 @@ export const MaskingTab: React.FC = () => {
           <Panel className="flex h-full min-h-[420px] items-center justify-center">
             <EmptyState
               icon={<LockKeyIcon size={18} />}
-              title="Maskeleme kuralları"
-              description="Soldaki listeden bir veritabanı seçin. Şeması taranır ve kolon kolon maskeleme kuralı tanımlayabilirsiniz."
+              title="Masking rules"
+              description="Select a database on the left to scan its schema and define column-level masking rules."
             />
           </Panel>
         ) : (
@@ -243,10 +243,10 @@ export const MaskingTab: React.FC = () => {
                   <span className="ml-2 font-sans text-[12px] font-normal text-subtle">{selected.servername}</span>
                 </span>
               }
-              description={`${formatCount(masked.size)} kolon maskeleniyor`}
+              description={`${formatCount(masked.size)} columns configured for masking`}
               actions={
                 <IconButton
-                  label="Şemayı yeniden tara"
+                  label="Rescan schema"
                   size="sm"
                   onClick={() => void loadSchemaAndRules(selected)}
                 >
@@ -282,12 +282,12 @@ export const MaskingTab: React.FC = () => {
             </div>
 
             <div className="border-b border-line px-3 py-2">
-              <Field label="Tablo veya kolon ara" className="[&>div:first-child]:sr-only">
+              <Field label="Search tables or columns" className="[&>div:first-child]:sr-only">
                 <Input
                   type="search"
                   value={filter}
                   onChange={(event) => setFilter(event.target.value)}
-                  placeholder="Tablo veya kolon ara"
+                  placeholder="Search tables or columns"
                   icon={<MagnifyingGlassIcon size={14} />}
                   disabled={loadingSchema || Object.keys(schema).length === 0}
                 />
@@ -304,19 +304,19 @@ export const MaskingTab: React.FC = () => {
               ) : schemaError ? (
                 <EmptyState
                   icon={<WarningCircleIcon size={18} />}
-                  title="Şema okunamadı"
+                  title="Could not read schema"
                   description={schemaError}
-                  action={<Button onClick={() => void loadSchemaAndRules(selected)}>Yeniden dene</Button>}
+                  action={<Button onClick={() => void loadSchemaAndRules(selected)}>Try again</Button>}
                 />
               ) : visibleTables.length === 0 ? (
                 <EmptyState
                   size="sm"
                   icon={<TableIcon size={18} />}
-                  title={filter ? 'Eşleşen tablo yok' : 'Tablo bulunamadı'}
+                  title={filter ? "No matching tables" : "No tables found"}
                   description={
                     filter
-                      ? 'Arama terimini kısaltmayı deneyin.'
-                      : 'Bu veritabanına bağlanılamadı veya görünür tablo yok. Sunucu erişimini kontrol edin.'
+                      ? "Try a shorter search term."
+                      : "Could not connect to this database, or no tables are visible. Check server access."
                   }
                 />
               ) : (
@@ -332,7 +332,7 @@ export const MaskingTab: React.FC = () => {
                           <Checkbox
                             checked={allMasked ? true : maskedInTable > 0 ? 'indeterminate' : false}
                             onCheckedChange={(checked) => toggleTable(table, columns, checked)}
-                            ariaLabel={`${table} tablosundaki tüm kolonları maskele`}
+                            ariaLabel={`${table} — mask all columns`}
                           />
                           <button
                             type="button"
@@ -351,9 +351,9 @@ export const MaskingTab: React.FC = () => {
                             <span className="truncate font-mono text-[12.5px] text-fg">{table}</span>
                             <span className="ml-auto shrink-0 text-[11.5px] text-subtle">
                               {maskedInTable > 0 && (
-                                <span className="mr-2 text-warning">{maskedInTable} maskeli</span>
+                                <span className="mr-2 text-warning">{maskedInTable} masked</span>
                               )}
-                              {columns.length} kolon
+                              {columns.length} columns
                             </span>
                           </button>
                         </div>
@@ -373,7 +373,7 @@ export const MaskingTab: React.FC = () => {
                                     <Checkbox
                                       checked={isMasked}
                                       onCheckedChange={() => toggleColumn(table, column)}
-                                      ariaLabel={`${table}.${column} kolonunu maskele`}
+                                      ariaLabel={`${table}.${column} — mask column`}
                                     />
                                     <span
                                       className={cn(
@@ -402,9 +402,9 @@ export const MaskingTab: React.FC = () => {
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
               <p className="text-[12.5px] text-subtle">
                 {dirty ? (
-                  <span className="text-warning">Kaydedilmemiş değişiklik var</span>
+                  <span className="text-warning">Unsaved changes</span>
                 ) : (
-                  'Tüm değişiklikler kaydedildi'
+                  "All changes saved"
                 )}
               </p>
               <Button
@@ -414,7 +414,7 @@ export const MaskingTab: React.FC = () => {
                 disabled={!dirty || loadingSchema}
                 onClick={() => void saveRules()}
               >
-                Kuralları kaydet
+                Save rules
               </Button>
             </div>
           </Panel>

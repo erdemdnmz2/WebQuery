@@ -272,8 +272,8 @@ class WorkspaceService:
 
             if query_data.status not in WORKSPACE_EDITABLE_STATUSES:
                 raise WorkspaceNotEditableError(
-                    "Bu sorgu onay akışına bağlı olduğu için düzenlenemez. "
-                    "Değiştirmek için yeni bir çalışma alanı oluşturun."
+                    "This query cannot be edited because it is part of an approval flow. "
+                    "Create a new workspace to change it."
                 )
 
             if query != query_data.query:

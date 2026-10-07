@@ -198,7 +198,7 @@ def hard_block_reason(
     """
     analysis = analyzer.analyze(query, technology=technology)
     if analysis.get("risk_type") in HARD_BLOCKED_RISKS:
-        return analysis.get("reason") or "Bu sorgu güvenlik politikası gereği engellendi."
+        return analysis.get("reason") or "This query was blocked by security policy."
     return None
 
 
@@ -206,7 +206,7 @@ def hard_block_reason_for(analyzer: "QueryAnalyzer", plan: QueryPlan) -> str | N
     """`hard_block_reason` against an already-parsed plan."""
     analysis = analyzer.analyze_plan(plan)
     if analysis.get("risk_type") in HARD_BLOCKED_RISKS:
-        return analysis.get("reason") or "Bu sorgu güvenlik politikası gereği engellendi."
+        return analysis.get("reason") or "This query was blocked by security policy."
     return None
 
 
@@ -300,7 +300,7 @@ class QueryAnalyzer:
             # block it entirely to prevent bypasses.
             return {
                 "risk_type": RiskLevel.SQL_INJECTION.value,
-                "reason": "Sorgu ayrıştırılamadı ve güvenlik gereği engellendi.",
+                "reason": "The query could not be parsed and was blocked for security.",
                 "return": False,
             }
 
@@ -360,7 +360,7 @@ class QueryAnalyzer:
                 result["return"] = not self.performance_blocks
                 if result["return"]:
                     result.setdefault("warnings", []).append(
-                        "Sorgu ağır olabilir (çok sayıda JOIN veya baştan-sona joker)."
+                        "The query may be expensive (many JOINs or a leading wildcard)."
                     )
                 else:
                     return result
@@ -375,8 +375,8 @@ class QueryAnalyzer:
         phrase it is describing.
         """
         if _EXPLAIN_ANALYZE_RE.search(_strip_sql_noise(query)):
-            return ("EXPLAIN ANALYZE, sarılan sorguyu gerçekten çalıştırır ve "
-                    "bu nedenle izin verilmiyor. Düz EXPLAIN kullanın.")
+            return ("EXPLAIN ANALYZE actually runs the wrapped query and is "
+                    "therefore not allowed. Use plain EXPLAIN.")
         return None
 
     def check_tier_consistency(self, query: str, technology: str = "mssql") -> str | None:
@@ -397,15 +397,15 @@ class QueryAnalyzer:
         try:
             statements = sqlglot.parse(query.strip(), read=self._dialect(technology))
         except sqlglot.errors.ParseError:
-            return "Sorgu ayrıştırılamadı."
+            return "The query could not be parsed."
         return self._mixed_ddl_batch(statements)
 
     def _mixed_ddl_batch(self, statements: list[exp.Expression | None]) -> str | None:
         """Return a rejection reason when a batch mixes DDL with other tiers."""
         tiers = {self._statement_tier(stmt) for stmt in statements if stmt}
         if len(tiers) > 1 and "ddl" in tiers:
-            return ("Şema değiştiren ifadeler veri sorgularıyla aynı istekte "
-                    "gönderilemez. Şema değişikliğini ayrı çalıştırın.")
+                return ("Schema-changing statements cannot be submitted in the "
+                        "same request as data queries. Run the schema change separately.")
         return None
 
     def _statement_tier(self, stmt: exp.Expression) -> str:
@@ -433,7 +433,7 @@ class QueryAnalyzer:
         """Return a rejection reason for a blocked function name, else None."""
         for name in _function_names(stmt):
             if name in _BLOCKED_FUNCTIONS:
-                return f"'{name}' fonksiyonu güvenlik politikası gereği engellidir."
+                return f"The '{name}' function is blocked by security policy."
 
         for call in stmt.find_all(exp.Anonymous):
             fname = _anonymous_name(call)
@@ -448,7 +448,7 @@ class QueryAnalyzer:
                     seconds = None
             # Unreadable argument is blocked too - if we are not sure, no.
             if seconds is None or seconds > _MAX_SLEEP_SECONDS:
-                return (f"'{fname}' çağrısı engellendi "
+                return (f"The '{fname}' call was blocked "
                         f"(en fazla {_MAX_SLEEP_SECONDS} saniye).")
         return None
 

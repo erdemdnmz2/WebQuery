@@ -34,13 +34,13 @@ const Login: React.FC = () => {
 
   return (
     <AuthLayout
-      title="Oturum açın"
-      subtitle="Kayıtlı veritabanlarına sorgu çalıştırmak için hesabınızla giriş yapın."
+      title="Sign in"
+      subtitle="Sign in to run queries on your registered databases."
       footer={
         <p>
-          Hesabınız yok mu?{' '}
+          Don't have an account?{' '}
           <Link to="/register" className="font-medium text-accent underline-offset-4 hover:underline">
-            Hesap oluşturun
+            Create an account
           </Link>
         </p>
       }
@@ -56,7 +56,7 @@ const Login: React.FC = () => {
           </div>
         )}
 
-        <Field label="E-posta" required>
+        <Field label="Email" required>
           <Input
             type="email"
             value={email}
@@ -64,11 +64,11 @@ const Login: React.FC = () => {
             autoComplete="email"
             autoFocus
             required
-            placeholder="ad.soyad@sirket.com"
+            placeholder="firstname.lastname@company.com"
           />
         </Field>
 
-        <Field label="Parola" required>
+        <Field label="Password" required>
           <Input
             type={showPassword ? 'text' : 'password'}
             value={password}
@@ -77,7 +77,7 @@ const Login: React.FC = () => {
             required
             addon={
               <IconButton
-                label={showPassword ? 'Parolayı gizle' : 'Parolayı göster'}
+                label={showPassword ? "Hide password" : "Show password"}
                 size="sm"
                 className="size-6"
                 onClick={() => setShowPassword((visible) => !visible)}
@@ -89,7 +89,7 @@ const Login: React.FC = () => {
         </Field>
 
         <Button type="submit" variant="primary" size="lg" fullWidth loading={submitting} className="mt-1">
-          Giriş yap
+          Sign in
         </Button>
       </form>
     </AuthLayout>

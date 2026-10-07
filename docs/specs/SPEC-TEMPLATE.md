@@ -1,63 +1,63 @@
-# Mini-Spec: `<Özellik adı>`
+# Mini-Spec: `<Feature name>`
 
-## 1. Spec Kartı
+## 1. Spec card
 
-- Özellik: `<Kısa ad>`
-- Durum: Draft | Ready for implementation | Implemented | Superseded
-- Versiyon: `<semver veya tarih>`
-- Tarih: `<YYYY-MM-DD>`
-- Sahip: `<kişi veya ekip>`
+- Feature: `<Short name>`
+- Status: Draft | Ready for implementation | Implemented | Superseded
+- Version: `<semver or date>`
+- Date: `<YYYY-MM-DD>`
+- Owner: `<person or team>`
 
-## 2. Amaç ve Başarı Sinyali
+## 2. Purpose and success signal
 
-### Amaç
+### Purpose
 
-`<Kullanıcı veya iş problemi.>`
+`<User or business problem.>`
 
-### Başarı Sinyali
+### Success signal
 
-- `<Gözlemlenebilir ve test edilebilir sonuç>`
+- `<Observable and testable result>`
 
-## 3. Kapsam / Kapsam Dışı
+## 3. Scope / exclusions
 
-### Kapsam
+### Scope
 
-- `<Dahil olan davranış>`
+- `<Included behavior>`
 
-### Kapsam Dışı
+### Exclusions
 
-- `<Bu değişiklikte özellikle yapılmayacak davranış>`
+- `<Behavior explicitly excluded from this change>`
 
-## 4. Sözleşme
+## 4. Contract
 
-`<Endpoint, UI akışı, olay veya veri sözleşmesini yazın. Request/response örneği gerekiyorsa ekleyin.>`
+`<Describe the endpoint, UI flow, event or data contract. Add request/response examples when needed.>`
 
-## 5. İş Kuralları
+## 5. Business rules
 
-### BR-01: `<Kural adı>`
+### BR-01: `<Rule name>`
 
-`<Açık, tek anlamlı kural.>`
+`<A clear, unambiguous rule.>`
 
-## 6. Acceptance Criteria
+## 6. Acceptance criteria
 
-- AC-01: Given `<başlangıç durumu>`, when `<eylem>`, then `<doğrulanabilir sonuç>`.
-- AC-02: `<Hata, yetki veya sınır durumu>`.
+- AC-01: Given `<starting state>`, when `<action>`, then `<verifiable result>`.
+- AC-02: `<Error, authorization or boundary case>`.
 
-## 7. Teknik ve Güvenlik Kısıtları
+## 7. Technical and security constraints
 
-- `<Performans, uyumluluk, veri, kimlik doğrulama, audit veya masking kısıtı>`
+- `<Performance, compatibility, data, authentication, audit or masking constraint>`
 
-## 8. Open Questions
+## 8. Open questions
 
-- `<OQ-YYYY-NNN>`: `<Soru>`
+- `<OQ-YYYY-NNN>`: `<Question>`
 
-Bir soru açıksa, `docs/open-questions.md` içine de girilmelidir. Status `Ready
-for implementation` olabilmesi için açık soruların çözülmüş veya kullanıcı
-tarafından açıkça ertelenmiş olması gerekir.
+If a question is open, also add it to `docs/open-questions.md`. Status can be
+`Ready for implementation` only after open questions are resolved or explicitly
+deferred by the user.
 
-## 9. Done Kontrolü
+## 9. Done check
 
-- [ ] Acceptance criteria için test eklendi veya güncellendi
-- [ ] İlgili güvenlik ve hata davranışları doğrulandı
-- [ ] Gerekliyse ADR oluşturuldu/güncellendi
-- [ ] Doğrulama komutları çalıştırıldı ve sonuçları handoff'a yazıldı
+- [ ] Tests were added or updated for the acceptance criteria
+- [ ] Relevant security and error behavior was verified
+- [ ] An ADR was created or updated when required
+- [ ] Validation commands were run and results were written to the handoff
