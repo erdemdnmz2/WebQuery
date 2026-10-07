@@ -11,6 +11,7 @@ handoff:
       - Added complete examples, Git/Docker ignores, current README and one backlog.
       - Preserved Apache license and original MIT attribution.
       - Patched source-map-js 1.2.1 to 1.2.2 after a fresh high-severity advisory.
+      - Published the prepared baseline on chore/clean-baseline and opened PR 1 after maintainer authorization.
     excluded:
       - Source repository changes, legacy history, secrets, backups and local-only material.
       - New schema/API/security-policy designs listed in the implementation plan.
@@ -108,7 +109,7 @@ handoff:
   open_questions: []
   known_risks:
     - Real SQL Server/Redis integration was not executed locally in this cleanup.
-    - New-repository GitHub CI and CodeQL have not run; no remote success claim.
+    - New-repository CI has started; its final result and CodeQL coverage still need verification. No remote success claim.
     - Actions currently allows all actions; previous UI allowlist is not active per API.
     - Cancellation outage policy, central credential fallback and encryption/masking limits remain as documented.
     - Compose bootstrap/TLS/proxy/restore design needs the P2 work before production use.
@@ -116,6 +117,8 @@ handoff:
     repository: https://github.com/erdemdnmz2/WebQuery
     branch: chore/clean-baseline
     base_branch: main
+    pull_request: https://github.com/erdemdnmz2/WebQuery/pull/1
+    baseline_commit: 214ff0927c633fa04e05296e799ce56b20b1c979
     merge_authorized: false
-    status: Prepared for authorized push and PR
+    status: Published; PR open; CI pending; main unchanged
   next_step: Verify the published branch/PR and actual GitHub CI; obtain separate approval before merge or Actions setting changes.
