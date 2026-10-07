@@ -1,0 +1,121 @@
+handoff:
+  status: READY_FOR_REVIEW
+  from: Codex
+  to: WebQuery maintainer
+  created_at: "2026-10-07T12:01:21+03:00"
+  task: Clean public baseline, code-aligned documentation and authorized new-repository transfer
+  scope:
+    completed:
+      - Imported tracked runtime/tests and all 11 migrations from legacy main 6cf0a73.
+      - Consolidated 108 tracked legacy docs into 18 current docs/templates/playbooks/specs/handoff files.
+      - Added complete examples, Git/Docker ignores, current README and one backlog.
+      - Preserved Apache license and original MIT attribution.
+      - Patched source-map-js 1.2.1 to 1.2.2 after a fresh high-severity advisory.
+    excluded:
+      - Source repository changes, legacy history, secrets, backups and local-only material.
+      - New schema/API/security-policy designs listed in the implementation plan.
+      - Merge into main and GitHub settings changes.
+  changed_files:
+    created:
+      - web_api/ (imported source, tests and migrations)
+      - frontend/ (imported source and lockfile with documented patch)
+      - docs/ (consolidated reference, templates, playbooks, specs and this handoff)
+      - scripts/ (repository hygiene checks and tests)
+      - .gitignore
+      - .env.example
+      - .github/workflows/ci.yml
+      - AGENTS.md
+      - CONTRIBUTING.md
+      - SECURITY.md
+      - NOTICE
+      - licenses/WebQuery-legacy-MIT.txt
+      - Docker/Compose files and Makefile
+    modified:
+      - README.md
+    deleted: []
+  decisions:
+    - decision: Import fixed main, not the stale security-hardening branch.
+      rationale: Main includes merged cancellation and MSSQL boolean/result-set fixes.
+      recorded_in: docs/specs/SPEC-0033-public-repository-baseline.md
+    - decision: Consolidate current contracts; keep unapplied changes in one ordered plan.
+      rationale: Legacy handoffs and drafts mix historical findings with delivered code.
+      recorded_in: docs/migration-analysis.md
+    - decision: Compatible source-map-js patch only; no unrelated dependency updates.
+      rationale: Fresh npm audit fails on GHSA-68fv-2mgg-jv7q; upstream 1.2.2 repairs it.
+      recorded_in: docs/specs/SPEC-0034-source-map-dependency-remediation.md
+    - decision: Publish the prepared baseline on chore/clean-baseline with a PR to main.
+      rationale: The maintainer explicitly requested transfer to the new public repository after local review preparation.
+      recorded_in: docs/specs/SPEC-0033-public-repository-baseline.md
+  validation:
+    commands_run:
+      - command: python -m pytest -q (web_api; legacy backend .venv interpreter)
+        result: passed
+        evidence: "338 passed, 3 real-MSSQL tests skipped, 1 Pydantic deprecation warning; 230.15s. Python 3.13.0, not CI Python 3.11."
+      - command: ruff check --select F,E9 . (web_api; legacy backend environment)
+        result: passed
+        evidence: All checks passed.
+      - command: python -m pytest -q tests/unit/test_schema_guard.py tests/unit/test_baseline_migration.py tests/unit/test_database_config.py
+        result: passed
+        evidence: "29 passed after documentation-pointer edits; 1 inherited deprecation warning."
+      - command: npm ci --no-fund --no-audit
+        result: passed
+        evidence: "185 packages installed; Node 25.9.0 locally, not CI Node 24."
+      - command: npm run verify:source-map-security
+        result: passed
+        evidence: "Expected failure on inherited 1.2.1; passing oversized/nested offset checks on 1.2.2."
+      - command: npm audit --audit-level=high
+        result: passed
+        evidence: "Before patch: one high advisory. After patch: 0 vulnerabilities. Network retry required."
+      - command: npm run typecheck && npm run verify:export && npm run audit:api && npm run audit:contrast && npm run build
+        result: passed
+        evidence: "Passed before and after dependency patch. 37 frontend calls matched backend routes; light/dark contrast checks passed; final Vite build 3.30s."
+      - command: python -m pip_audit -r requirements.txt (web_api; legacy backend environment)
+        result: passed
+        evidence: No known vulnerabilities found; initial restricted-network attempt failed, escalation succeeded.
+      - command: python3 scripts/check_repository.py
+        result: passed
+        evidence: "44 backend env keys covered; blank secret examples, Git exclusions, required Docker rules and local document targets verified."
+      - command: python3 -m unittest discover -s scripts/tests -v
+        result: passed
+        evidence: Seven repository hygiene regression tests passed.
+      - command: DB_USER=webquery_config_test DB_PASSWORD=local-config-only docker compose --env-file .env.example -f docker-compose.yml config --quiet --no-env-resolution
+        result: passed
+        evidence: Syntax validation only, synthetic values; no real .env read and no services started.
+      - command: DB_USER=webquery_config_test DB_PASSWORD=local-config-only docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.dev.yml config --quiet --no-env-resolution
+        result: passed
+        evidence: Development topology syntax validation only; no real .env read and no services started.
+      - command: One-off import byte/AST/lockfile comparison against legacy 6cf0a73
+        result: passed
+        evidence: "No missing selected runtime files; Python logic unchanged after documented reference normalization; only source-map-js lock resolution differs."
+      - command: cmp licenses/WebQuery-legacy-MIT.txt with git show 6cf0a73:LICENSE
+        result: passed
+        evidence: Original MIT notice preserved byte-for-byte.
+      - command: git diff --check and curated-file whitespace scan
+        result: passed
+        evidence: No new/curated whitespace findings; unchanged imported style not reformatted.
+      - command: Pre-publication selected-file artifact/token heuristic scan
+        result: passed
+        evidence: "256 selected public files; no forbidden secret/environment/backup/dependency artifacts or common token/private-key matches. Not a comprehensive secret scanner."
+      - command: gh api repos/erdemdnmz2/WebQuery/actions/permissions
+        result: passed
+        evidence: "Read-only: enabled=true, allowed_actions=all, sha_pinning_required=false. No setting changed."
+      - command: gh api repos/erdemdnmz2/WebQuery/actions/permissions/workflow
+        result: passed
+        evidence: "Read-only: default token permission read; Actions PR approval permission false."
+      - command: gh api repos/actions/{checkout,setup-python,setup-node}/git/ref/tags/v7
+        result: passed
+        evidence: All three official v7 tags resolved; imported action names/versions exist.
+  open_questions: []
+  known_risks:
+    - Real SQL Server/Redis integration was not executed locally in this cleanup.
+    - New-repository GitHub CI and CodeQL have not run; no remote success claim.
+    - Actions currently allows all actions; previous UI allowlist is not active per API.
+    - Cancellation outage policy, central credential fallback and encryption/masking limits remain as documented.
+    - Compose bootstrap/TLS/proxy/restore design needs the P2 work before production use.
+  publication:
+    repository: https://github.com/erdemdnmz2/WebQuery
+    branch: chore/clean-baseline
+    base_branch: main
+    merge_authorized: false
+    status: Prepared for authorized push and PR
+  next_step: Verify the published branch/PR and actual GitHub CI; obtain separate approval before merge or Actions setting changes.

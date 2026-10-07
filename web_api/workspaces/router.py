@@ -1,0 +1,221 @@
+"""
+Workspace Router
+User workspace (saved query) management endpoints
+"""
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+
+from app_database import AppDatabase
+from app_database.models import User, Workspace
+from authentication.services import get_current_user
+from database_provider import DatabaseProvider
+from dependencies import (
+    ensure_owner,
+    get_app_db,
+    get_db_provider,
+    get_workspace_service,
+    get_execution_registry,
+)
+from query_execution.cancellation import ExecutionRegistry
+from query_execution import schemas as query_models
+
+from .schemas import (
+    WorkspaceCreate,
+    WorkspaceExecutionRequest,
+    WorkspaceList,
+    WorkspaceUpdate,
+)
+from .services import WorkspaceService
+
+router = APIRouter(prefix="/api")
+
+@router.post("/workspaces")
+async def create_workspace(
+    request: WorkspaceCreate,
+    current_user : User = Depends(get_current_user),
+    service: WorkspaceService = Depends(get_workspace_service),
+    app_db: AppDatabase = Depends(get_app_db)
+):
+    """
+    Creates a new workspace
+    
+    Args:
+        request: Workspace creation data (name, query, servername, database)
+    
+    Returns:
+        Dict: {"success": true, "workspace_id": int}
+    
+    Raises:
+        HTTPException 400: If workspace cannot be created
+    """
+    async with app_db.get_app_db() as db:
+        result = await service.create_workspace(db=db, workspace_data=request, user_id=current_user.id)
+    if result.get("success"):
+        return result
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("error", "Workspace could not be created."))
+
+@router.get("/workspaces", response_model=WorkspaceList)
+async def get_workspaces(
+    current_user : User = Depends(get_current_user),
+    service: WorkspaceService = Depends(get_workspace_service),
+    app_db: AppDatabase = Depends(get_app_db)
+):
+    """
+    Lists all workspaces of the user
+    
+    Returns:
+        WorkspaceList: List of workspaces belonging to the user
+    """
+    async with app_db.get_app_db() as db:
+        workspaces = await service.get_workspace_by_id(db, current_user.id)
+        return {"workspaces": workspaces}
+
+@router.delete("/workspaces/{workspace_id}")
+async def delete_workspace(
+    workspace_id: int,
+    _ws: Workspace = Depends(ensure_owner),
+    service: WorkspaceService = Depends(get_workspace_service),
+    app_db: AppDatabase = Depends(get_app_db)
+):
+    """
+    Deletes a workspace
+    
+    Args:
+        workspace_id: ID of the workspace to delete
+    
+    Returns:
+        Response: 200 OK
+    
+    Raises:
+        HTTPException 400: If workspace cannot be deleted
+    
+    Note:
+        Related queryData record is also deleted
+    """
+    async with app_db.get_app_db() as db:
+        success = await service.delete_workspace_by_id(workspace_id, db=db)
+        if success:
+            return Response(status_code=status.HTTP_200_OK)
+        else:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Workspace could not be deleted.")
+
+@router.put("/workspaces/{workspace_id}")
+async def update_workspace(
+    workspace_id: int,
+    request: WorkspaceUpdate,
+    _ws: Workspace = Depends(ensure_owner),
+    service: WorkspaceService = Depends(get_workspace_service),
+    app_db: AppDatabase = Depends(get_app_db)
+):
+    """
+    Rewrites the SQL text of a workspace.
+
+    The status is not client-supplied; see `WorkspaceUpdate`. An accepted edit
+    returns the record to a draft with results unshared.
+
+    Args:
+        workspace_id: ID of the workspace to update
+        request: Update data (query)
+
+    Returns:
+        Response: 200 OK
+
+    Raises:
+        HTTPException 400: If workspace cannot be updated
+        WorkspaceNotEditableError (409): If the query is awaiting or carrying approval
+    """
+    async with app_db.get_app_db() as db:
+        success = await service.update_workspace(db, workspace_id, query=request.query)
+        if success:
+            return Response(status_code=status.HTTP_200_OK)
+        else:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Workspace could not be updated.")
+        
+@router.get("/get_workspace_by_id/{workspace_id}")
+async def get_workspace_by_id(
+    workspace_id: int,
+    _ws: Workspace = Depends(ensure_owner),
+    current_user: User = Depends(get_current_user),
+    service: WorkspaceService = Depends(get_workspace_service),
+    app_db: AppDatabase = Depends(get_app_db)
+):
+    """
+    Retrieves workspace details by ID
+    
+    Args:
+        workspace_id: ID of the workspace to retrieve details for
+    
+    Returns:
+        Dict: Workspace details (name, query, servername, database, status)
+    
+    Raises:
+        HTTPException 404: If workspace is not found or does not belong to the user
+    
+    Note:
+        Only workspace owner can access. `ensure_owner` is the gate; the service
+        is handed the *requester's* id (not the row's own `user_id`, which made
+        its internal ownership check a tautology).
+    """
+    async with app_db.get_app_db() as db:
+        result = await service.get_workspace_detail_by_id(db, workspace_id, current_user.id)
+        if not result:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        return result
+
+
+@router.post("/execute_workspace/{workspace_id}", response_model=query_models.SQLResponse)
+async def execute_workspace(
+    workspace_id: int,
+    execution_request: WorkspaceExecutionRequest = None,
+    current_user: User = Depends(get_current_user),
+    workspace_service: WorkspaceService = Depends(get_workspace_service),
+    app_db: AppDatabase = Depends(get_app_db),
+    db_provider: DatabaseProvider = Depends(get_db_provider),
+    registry: ExecutionRegistry = Depends(get_execution_registry),
+) -> dict[str, Any]:
+    """
+    Execute the stored query for a workspace server-side using centralized credentials.
+
+    Requirements:
+    - User must have a valid JWT session.
+    - Workspace must exist.
+    - Workspace.show_results must be True and queryData.status == 'approved_with_results'.
+
+    Only the workspace_id is accepted from the client to avoid arbitrary SQL execution.
+    
+    Args:
+        workspace_id: ID of the workspace to execute.
+        execution_request: The workspace execution request payload.
+        current_user: The authenticated user instance.
+        workspace_service: The workspace service instance.
+        app_db: The application database manager.
+        db_provider: The database provider instance.
+        
+    Returns:
+        dict[str, Any]: The query execution results or error details.
+    """
+    # Delegate execution to WorkspaceService which enforces approval rules (using centralized credentials)
+    ad_hoc = execution_request.ad_hoc_mask_columns if execution_request else None
+    execution_id = str(execution_request.execution_id) if execution_request and execution_request.execution_id else None
+    async with registry.track(current_user.id, execution_id):
+        result: dict[str, Any] = await workspace_service.execute_workspace(
+            workspace_id=workspace_id,
+            current_user=current_user,
+            db_provider=db_provider,
+            ad_hoc_mask_columns=ad_hoc
+        )
+
+    if result.get("response_type") == "error":
+        # map to HTTP errors for common cases
+        err: str = str(result.get("error", "Execution failed"))
+        if "not found" in err.lower():
+            raise HTTPException(status_code=404, detail=err)
+        if "not approved" in err.lower() or "not approved for execution" in err.lower():
+            raise HTTPException(status_code=403, detail=err)
+        if "session" in err.lower():
+            raise HTTPException(status_code=401, detail=err)
+        raise HTTPException(status_code=400, detail=err)
+
+    return result
