@@ -1,0 +1,89 @@
+# Core FastAPI & ASGI
+fastapi==0.141.1
+starlette==1.3.1
+uvicorn==0.35.0
+anyio==4.15.1
+sniffio==1.3.1
+click==8.5.0
+
+# Pydantic for data validation
+pydantic==2.11.7
+pydantic_core==2.33.2
+annotated-types==0.7.0
+
+# SQLAlchemy & Database
+SQLAlchemy==2.0.41
+
+# Schema migrations (see docs/architecture.md, legacy ADR-0001).
+# Alembic runs synchronously; env.py rewrites the async URL to the sync
+# driver below for each technology.
+alembic==1.17.0
+
+# MSSQL Support
+aioodbc==0.5.0
+pyodbc==5.2.0
+
+# MySQL Support
+aiomysql==0.3.2
+PyMySQL==1.2.3
+
+# PostgreSQL Support
+asyncpg==0.30.0
+psycopg2-binary==2.9.13  # sync driver, used only by Alembic migrations
+
+# SQLAlchemy dependencies
+greenlet==3.2.3
+
+# Authentication & Security
+# passlib was dropped: password hashing calls bcrypt directly
+# (app_database/models.py), so the wrapper had no call site.
+bcrypt==4.2.0
+cryptography==50.0.1
+PyJWT==2.15.0
+
+# Rate Limiting
+slowapi==0.1.9
+limits==5.5.0
+redis==7.2.0
+
+# Alembic template rendering (Mako). Jinja2 was dropped with the server-side
+# HTML routes; the frontend is a separate Vite build and renders no templates.
+MarkupSafe==3.0.2
+
+# Email validation
+email_validator==2.2.0
+dnspython==2.7.0
+
+# Environment & Config
+python-dotenv==1.2.3
+
+# File handling
+python-multipart==0.0.32
+
+# HTTP & Requests
+requests==2.34.2
+httpx==0.28.1
+certifi==2025.7.9
+charset-normalizer==3.4.2
+idna==3.20
+urllib3==2.8.0
+
+# Dependencies
+cffi==2.1.1
+pycparser==3.0
+typing_extensions==4.16.0
+packaging==25.0
+setuptools==84.0.0
+
+# Async HTTP Client (Required for Slack Bolt AsyncApp)
+aiohttp==3.14.3
+
+# Slack Integration
+slack-bolt==1.30.0
+slack-sdk==3.44.1
+
+# Testing
+pytest==9.1.1
+pytest-asyncio==1.4.0
+aiosqlite==0.20.0
+sqlglot==30.14.0

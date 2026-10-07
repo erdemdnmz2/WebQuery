@@ -1,0 +1,36 @@
+handoff:
+  status: READY_FOR_REVIEW # IN_PROGRESS | BLOCKED | READY_FOR_REVIEW | COMPLETE
+  from: "<agent-or-person>"
+  to: "<agent-or-person-or-role>"
+  created_at: "<ISO-8601 timestamp>"
+  task: "<task title or issue link>"
+
+  scope:
+    completed:
+      - "<completed outcome>"
+    excluded:
+      - "<intentionally out-of-scope item>"
+
+  changed_files:
+    created: []
+    modified: []
+    deleted: []
+
+  decisions:
+    - decision: "<decision made>"
+      rationale: "<why>"
+      recorded_in: "<spec or ADR path, if applicable>"
+
+  validation:
+    commands_run:
+      - command: "<exact command>"
+        result: "passed | failed | not-run"
+        evidence: "<test count, relevant output, or reason>"
+
+  open_questions:
+    - id: "OQ-YYYY-NNN"
+      status: "Open | Deferred"
+      question: "<unresolved question>"
+
+  known_risks: []
+  next_step: "<single concrete next action>"

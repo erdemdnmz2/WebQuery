@@ -1,0 +1,243 @@
+/*
+ * WebQuery design tokens.
+ *
+ * One rule governs this palette: colour carries meaning.
+ * The application chrome is achromatic warm graphite. Chroma is reserved for
+ * state that a reviewer must not miss (risk, pending, approved, rejected,
+ * running) plus a single low-chroma teal that marks focus, selection and the
+ * brand mark. Primary actions use maximum-contrast ink, not a brand hue, so a
+ * destructive confirm never competes with a status badge for attention.
+ *
+ * Values are OKLCH so the light and dark ramps stay perceptually even.
+ * Light is the base declaration; dark is redefined under both the system
+ * preference and an explicit [data-theme] so the toggle wins in both
+ * directions.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Surface ladder. Sunken sits below the page, raised sits above it. */
+  --bg-sunken: oklch(0.945 0.005 95);
+  --bg-canvas: oklch(0.970 0.004 95);
+  --bg-surface: oklch(0.992 0.002 95);
+  --bg-raised: oklch(0.998 0.001 95);
+  --bg-hover: oklch(0.930 0.006 95);
+  --bg-active: oklch(0.902 0.008 95);
+  --bg-selected: oklch(0.945 0.028 205);
+
+  /* Text ramp. fg-faint is decorative only, never load-bearing copy. */
+  --fg: oklch(0.205 0.008 85);
+  --fg-muted: oklch(0.448 0.008 85);
+  --fg-subtle: oklch(0.527 0.008 85);
+  /* Decorative only: separators, disabled glyphs. Never load-bearing text. */
+  --fg-faint: oklch(0.690 0.006 85);
+  --fg-on-solid: oklch(0.988 0.002 95);
+
+  /* Hairlines carry the hierarchy that shadows carry elsewhere. */
+  --line: oklch(0.882 0.006 95);
+  --line-strong: oklch(0.812 0.008 95);
+  /* Borders that identify an interactive control. Held at 3:1 (WCAG 1.4.11). */
+  --control-line: oklch(0.628 0.010 95);
+
+  /* Primary action: ink. Highest contrast object on the page. */
+  --primary: oklch(0.235 0.010 85);
+  --primary-hover: oklch(0.318 0.010 85);
+  --primary-fg: oklch(0.988 0.002 95);
+
+  /* Single accent hue. Focus, selection, active nav, brand mark. Nothing else. */
+  --accent: oklch(0.518 0.100 205);
+  --accent-hover: oklch(0.452 0.098 205);
+  --accent-fg: oklch(0.992 0.004 205);
+  --accent-soft: oklch(0.955 0.026 205);
+  --accent-line: oklch(0.850 0.055 205);
+
+  /* Semantic state. Each has a text tone, a soft fill and a soft border. */
+  --success: oklch(0.470 0.115 150);
+  --success-soft: oklch(0.948 0.038 150);
+  --success-line: oklch(0.858 0.058 150);
+  --success-solid: oklch(0.520 0.130 150);
+
+  --warning: oklch(0.498 0.108 72);
+  --warning-soft: oklch(0.952 0.045 82);
+  --warning-line: oklch(0.862 0.072 82);
+  --warning-solid: oklch(0.640 0.140 72);
+
+  --danger: oklch(0.512 0.170 25);
+  --danger-hover: oklch(0.448 0.168 25);
+  --danger-soft: oklch(0.952 0.032 25);
+  --danger-line: oklch(0.862 0.062 25);
+  --danger-solid: oklch(0.548 0.190 25);
+
+  --info: var(--accent);
+  --info-soft: var(--accent-soft);
+  --info-line: var(--accent-line);
+
+  /* Focus. One ring, one hue, everywhere. */
+  --ring: oklch(0.520 0.130 205);
+  --ring-width: 2px;
+  --ring-offset: 2px;
+
+  /* Radii. Documented scale: controls 6, panels 10, overlays 14. */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  /* Elevation. Chrome uses hairlines; only true overlays get a tinted shadow. */
+  --shadow-overlay:
+    0 12px 32px -10px oklch(0.30 0.020 85 / 0.20),
+    0 2px 8px -3px oklch(0.30 0.020 85 / 0.14);
+  --shadow-sticky: 0 1px 0 0 var(--line);
+
+  /* Motion. Short, functional, always cancellable by reduced-motion. */
+  --dur-fast: 110ms;
+  --dur: 170ms;
+  --dur-slow: 260ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Layering. Documented so no component invents a z-index. */
+  --z-sticky: 20;
+  --z-nav: 30;
+  --z-overlay: 50;
+  --z-dialog: 60;
+  --z-toast: 70;
+  --z-tooltip: 80;
+
+  /* Layout rhythm. */
+  --nav-h: 56px;
+  --shell-max: 1440px;
+
+  /* Syntax highlighting, derived from the same ramps as the rest of the UI. */
+  --code-keyword: oklch(0.472 0.148 285);
+  --code-string: oklch(0.470 0.115 150);
+  --code-number: oklch(0.500 0.130 45);
+  --code-comment: oklch(0.520 0.020 85);
+  --code-fn: oklch(0.480 0.110 240);
+  --code-operator: oklch(0.400 0.020 85);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --bg-sunken: oklch(0.148 0.004 95);
+    --bg-canvas: oklch(0.180 0.004 95);
+    --bg-surface: oklch(0.214 0.005 95);
+    --bg-raised: oklch(0.248 0.005 95);
+    --bg-hover: oklch(0.268 0.006 95);
+    --bg-active: oklch(0.302 0.007 95);
+    --bg-selected: oklch(0.278 0.042 205);
+
+    --fg: oklch(0.962 0.003 95);
+    --fg-muted: oklch(0.768 0.006 95);
+    --fg-subtle: oklch(0.648 0.007 95);
+    --fg-faint: oklch(0.520 0.007 95);
+    --fg-on-solid: oklch(0.180 0.006 85);
+
+    --line: oklch(0.302 0.006 95);
+    --line-strong: oklch(0.398 0.007 95);
+    --control-line: oklch(0.530 0.008 95);
+
+    --primary: oklch(0.945 0.003 95);
+    --primary-hover: oklch(0.862 0.004 95);
+    --primary-fg: oklch(0.180 0.006 85);
+
+    --accent: oklch(0.762 0.098 205);
+    --accent-hover: oklch(0.830 0.090 205);
+    --accent-fg: oklch(0.170 0.020 205);
+    --accent-soft: oklch(0.288 0.048 205);
+    --accent-line: oklch(0.392 0.062 205);
+
+    --success: oklch(0.782 0.128 150);
+    --success-soft: oklch(0.272 0.048 150);
+    --success-line: oklch(0.372 0.068 150);
+    --success-solid: oklch(0.598 0.140 150);
+
+    --warning: oklch(0.812 0.128 82);
+    --warning-soft: oklch(0.282 0.050 72);
+    --warning-line: oklch(0.388 0.070 72);
+    --warning-solid: oklch(0.720 0.150 72);
+
+    --danger: oklch(0.742 0.150 25);
+    --danger-hover: oklch(0.800 0.130 25);
+    --danger-soft: oklch(0.278 0.062 25);
+    --danger-line: oklch(0.392 0.090 25);
+    --danger-solid: oklch(0.560 0.190 25);
+
+    --ring: oklch(0.762 0.110 205);
+
+    --shadow-overlay:
+      0 16px 44px -12px oklch(0 0 0 / 0.62),
+      0 2px 10px -4px oklch(0 0 0 / 0.52);
+
+    --code-keyword: oklch(0.780 0.120 300);
+    --code-string: oklch(0.790 0.115 150);
+    --code-number: oklch(0.790 0.115 55);
+    --code-comment: oklch(0.580 0.014 95);
+    --code-fn: oklch(0.780 0.100 240);
+    --code-operator: oklch(0.760 0.012 95);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg-sunken: oklch(0.148 0.004 95);
+  --bg-canvas: oklch(0.180 0.004 95);
+  --bg-surface: oklch(0.214 0.005 95);
+  --bg-raised: oklch(0.248 0.005 95);
+  --bg-hover: oklch(0.268 0.006 95);
+  --bg-active: oklch(0.302 0.007 95);
+  --bg-selected: oklch(0.278 0.042 205);
+
+  --fg: oklch(0.962 0.003 95);
+  --fg-muted: oklch(0.768 0.006 95);
+  --fg-subtle: oklch(0.648 0.007 95);
+  --fg-faint: oklch(0.520 0.007 95);
+  --fg-on-solid: oklch(0.180 0.006 85);
+
+  --line: oklch(0.302 0.006 95);
+  --line-strong: oklch(0.398 0.007 95);
+  --control-line: oklch(0.530 0.008 95);
+
+  --primary: oklch(0.945 0.003 95);
+  --primary-hover: oklch(0.862 0.004 95);
+  --primary-fg: oklch(0.180 0.006 85);
+
+  --accent: oklch(0.762 0.098 205);
+  --accent-hover: oklch(0.830 0.090 205);
+  --accent-fg: oklch(0.170 0.020 205);
+  --accent-soft: oklch(0.288 0.048 205);
+  --accent-line: oklch(0.392 0.062 205);
+
+  --success: oklch(0.782 0.128 150);
+  --success-soft: oklch(0.272 0.048 150);
+  --success-line: oklch(0.372 0.068 150);
+  --success-solid: oklch(0.598 0.140 150);
+
+  --warning: oklch(0.812 0.128 82);
+  --warning-soft: oklch(0.282 0.050 72);
+  --warning-line: oklch(0.388 0.070 72);
+  --warning-solid: oklch(0.720 0.150 72);
+
+  --danger: oklch(0.742 0.150 25);
+  --danger-hover: oklch(0.800 0.130 25);
+  --danger-soft: oklch(0.278 0.062 25);
+  --danger-line: oklch(0.392 0.090 25);
+  --danger-solid: oklch(0.560 0.190 25);
+
+  --ring: oklch(0.762 0.110 205);
+
+  --shadow-overlay:
+    0 16px 44px -12px oklch(0 0 0 / 0.62),
+    0 2px 10px -4px oklch(0 0 0 / 0.52);
+
+  --code-keyword: oklch(0.780 0.120 300);
+  --code-string: oklch(0.790 0.115 150);
+  --code-number: oklch(0.790 0.115 55);
+  --code-comment: oklch(0.580 0.014 95);
+  --code-fn: oklch(0.780 0.100 240);
+  --code-operator: oklch(0.760 0.012 95);
+}

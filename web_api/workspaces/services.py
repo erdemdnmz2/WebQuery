@@ -1,0 +1,493 @@
+"""
+Workspace Service Layer
+User workspace (saved query) management operations
+"""
+import json
+import logging
+import uuid
+from typing import Any
+
+import sqlglot.errors
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import select, true
+
+from app_database.app_database import AppDatabase
+from app_database.models import (
+    Databases,
+    QueryData,
+    User,
+    UserDatabaseAssociation,
+    Workspace,
+)
+from common.constants import (
+    QUERY_STATUS_APPROVED_WITH_RESULTS,
+    QUERY_STATUS_SAVED_IN_WORKSPACE,
+    WORKSPACE_EDITABLE_STATUSES,
+)
+from common.errors import redact_passwords, scrub
+from common.exceptions import BaseServiceException
+from common.roles import is_admin
+from common.security import columns_to_mask, mask_result_set, masked_columns_in
+from database_provider import DatabaseProvider
+from query_execution import config as query_config
+from query_execution.exceptions import (
+    DatabaseAccessDeniedError,
+    QueryAnalysisRejectedError,
+    QueryBlockedError,
+    QueryExecutionError,
+    QueryRoleDeniedError,
+    QuerySyntaxError,
+)
+from query_execution.query_analyzer import QueryAnalyzer, hard_block_reason_for
+from query_execution.runner import run_statement
+from query_execution.cancellation import CancellationUnavailable, QueryCancelled
+from workspaces.exceptions import (
+    WorkspaceAccessDeniedError,
+    WorkspaceNotEditableError,
+    WorkspaceNotFoundError,
+)
+
+from .schemas import WorkspaceCreate, WorkspaceInfo
+
+logger = logging.getLogger(__name__)
+
+class WorkspaceService:
+    """
+    Workspace CRUD operations service
+    
+    Manages users' operations of storing, editing, deleting,
+    and listing queries in workspaces.
+    
+    Attributes:
+        app_db: Application database instance
+    """
+
+    def __init__(self, app_db: AppDatabase):
+        """
+        Initializes WorkspaceService
+        
+        Args:
+            app_db: AppDatabase instance
+        """
+        self.app_db = app_db
+        self.analyzer = QueryAnalyzer()
+
+    async def create_workspace(self, db: AsyncSession, workspace_data: WorkspaceCreate, user_id: int):
+        """
+        Creates a new workspace.
+        
+        Args:
+            db: Async database session
+            workspace_data: Workspace creation schema
+            user_id: ID of the user creating the workspace
+        
+        Returns:
+            Dict: Result with workspace_id or error
+        """
+        try:
+            # Query the database to retrieve servername and database_name from UUID
+            db_res = await db.execute(
+                select(Databases).where(Databases.uuid == workspace_data.db_uuid)
+            )
+            db_entry = db_res.scalars().first()
+            if not db_entry:
+                raise BaseServiceException(f"Database with UUID '{workspace_data.db_uuid}' not found.")
+
+            new_query_data = QueryData(
+                    user_id=user_id,
+                    servername=db_entry.servername,
+                    database_name=db_entry.database_name,
+                    query=workspace_data.query,
+                    uuid=str(uuid.uuid4()),
+                    status=QUERY_STATUS_SAVED_IN_WORKSPACE
+                )
+            
+            db.add(new_query_data)
+            await db.flush()
+
+            """Workspace creation operation"""
+            workspace = Workspace(
+                name=workspace_data.name,
+                description=workspace_data.description,
+                user_id=user_id,
+                query_id=new_query_data.id
+            )
+            db.add(workspace)
+            await db.commit()
+            await db.refresh(workspace)
+            return {"success": True, "workspace_id": workspace.id}
+        except BaseServiceException:
+            raise
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"Error creating workspace: {e}")
+            raise BaseServiceException(f"Error creating workspace: {e!s}", original_exception=e)
+        
+    async def get_workspace_by_id(self, db: AsyncSession, user_id: int):
+        """
+        Retrieves all workspaces for the user.
+        
+        Args:
+            db: Async database session
+            user_id: ID of the user whose workspaces will be retrieved
+        
+        Returns:
+            List[WorkspaceInfo]: List of workspaces (can be empty)
+        """
+        
+        results = await db.execute(
+            select(Workspace).where(Workspace.user_id == user_id)
+        )
+        workspaces = results.scalars().all()
+        if not workspaces:
+            return []
+
+        query_ids = [ws.query_id for ws in workspaces]
+
+        query_data_results = await db.execute(
+            select(QueryData).where(QueryData.id.in_(query_ids))
+        )
+        query_data_map = {qd.id: qd for qd in query_data_results.scalars().all()}
+        
+        # Resolve db_uuid for exactly the targets these workspaces name, and
+        # only from live registrations. Selecting the whole `Databases` table
+        # pulled every row (including the encrypted per-tier credentials) into
+        # memory to answer a lookup for a handful of pairs; a retired row also
+        # resolved to a usable uuid even though `get_db_info` excludes it from
+        # the runtime catalogue, so the workspace looked runnable and then
+        # failed at execution instead of arriving with an empty `db_uuid`.
+        # The two `IN`s are filtered independently rather than as a row value,
+        # because SQL Server has no row-value `IN`. That can match a spurious
+        # cross-product row, which is harmless: the map is keyed on the exact
+        # pair, so only real pairs are ever read back out.
+        servernames = {qd.servername for qd in query_data_map.values()}
+        database_names = {qd.database_name for qd in query_data_map.values()}
+        db_map: dict[tuple[str, str], str] = {}
+        if servernames:
+            db_results = await db.execute(
+                select(Databases.servername, Databases.database_name, Databases.uuid)
+                .where(
+                    Databases.is_active == true(),
+                    Databases.servername.in_(servernames),
+                    Databases.database_name.in_(database_names),
+                )
+            )
+            db_map = {
+                (servername, database_name): str(db_uuid)
+                for servername, database_name, db_uuid in db_results.all()
+            }
+
+        workspace_list = []
+        for ws in workspaces:
+            query_data = query_data_map.get(ws.query_id)
+            if query_data:
+                db_uuid = db_map.get((query_data.servername, query_data.database_name), "")
+                workspace_list.append(WorkspaceInfo(
+                    id=ws.id,
+                    name=ws.name,
+                    description=ws.description,
+                    query=query_data.query,
+                    servername=query_data.servername,
+                    database_name=query_data.database_name,
+                    db_uuid=db_uuid,
+                    status=query_data.status,
+                    show_results=getattr(ws, 'show_results', None),
+                    owner_id=ws.user_id,
+                    is_owner=True
+                ))
+        return workspace_list
+    
+    async def delete_workspace_by_id(self, workspace_id: int, db: AsyncSession):
+        """
+        Deletes workspace and related queryData.
+        
+        Args:
+            workspace_id: ID of the workspace to delete
+            db: Async database session
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+            workspace = workspace_result.scalars().first()
+            if not workspace:
+                raise WorkspaceNotFoundError("Workspace not found")
+            
+            query_id = workspace.query_id
+            
+            await db.delete(workspace)
+            
+            if query_id:
+                query_result = await db.execute(select(QueryData).where(QueryData.id == query_id))
+                query_data = query_result.scalars().first()
+                if query_data:
+                    await db.delete(query_data)
+            
+            await db.commit()
+            return True
+        except BaseServiceException:
+            raise
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"Error deleting workspace: {e}")
+            raise BaseServiceException(f"Error deleting workspace: {e!s}", original_exception=e)
+    
+    async def update_workspace(self, db: AsyncSession, workspace_id: int, query: str):
+        """
+        Rewrites the SQL text of a saved query.
+
+        The status is deliberately not a parameter. Workspace state transitions
+        belong to the approval decision (`approval.service.decide`) and to the
+        execution flow; accepting one from the client let an owner mark their own
+        query `approved_with_results` and skip review entirely.
+
+        Editing is restricted to states where no approval depends on the text
+        (`WORKSPACE_EDITABLE_STATUSES`), and any accepted edit drops the record
+        back to a draft with results unshared — so an old approval can never
+        travel with new SQL.
+
+        Args:
+            db: Async database session
+            workspace_id: ID of the workspace to update
+            query: New SQL text
+
+        Returns:
+            bool: True if successful
+
+        Raises:
+            WorkspaceNotFoundError: Workspace or its query row is missing.
+            WorkspaceNotEditableError: The record is awaiting or carrying approval.
+        """
+        try:
+            workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+            workspace = workspace_result.scalars().first()
+            if not workspace:
+                raise WorkspaceNotFoundError("Workspace not found")
+
+            query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
+            query_data = query_result.scalars().first()
+            if not query_data:
+                raise WorkspaceNotFoundError("Query data not found for this workspace")
+
+            if query_data.status not in WORKSPACE_EDITABLE_STATUSES:
+                raise WorkspaceNotEditableError(
+                    "Bu sorgu onay akışına bağlı olduğu için düzenlenemez. "
+                    "Değiştirmek için yeni bir çalışma alanı oluşturun."
+                )
+
+            if query != query_data.query:
+                query_data.query = query
+                # A new statement carries none of the old decision.
+                query_data.status = QUERY_STATUS_SAVED_IN_WORKSPACE
+                workspace.show_results = None
+            await db.commit()
+            return True
+        except BaseServiceException:
+            raise
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"Error updating workspace: {e}")
+            raise BaseServiceException(f"Error updating workspace: {e!s}", original_exception=e)
+    
+    async def get_workspace_detail_by_id(self, db: AsyncSession, workspace_id: int, user_id: int):
+        """
+        Retrieves details of a specific workspace.
+        
+        Args:
+            db: Async database session
+            workspace_id: ID of the workspace to retrieve details for
+            user_id: ID of the requesting user (for authorization check)
+        
+        Returns:
+            Dict | None: Workspace details or None
+        """
+        workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+        workspace = workspace_result.scalars().first()
+        if not workspace:
+            raise WorkspaceNotFoundError("Workspace not found")
+        if workspace.user_id != user_id:
+            raise WorkspaceAccessDeniedError("You do not own this workspace")
+            
+        query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
+        query_data = query_result.scalars().first()
+        if not query_data:
+            raise WorkspaceNotFoundError("Query data not found for this workspace")
+            
+        # Live registrations only: a retired one is absent from the runtime
+        # catalogue, so handing its uuid back would advertise a target the
+        # execution path refuses.
+        db_res = await db.execute(
+            select(Databases.uuid).where(
+                Databases.servername == query_data.servername,
+                Databases.database_name == query_data.database_name,
+                Databases.is_active == true(),
+            )
+        )
+        db_uuid = str(db_res.scalars().first() or "")
+            
+        return {
+            "id": workspace.id,
+            "name": workspace.name,
+            "description": workspace.description,
+            "query": query_data.query,
+            "servername": query_data.servername,
+            "database_name": query_data.database_name,
+            "db_uuid": db_uuid,
+            "status": query_data.status,
+            "show_results": getattr(workspace, 'show_results', None),
+            "owner_id": workspace.user_id,
+            "is_owner": True
+        }
+
+    async def execute_workspace(self, workspace_id: int, current_user: User, db_provider: DatabaseProvider, ad_hoc_mask_columns: list[str] | None = None) -> dict[str, Any]:
+        """
+        Executes a stored workspace query after enforcing approval rules.
+        Uses centralized service account credentials, requiring no user password caching.
+
+        Args:
+            workspace_id: ID of the workspace to execute.
+            current_user: The authenticated calling user instance.
+            db_provider: The database connection provider.
+            ad_hoc_mask_columns: Temporary columns to mask for this transaction (optional).
+
+        Returns:
+            dict[str, Any]: A dictionary containing execution status and data or error details.
+        """
+        # Load workspace, query, database, and user database roles
+        async with self.app_db.get_app_db() as db:
+            workspace_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+            workspace: Workspace | None = workspace_result.scalars().first()
+            if not workspace:
+                raise WorkspaceNotFoundError("Workspace not found")
+
+            if workspace.user_id != current_user.id:
+                raise WorkspaceAccessDeniedError("You do not own this workspace")
+
+            query_result = await db.execute(select(QueryData).where(QueryData.id == workspace.query_id))
+            query_data: QueryData | None = query_result.scalars().first()
+            if not query_data:
+                raise WorkspaceNotFoundError("Query data not found for this workspace")
+
+            db_result = await db.execute(
+                select(Databases).where(
+                    Databases.servername == query_data.servername,
+                    Databases.database_name == query_data.database_name,
+                    Databases.is_active == true(),
+                )
+            )
+            db_entry = db_result.scalars().first()
+            if not db_entry:
+                # Covers both "never registered" and "registration retired":
+                # neither can be executed against, and telling them apart here
+                # would only report registry state to a non-admin caller.
+                raise BaseServiceException("Target database does not exist in registry.")
+            db_id = db_entry.id
+            db_uuid = str(db_entry.uuid)
+
+            assoc_result = await db.execute(
+                select(UserDatabaseAssociation).where(
+                    UserDatabaseAssociation.user_id == current_user.id,
+                    UserDatabaseAssociation.database_id == db_id
+                )
+            )
+            assoc = assoc_result.scalars().first()
+            if not assoc:
+                raise DatabaseAccessDeniedError(
+                    "You do not have permission to access this database."
+                )
+            user_role = assoc.role
+
+            is_db_admin = is_admin(user_role)
+
+            # enforce approval only for non-admins
+            if not is_db_admin and (
+                not workspace.show_results
+                or query_data.status != QUERY_STATUS_APPROVED_WITH_RESULTS
+            ):
+                raise QueryAnalysisRejectedError("This workspace is not approved for execution")
+
+        log_id: int | None = None
+        try:
+            logger.info(f"Executing approved workspace {workspace_id} on server '{query_data.servername}'")
+            log_id = await self.app_db.create_log(user=current_user, query=query_data.query, machine_name=query_data.servername, approved_execution=True)
+
+            masking_cols = set()
+            masked_now: list[str] = []
+            db_info_entry = db_provider.db_by_uuid.get(db_uuid, {})
+            technology = db_info_entry.get("technology", "mssql")
+            
+            # One parse for the role check, the hard-block gate, the tier and
+            # the execution strategy; this path used to parse the same SQL four
+            # times.
+            try:
+                plan = self.analyzer.plan(query_data.query, technology=technology)
+            except sqlglot.errors.ParseError as exc:
+                raise QuerySyntaxError('Query blocked: the statement could not be parsed. Check the SQL syntax.', original_exception=exc)
+
+            # Role capability verification using SQLGlot AST analyzer
+            if not self.analyzer.permits_role(plan, user_role):
+                raise QueryRoleDeniedError(
+                    f"Query blocked: Your role '{user_role}' is not authorized to execute this query."
+                )
+
+            # An approved workspace may re-run a query an administrator judged
+            # acceptable, but approval never covers the hard-blocked checks -
+            # otherwise this endpoint is a second door to them.
+            blocked = hard_block_reason_for(self.analyzer, plan)
+            if blocked:
+                raise QueryBlockedError(blocked)
+
+            required_tier = plan.tier
+
+            if db_id:
+                rules = await self.app_db.get_masking_rules(db_id)
+                masking_cols |= columns_to_mask(rules, plan.tables)
+
+            if ad_hoc_mask_columns:
+                for col in ad_hoc_mask_columns:
+                    masking_cols.add(col.lower())
+
+            async with db_provider.get_session(
+                user=current_user, db_uuid=db_uuid, tier=required_tier
+            ) as session:
+                outcome = await run_statement(
+                    session, plan, query_config.MAX_ROW_COUNT_LIMIT
+                )
+                row_count: int = outcome.row_count
+                message: str = outcome.message
+                result_data: list[dict[str, Any]] = outcome.rows
+
+                # Report what was masked, not what was asked for; see
+                # SPEC-0012 BR-03.
+                if outcome.returns_rows and not is_db_admin and masking_cols:
+                    masked_now = masked_columns_in(result_data, masking_cols)
+                    result_data = mask_result_set(result_data, masking_cols)
+
+            applied_rules_str = json.dumps(list(masking_cols)) if masking_cols else None
+            await self.app_db.update_log(log_id=log_id, successfull=True, row_count=row_count, applied_masking_rules=applied_rules_str)
+            
+            logger.info(f"Workspace {workspace_id} executed successfully. Result: {message}")
+            return {"response_type": "data", "data": result_data, "message": message, "masked_columns": masked_now}
+
+        except (QueryCancelled, CancellationUnavailable) as exc:
+            if log_id:
+                await self.app_db.update_log(log_id=log_id, successfull=False, error=exc.code)
+            raise
+        except BaseServiceException:
+            raise
+        except Exception as e:
+            error_msg = str(e)
+            safe_log_error = redact_passwords(error_msg)
+            logger.error(
+                "Workspace query execution failed [workspace_id=%s]: %s",
+                workspace_id,
+                safe_log_error,
+            )
+            if log_id:
+                await self.app_db.update_log(
+                    log_id=log_id,
+                    successfull=False,
+                    error=safe_log_error,
+                )
+            raise QueryExecutionError(scrub(error_msg), original_exception=e)

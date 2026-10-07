@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="WebQuery: kayıtlı veritabanlarına denetlenebilir SQL sorguları çalıştırmak için kurumsal sorgu konsolu."
+    />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>WebQuery</title>
+
+    <!--
+      The theme is applied before first paint so a dark-mode user never sees a
+      light flash. It mirrors the resolution order in lib/theme.tsx.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('webquery.theme');
+          if (stored === 'light' || stored === 'dark') {
+            document.documentElement.setAttribute('data-theme', stored);
+          }
+        } catch (error) {
+          /* Storage can be blocked; the media query still resolves the theme. */
+        }
+      })();
+    </script>
+
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Crect x='0.75' y='0.75' width='18.5' height='18.5' rx='4.25' fill='none' stroke='%23167f96' stroke-width='1.5'/%3E%3Cpath d='M4.5 7.25h11' stroke='%23167f96' stroke-width='1.5' stroke-linecap='round' opacity='0.45'/%3E%3Cpath d='M4.5 10.5h11' stroke='%23167f96' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M4.5 13.75h6' stroke='%23167f96' stroke-width='1.5' stroke-linecap='round' opacity='0.45'/%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      WebQuery çalışmak için JavaScript gerektirir. Tarayıcınızda JavaScript'i etkinleştirin.
+    </noscript>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

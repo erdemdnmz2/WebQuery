@@ -1,0 +1,11 @@
+WebQuery
+
+This repository includes source code and associated documentation adapted from
+the MIT-licensed WebQuery legacy project, copyright (c) 2026 WebQuery Contributors.
+The original MIT copyright and permission notice is preserved in
+licenses/WebQuery-legacy-MIT.txt.
+
+Imported baseline: 6cf0a732f5388b01edeecb8528ff9f0fcb0bc91c (legacy main).
+The repository-level license is Apache License 2.0; see LICENSE. Third-party
+dependencies retain their own licenses. See docs/migration-analysis.md for the
+scope and modifications of this import.

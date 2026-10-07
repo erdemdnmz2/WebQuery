@@ -1,0 +1,225 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# The workflow only reads the repository: it checks out, installs, lints and
+# tests. Nothing writes back. Setting this explicitly stops a compromised
+# dependency in any step from using the default job token to push or comment.
+permissions:
+  contents: read
+
+# Every push to the long-lived branch used to keep its own runner alive even
+# after the next commit landed. This cancels superseded runs of the same ref.
+# `github.ref` differs between the push and the pull_request event, so the two
+# runs a PR triggers stay separate on purpose — ADR-0002 wants both.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Repository hygiene and regression checks
+        run: |
+          python scripts/check_repository.py
+          python -m unittest discover -s scripts/tests -v
+
+  backend:
+    runs-on: ubuntu-latest
+    # Defense-in-depth: a background asyncio task (EngineCache cleanup
+    # loop) used to outlive test teardown and hang `pytest` after it had
+    # already printed its results (reproduced locally 3x, fixed in
+    # tests/conftest.py). Kept as a guard against a similar leak recurring
+    # silently. See ADR-0002.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11" # matches web_api/Dockerfile
+          cache: pip
+          cache-dependency-path: web_api/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r web_api/requirements.txt
+          pip install pytest-cov ruff pip-audit
+
+      # Blocking. `F` (pyflakes) and `E9` (syntax/IO errors) are the rules that
+      # find real defects rather than style: an undefined name, an unused
+      # import hiding a moved symbol, a file that does not parse. The audit
+      # found three live F821s in a dead module this way. The remaining
+      # informational rules stay in the step below. See ADR-0002.
+      - name: Lint (correctness rules — merge gate)
+        working-directory: web_api
+        run: ruff check --select F,E9 .
+
+      - name: Lint (style — informational, see ADR-0002)
+        working-directory: web_api
+        continue-on-error: true
+        run: ruff check .
+
+      - name: Tests
+        working-directory: web_api
+        env:
+          # CI-only values, unrelated to any real deployment secret.
+          SECRET_KEY: ci-test-key-for-github-actions-only-not-production
+          # Ephemeral CI data only; production must provide its own secret.
+          # CI_FERNET_KEY may override this value when configured in GitHub.
+          QUERY_ENCRYPTION_KEY: ${{ secrets.CI_FERNET_KEY || 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }}
+          APP_DATABASE_URL: sqlite+aiosqlite:///./test.db
+          CENTRAL_DB_USER: ci_user
+          CENTRAL_DB_PASSWORD: ci_pass
+        run: pytest -v --cov=. --cov-report=term-missing
+
+      - name: Secret leak scan
+        run: |
+          # Test fixtures use dummy credentials on purpose; only production
+          # code paths are scanned.
+          ! grep -rn --include='*.py' --exclude-dir=tests \
+              -E "(password|secret|api_key)\s*=\s*['\"][^'\"]{8,}" web_api/ \
+            || (echo "Hardcoded secret-looking value found in source" && exit 1)
+
+      # Blocking: SPEC-0029 remediated the known high/critical backlog. A new
+      # advisory must now stop the merge instead of blending into a permanent
+      # informational failure.
+      - name: Dependency audit
+        run: pip-audit -r web_api/requirements.txt
+
+  mssql:
+    # The metadata database is SQL Server in deployment. This focused job
+    # proves migrations, schema guard and high-impact runtime paths on the
+    # real dialect without duplicating the full SQLite suite. See ADR-0025.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: "WebQuery-CI-Sql1!"
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'WebQuery-CI-Sql1!' -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      # Disposable service credentials, not a deployment secret.
+      MSSQL_CI: "1"
+      MSSQL_TEST_URL: "mssql+aioodbc://sa:WebQuery-CI-Sql1%21@127.0.0.1:1433/webquery_ci?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+      SECRET_KEY: ci-test-key-for-github-actions-only-not-production
+      QUERY_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      CENTRAL_DB_USER: ci_user
+      CENTRAL_DB_PASSWORD: ci_pass
+      REDIS_URL: redis://localhost:6379/15
+      ALLOWED_EMAIL_DOMAINS: example.com
+      REGISTRATION_REQUIRES_ACTIVATION: "false"
+      SLACK_BOT_TOKEN: xoxb-test-token
+      SLACK_APP_TOKEN: xapp-test-token
+      SLACK_ADMIN_CHANNEL: C_TEST_CHANNEL
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11" # matches web_api/Dockerfile
+          cache: pip
+          cache-dependency-path: web_api/requirements.txt
+
+      - name: Install ODBC Driver 18
+        run: |
+          # Use Microsoft's canonical package-managed source. Hosted runners
+          # already carry microsoft-prod.list with Signed-By; adding a second
+          # unsigned mssql-release.list for the same URL breaks apt update.
+          curl -fsSL https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb \
+            -o /tmp/packages-microsoft-prod.deb
+          sudo dpkg -i /tmp/packages-microsoft-prod.deb
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
+
+      - name: Install dependencies
+        run: pip install -r web_api/requirements.txt
+
+      - name: Migrate and validate SQL Server
+        working-directory: web_api
+        run: |
+          pytest -q \
+            tests/mssql/ \
+            tests/integration/test_auth_api.py \
+            tests/integration/test_owner_governance.py \
+            tests/integration/test_database_lifecycle.py \
+            tests/integration/test_query_execution.py \
+            tests/integration/test_query_cancellation_api.py
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24" # matches frontend/Dockerfile
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # All four are blocking: they pass locally today, so making them a gate
+      # costs nothing now and keeps the frontend from drifting the way the
+      # backend lint did. There is still no frontend unit-test command; do not
+      # add one here until the suite exists.
+      - name: Typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Verify XLSX export
+        working-directory: frontend
+        run: npm run verify:export
+
+      - name: Source-map security regression
+        working-directory: frontend
+        run: npm run verify:source-map-security
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      # Fails when frontend/services/api.ts calls a route the backend does not
+      # expose - the contract drift class the audit found repeatedly.
+      - name: API contract audit
+        working-directory: frontend
+        run: npm run audit:api
+
+      - name: Contrast audit
+        working-directory: frontend
+        run: npm run audit:contrast
+
+      # Blocking: `xlsx` was replaced and the package graph is audit-clean.
+      # A newly disclosed high/critical dependency issue must stop the merge.
+      - name: Dependency audit
+        working-directory: frontend
+        run: npm audit --audit-level=high
