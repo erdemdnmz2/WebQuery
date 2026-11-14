@@ -52,7 +52,7 @@ MarkupSafe==3.0.2
 
 # Email validation
 email_validator==2.2.0
-dnspython==2.7.0
+dnspython==2.9.2
 
 # Environment & Config
 python-dotenv==1.2.3
